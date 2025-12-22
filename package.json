@@ -1,25 +1,18 @@
 {
-  "name": "nodered-cloudflare",
-  "version": "1.0.0",
-  "description": "Node-RED adaptation for Cloudflare Workers with Durable Objects",
+  "name": "rednox",
+  "version": "2.0.0",
+  "description": "Optimized Node-RED for Cloudflare Workers",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "tail": "wrangler tail"
+    "db:init": "wrangler d1 execute rednox-flows --remote --command 'SELECT 1'",
+    "db:create": "wrangler d1 create rednox-flows"
   },
-  "keywords": [
-    "node-red",
-    "cloudflare",
-    "workers",
-    "durable-objects",
-    "edge-computing"
-  ],
-  "author": "",
-  "license": "MIT",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241127.0",
-    "wrangler": "^3.87.0",
-    "typescript": "^5.7.2"
+    "wrangler": "^3.90.0",
+    "typescript": "^5.3.3"
   }
 }
+`;
