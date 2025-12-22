@@ -6,7 +6,7 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "rednox-db"
-database_id = "71cdffcd-79bf-4902-8e3a-86257862425c"
+database_id = "eba933e6-bd4a-41aa-85bc-313ffe2ae8c9"
 
 # Durable Objects
 [[durable_objects.bindings]]
