@@ -1,5 +1,6 @@
+
 // ===================================================================
-// RedNox - Durable Object with RPC - Flow Executor
+// RedNox - Flow Executor DO (Optimized for 30s CPU Budget)
 // ===================================================================
 
 import { DurableObject } from 'cloudflare:workers';
@@ -11,10 +12,12 @@ export class FlowExecutorDO extends DurableObject {
   private flowConfig?: FlowConfig;
   private flowContext: FlowContext;
   private globalContext: GlobalContext;
+  private lastFlowId?: string;
   
   constructor(state: DurableObjectState, env: any) {
     super(state, env);
     
+    // Lazy context initialization
     this.flowContext = {
       get: async (key: string) => this.ctx.storage.get(`flow:${key}`),
       set: async (key: string, value: any) => 
@@ -36,10 +39,89 @@ export class FlowExecutorDO extends DurableObject {
     };
   }
   
-  // RPC Method: Load Flow Configuration
-  async loadFlow(flowConfig: FlowConfig): Promise<{ success: boolean; nodeCount: number }> {
-    this.flowConfig = flowConfig;
+  // RPC Method: Execute Flow with automatic loading
+  // This is the main entry point - combines load + execute
+  async executeFlow(
+    flowConfig: FlowConfig,
+    entryNodeId: string,
+    payload: any
+  ): Promise<{ 
+    statusCode: number;
+    headers: Record<string, string>;
+    body: string;
+    duration: number;
+  }> {
+    const startTime = Date.now();
     
+    try {
+      // Smart caching: only reload if flow changed
+      if (!this.flowEngine || this.lastFlowId !== flowConfig.id) {
+        await this.loadFlowInternal(flowConfig);
+        this.lastFlowId = flowConfig.id;
+      }
+      
+      // Create message
+      const msg: NodeMessage = {
+        _msgid: crypto.randomUUID(),
+        payload,
+        topic: ''
+      };
+      
+      // Execute flow (this can use full 30s if needed)
+      const result = await this.flowEngine!.triggerFlow(entryNodeId, msg);
+      const duration = Date.now() - startTime;
+      
+      // Log execution asynchronously (don't block response)
+      this.ctx.waitUntil(
+        this.logExecution(flowConfig.id, 'success', duration)
+      );
+      
+      // Return HTTP response
+      if (result?._httpResponse) {
+        const resPayload = result._httpResponse.payload;
+        return {
+          statusCode: result._httpResponse.statusCode,
+          headers: result._httpResponse.headers,
+          body: typeof resPayload === 'string' ? resPayload : JSON.stringify(resPayload),
+          duration
+        };
+      }
+      
+      // Default success response
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          success: true, 
+          duration: duration + 'ms',
+          flowId: flowConfig.id
+        }),
+        duration
+      };
+      
+    } catch (err: any) {
+      const duration = Date.now() - startTime;
+      console.error('[FlowExecutor] Error:', err);
+      
+      // Log error asynchronously
+      this.ctx.waitUntil(
+        this.logExecution(flowConfig.id, 'error', duration, err.message)
+      );
+      
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          error: err.message,
+          duration: duration + 'ms'
+        }),
+        duration
+      };
+    }
+  }
+  
+  // Internal flow loading (cached in DO memory)
+  private async loadFlowInternal(flowConfig: FlowConfig): Promise<void> {
     const context: ExecutionContext = {
       storage: this.ctx.storage,
       env: this.env,
@@ -47,54 +129,38 @@ export class FlowExecutorDO extends DurableObject {
       global: this.globalContext
     };
     
+    this.flowConfig = flowConfig;
     this.flowEngine = new FlowEngine(flowConfig, context);
     await this.flowEngine.initialize();
-    
-    return { success: true, nodeCount: flowConfig.nodes.length };
   }
   
-  // RPC Method: Execute Flow
-  async executeFlow(entryNodeId: string, payload: any): Promise<{ 
-    statusCode: number;
-    headers: Record<string, string>;
-    body: string;
-    duration: number;
-  }> {
-    if (!this.flowEngine) {
-      return {
-        statusCode: 500,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Flow not loaded' }),
-        duration: 0
-      };
+  // Async logging (uses waitUntil to not block response)
+  private async logExecution(
+    flowId: string,
+    status: string,
+    duration: number,
+    errorMessage?: string
+  ): Promise<void> {
+    try {
+      await this.ctx.storage.put(`log:${Date.now()}`, {
+        flowId,
+        status,
+        duration,
+        errorMessage: errorMessage || null,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Optionally clean old logs (keep last 100)
+      const logs = await this.ctx.storage.list({ prefix: 'log:' });
+      if (logs.size > 100) {
+        const oldLogs = Array.from(logs.keys())
+          .sort()
+          .slice(0, logs.size - 100);
+        await this.ctx.storage.delete(oldLogs);
+      }
+    } catch (err) {
+      console.error('[FlowExecutor] Failed to log:', err);
     }
-    
-    const msg: NodeMessage = {
-      _msgid: crypto.randomUUID(),
-      payload,
-      topic: ''
-    };
-    
-    const startTime = Date.now();
-    const result = await this.flowEngine.triggerFlow(entryNodeId, msg);
-    const duration = Date.now() - startTime;
-    
-    if (result?._httpResponse) {
-      const resPayload = result._httpResponse.payload;
-      return {
-        statusCode: result._httpResponse.statusCode,
-        headers: result._httpResponse.headers,
-        body: typeof resPayload === 'string' ? resPayload : JSON.stringify(resPayload),
-        duration
-      };
-    }
-    
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: true, duration: duration + 'ms' }),
-      duration
-    };
   }
   
   // RPC Method: Get Debug Messages
@@ -116,12 +182,28 @@ export class FlowExecutorDO extends DurableObject {
     flowId?: string;
     flowName?: string;
     nodeCount: number;
+    uptime: number;
   }> {
     return {
       loaded: !!this.flowEngine,
       flowId: this.flowConfig?.id,
       flowName: this.flowConfig?.name,
-      nodeCount: this.flowConfig?.nodes.length || 0
+      nodeCount: this.flowConfig?.nodes.length || 0,
+      uptime: Date.now() // Could track actual uptime if needed
     };
+  }
+  
+  // RPC Method: Clear cache (force reload)
+  async clearCache(): Promise<{ success: boolean }> {
+    this.flowEngine = undefined;
+    this.flowConfig = undefined;
+    this.lastFlowId = undefined;
+    return { success: true };
+  }
+  
+  // Alarm handler for scheduled flows (future enhancement)
+  async alarm(): Promise<void> {
+    // Handle scheduled/cron triggers
+    console.log('[FlowExecutor] Alarm triggered');
   }
 }
