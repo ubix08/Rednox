@@ -1,6 +1,6 @@
 
 // ===================================================================
-// RedNox - Core Type Definitions
+// RedNox - Enhanced Core Type Definitions
 // ===================================================================
 
 export interface NodeMessage {
@@ -18,7 +18,22 @@ export interface NodeMessage {
     headers: Record<string, string>;
     payload: any;
   };
+  _session?: any;
+  _trace?: MessageTrace;
   [key: string]: any;
+}
+
+export interface MessageTrace {
+  msgId: string;
+  startTime: number;
+  nodeExecutions: Array<{
+    nodeId: string;
+    nodeType: string;
+    startTime: number;
+    duration: number;
+    status: 'success' | 'error';
+    error?: string;
+  }>;
 }
 
 export interface MessageParts {
@@ -38,10 +53,11 @@ export interface NodeStatus {
 
 export interface ExecutionContext {
   storage: DurableObjectStorage;
-  env: any;
+  env: Env;
   flow: FlowContext;
   global: GlobalContext;
   flowEngine?: any;
+  batchedStorage?: BatchedStorage;
 }
 
 export interface FlowContext {
@@ -134,4 +150,35 @@ export interface FlowRecord {
 export interface Env {
   DB: D1Database;
   FLOW_EXECUTOR: DurableObjectNamespace;
+  RATE_LIMIT?: {
+    requests: number;
+    window: number;
+  };
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface RouteCache {
+  flowId: string;
+  nodeId: string;
+  flowConfig: FlowConfig;
+  expiry: number;
+}
+
+export interface CircuitBreakerState {
+  failures: number;
+  lastFailure: number;
+  state: 'closed' | 'open' | 'half-open';
+}
+
+// Batched Storage Interface
+export interface BatchedStorage {
+  get(key: string): Promise<any>;
+  set(key: string, value: any): Promise<void>;
+  delete(key: string): Promise<void>;
+  flush(): Promise<void>;
 }
