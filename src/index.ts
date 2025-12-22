@@ -822,3 +822,149 @@ export class FlowExecutorDO extends DurableObject {
     const now = Date.now();
     const windowMs = 60000;
     const maxRequests = 100;
+    
+    const data = await this.state.storage.get<any>(key) || { 
+      count: 0, 
+      resetAt: now + windowMs 
+    };
+    
+    if (now > data.resetAt) {
+      data.count = 0;
+      data.resetAt = now + windowMs;
+    }
+    
+    if (data.count >= maxRequests) {
+      return false;
+    }
+    
+    data.count++;
+    await this.state.storage.put(key, data);
+    
+    return true;
+  }
+  
+  private async updateUsageStats(userId: string): Promise<void> {
+    const stats = await this.state.storage.get<any>('usage:stats') || {
+      totalRequests: 0,
+      lastRequest: null
+    };
+    
+    stats.totalRequests++;
+    stats.lastRequest = new Date().toISOString();
+    
+    await this.state.storage.put('usage:stats', stats);
+  }
+  
+  // ===================================================================
+  // Background Job Processing
+  // ===================================================================
+  private async processJobInBackground(request: Request, jobId: string): Promise<void> {
+    try {
+      await this.state.storage.put('job:status', {
+        state: 'processing',
+        progress: 0,
+        startedAt: Date.now()
+      });
+      
+      const data = await request.json();
+      
+      // Execute flow for job processing
+      const url = new URL(request.url);
+      const path = url.pathname.replace('/internal/job/process', '');
+      const method = 'POST';
+      
+      const route = await this.lookupRoute(path || '/job', method);
+      
+      if (route) {
+        const flowEngine = await this.getOrLoadFlow(route.flowId, route.flowConfig);
+        
+        const msg: NodeMessage = {
+          _msgid: crypto.randomUUID(),
+          payload: data,
+          topic: 'job'
+        };
+        
+        const result = await flowEngine.triggerFlow(route.nodeId, msg);
+        
+        await this.state.storage.put('job:status', {
+          state: 'completed',
+          progress: 100,
+          completedAt: Date.now()
+        });
+        
+        await this.state.storage.put('job:result', {
+          success: true,
+          data: result
+        });
+      } else {
+        throw new Error('No job processing flow found');
+      }
+      
+    } catch (err: any) {
+      await this.state.storage.put('job:status', {
+        state: 'failed',
+        error: err.message
+      });
+    }
+  }
+  
+  // ===================================================================
+  // Cleanup & Alarms
+  // ===================================================================
+  private async updateLastActivity(): Promise<void> {
+    await this.state.storage.put('last_activity', Date.now());
+  }
+  
+  private async setupCleanupAlarm(): Promise<void> {
+    const lastActivity = await this.state.storage.get<number>('last_activity');
+    if (!lastActivity) {
+      await this.updateLastActivity();
+    }
+    
+    await this.state.storage.setAlarm(Date.now() + 3600000);
+  }
+  
+  async alarm(): Promise<void> {
+    const lastActivity = await this.state.storage.get<number>('last_activity') || 0;
+    const now = Date.now();
+    const inactiveTime = now - lastActivity;
+    
+    if (inactiveTime > 3600000) {
+      console.log('[FlowExecutorDO] Cleaning up inactive session');
+      this.flowEngines.clear();
+      this.sessionData.clear();
+    }
+    
+    await this.state.storage.setAlarm(now + 3600000);
+  }
+  
+  // ===================================================================
+  // Logging
+  // ===================================================================
+  private async logExecution(
+    flowId: string,
+    status: string,
+    duration: number,
+    errorMessage?: string
+  ): Promise<void> {
+    try {
+      await this.state.storage.put(`log:${Date.now()}`, {
+        flowId,
+        status,
+        duration,
+        errorMessage: errorMessage || null,
+        timestamp: new Date().toISOString()
+      });
+      
+      const logs = await this.state.storage.list({ prefix: 'log:' });
+      if (logs.size > 100) {
+        const oldLogs = Array.from(logs.keys())
+          .sort()
+          .slice(0, logs.size - 100);
+        await this.state.storage.delete(oldLogs);
+      }
+    } catch (err) {
+      console.error('[FlowExecutorDO] Failed to log:', err);
+    }
+  }
+}
