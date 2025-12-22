@@ -1,44 +1,67 @@
 
 // ===================================================================
-// FlowExecutorDO.ts - CORRECTED (No Duplication)
+// FlowExecutorDO.ts - Enhanced with Caching & Optimization
 // ===================================================================
 
 import { DurableObject } from 'cloudflare:workers';
 import { FlowEngine } from '../core/FlowEngine';
-import { FlowConfig, FlowContext, GlobalContext, ExecutionContext, NodeMessage } from '../types/core';
+import { 
+  FlowConfig, FlowContext, GlobalContext, ExecutionContext, 
+  NodeMessage, Env, RouteCache 
+} from '../types/core';
+import { 
+  StorageKeys, BatchedStorageImpl, RateLimiter 
+} from '../utils';
 
 export class FlowExecutorDO extends DurableObject {
   private state: DurableObjectState;
-  private env: any; // Using 'any' to avoid circular dependency
+  private env: Env;
   private flowEngines: Map<string, FlowEngine> = new Map();
   private sessionData: Map<string, any> = new Map();
   private websockets: Map<string, WebSocket> = new Map();
   private flowContext: FlowContext;
   private globalContext: GlobalContext;
   private shardingType?: string;
+  private routeCache: Map<string, RouteCache> = new Map();
+  private rateLimiter: RateLimiter;
+  private batchedStorage: BatchedStorageImpl;
   
-  constructor(state: DurableObjectState, env: any) {
+  constructor(state: DurableObjectState, env: Env) {
     super(state, env);
     this.state = state;
     this.env = env;
     
+    // Initialize batched storage
+    this.batchedStorage = new BatchedStorageImpl(state.storage, 100);
+    
+    // Initialize rate limiter
+    this.rateLimiter = new RateLimiter(state.storage);
+    
+    // Flow context with storage keys
     this.flowContext = {
-      get: async (key: string) => await this.state.storage.get(`flow:${key}`),
+      get: async (key: string) => 
+        await this.batchedStorage.get(StorageKeys.flow(key)),
       set: async (key: string, value: any) => 
-        await this.state.storage.put(`flow:${key}`, value),
+        await this.batchedStorage.set(StorageKeys.flow(key), value),
       keys: async () => {
-        const list = await this.state.storage.list({ prefix: 'flow:' });
-        return Array.from(list.keys()).map(k => k.replace('flow:', ''));
+        const list = await this.state.storage.list({ 
+          prefix: StorageKeys.listPrefix('f:') 
+        });
+        return Array.from(list.keys()).map(k => k.replace('f:', ''));
       }
     };
     
+    // Global context with storage keys
     this.globalContext = {
-      get: async (key: string) => await this.state.storage.get(`global:${key}`),
+      get: async (key: string) => 
+        await this.batchedStorage.get(StorageKeys.global(key)),
       set: async (key: string, value: any) => 
-        await this.state.storage.put(`global:${key}`, value),
+        await this.batchedStorage.set(StorageKeys.global(key), value),
       keys: async () => {
-        const list = await this.state.storage.list({ prefix: 'global:' });
-        return Array.from(list.keys()).map(k => k.replace('global:', ''));
+        const list = await this.state.storage.list({ 
+          prefix: StorageKeys.listPrefix('g:') 
+        });
+        return Array.from(list.keys()).map(k => k.replace('g:', ''));
       }
     };
     
@@ -57,21 +80,9 @@ export class FlowExecutorDO extends DurableObject {
       return this.handleWebSocketUpgrade(request);
     }
     
-    // Admin endpoints (RPC-style)
-    if (url.pathname === '/internal/session/info') {
-      return this.handleSessionInfo();
-    }
-    
-    if (url.pathname === '/internal/session/clear') {
-      return this.handleSessionClear();
-    }
-    
-    if (url.pathname === '/internal/debug/messages') {
-      return this.handleDebugMessages();
-    }
-    
-    if (url.pathname === '/internal/status') {
-      return this.handleStatus();
+    // Internal/Admin endpoints
+    if (url.pathname.startsWith('/internal/')) {
+      return this.handleInternalRequest(url.pathname, request);
     }
     
     // Route to pattern-specific handler
@@ -91,6 +102,26 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   // ===================================================================
+  // Internal Endpoints
+  // ===================================================================
+  private async handleInternalRequest(pathname: string, request: Request): Promise<Response> {
+    switch (pathname) {
+      case '/internal/session/info':
+        return this.handleSessionInfo();
+      case '/internal/session/clear':
+        return this.handleSessionClear();
+      case '/internal/debug/messages':
+        return this.handleDebugMessages();
+      case '/internal/status':
+        return this.handleStatus();
+      case '/internal/cache/clear':
+        return this.handleCacheClear();
+      default:
+        return this.errorResponse('Unknown internal endpoint', 404);
+    }
+  }
+  
+  // ===================================================================
   // Flow Execution (Main Logic)
   // ===================================================================
   private async handleFlowExecution(request: Request): Promise<Response> {
@@ -102,8 +133,8 @@ export class FlowExecutorDO extends DurableObject {
     try {
       await this.updateLastActivity();
       
-      // Route lookup
-      const route = await this.lookupRoute(path, method);
+      // Route lookup with caching
+      const route = await this.lookupRouteWithCache(path, method);
       
       if (!route) {
         return this.errorResponse('Route not found', 404, { path, method });
@@ -135,6 +166,9 @@ export class FlowExecutorDO extends DurableObject {
         await this.saveSessionContext(result._session);
       }
       
+      // Flush batched storage
+      await this.batchedStorage.flush();
+      
       // Broadcast to WebSockets
       if (this.websockets.size > 0) {
         this.broadcastToWebSockets({
@@ -145,26 +179,39 @@ export class FlowExecutorDO extends DurableObject {
         });
       }
       
-      // Log async
-      this.state.blockConcurrencyWhile(async () => 
-        await this.logExecution(route.flowId, 'success', duration)
-      );
+      // Log async (non-blocking)
+      this.ctx.waitUntil(this.logExecution(route.flowId, 'success', duration));
       
       return this.formatResponse(result, duration, route.flowId);
       
     } catch (err: any) {
       const duration = Date.now() - startTime;
       console.error('[FlowExecutorDO] Error:', err);
-      return this.errorResponse(err.message, 500, { duration });
+      
+      // Ensure storage is flushed even on error
+      await this.batchedStorage.flush();
+      
+      return this.errorResponse(err.message, 500, { 
+        duration,
+        stack: err.stack 
+      });
     }
   }
   
-  // User request handler
+  // User request handler with rate limiting
   private async handleUserRequest(request: Request): Promise<Response> {
-    const userId = request.headers.get('X-User-ID')!;
+    const userId = request.headers.get('X-User-ID');
     
-    if (!await this.checkRateLimit(userId)) {
-      return this.errorResponse('Rate limit exceeded', 429);
+    if (!userId) {
+      return this.errorResponse('User ID required', 401);
+    }
+    
+    // Check rate limit
+    const rateLimits = this.env.RATE_LIMIT || { requests: 100, window: 60000 };
+    if (!await this.rateLimiter.check(userId, rateLimits)) {
+      return this.errorResponse('Rate limit exceeded', 429, {
+        retryAfter: Math.ceil(rateLimits.window / 1000)
+      });
     }
     
     const result = await this.handleFlowExecution(request);
@@ -179,24 +226,18 @@ export class FlowExecutorDO extends DurableObject {
     const jobId = request.headers.get('X-Job-ID')!;
     
     if (url.pathname.includes('/process')) {
-      this.processJobInBackground(request, jobId);
-      return new Response(JSON.stringify({ started: true, jobId }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      this.ctx.waitUntil(this.processJobInBackground(request, jobId));
+      return this.jsonResponse({ started: true, jobId }, 202);
     }
     
     if (url.pathname.includes('/status')) {
-      const status = await this.state.storage.get('job:status');
-      return new Response(JSON.stringify(status || { state: 'not_found' }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      const status = await this.state.storage.get(StorageKeys.job('status'));
+      return this.jsonResponse(status || { state: 'not_found' });
     }
     
     if (url.pathname.includes('/result')) {
-      const result = await this.state.storage.get('job:result');
-      return new Response(JSON.stringify(result || { error: 'No result available' }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      const result = await this.state.storage.get(StorageKeys.job('result'));
+      return this.jsonResponse(result || { error: 'No result available' });
     }
     
     return this.errorResponse('Invalid job endpoint', 404);
@@ -224,7 +265,8 @@ export class FlowExecutorDO extends DurableObject {
       storage: this.state.storage,
       env: this.env,
       flow: this.flowContext,
-      global: this.globalContext
+      global: this.globalContext,
+      batchedStorage: this.batchedStorage
     };
     
     const engine = new FlowEngine(flowConfig, context);
@@ -242,7 +284,7 @@ export class FlowExecutorDO extends DurableObject {
       return this.sessionData.get('context');
     }
     
-    const stored = await this.state.storage.get('session:context');
+    const stored = await this.state.storage.get(StorageKeys.session('context'));
     const context = stored || {
       createdAt: new Date().toISOString(),
       messages: [],
@@ -255,12 +297,43 @@ export class FlowExecutorDO extends DurableObject {
   
   private async saveSessionContext(context: any): Promise<void> {
     this.sessionData.set('context', context);
-    await this.state.storage.put('session:context', context);
+    await this.batchedStorage.set(StorageKeys.session('context'), context);
   }
   
   // ===================================================================
-  // Route Lookup
+  // Route Lookup with Caching
   // ===================================================================
+  private async lookupRouteWithCache(path: string, method: string): Promise<{
+    flowId: string;
+    nodeId: string;
+    flowConfig: FlowConfig;
+  } | null> {
+    const cacheKey = `${method}:${path}`;
+    const cached = this.routeCache.get(cacheKey);
+    
+    // Check cache
+    if (cached && Date.now() < cached.expiry) {
+      return {
+        flowId: cached.flowId,
+        nodeId: cached.nodeId,
+        flowConfig: cached.flowConfig
+      };
+    }
+    
+    // Fetch from database
+    const route = await this.lookupRoute(path, method);
+    
+    // Cache result
+    if (route) {
+      this.routeCache.set(cacheKey, {
+        ...route,
+        expiry: Date.now() + 60000 // 1 minute cache
+      });
+    }
+    
+    return route;
+  }
+  
   private async lookupRoute(path: string, method: string): Promise<{
     flowId: string;
     nodeId: string;
@@ -299,22 +372,18 @@ export class FlowExecutorDO extends DurableObject {
     let body: any = null;
     
     if (request.method !== 'GET' && request.method !== 'HEAD') {
-      if (contentType.includes('application/json')) {
-        try {
+      try {
+        if (contentType.includes('application/json')) {
           body = await request.json();
-        } catch {
-          body = null;
-        }
-      } else if (contentType.includes('application/x-www-form-urlencoded') ||
-                 contentType.includes('multipart/form-data')) {
-        try {
+        } else if (contentType.includes('application/x-www-form-urlencoded') ||
+                   contentType.includes('multipart/form-data')) {
           const formData = await request.formData();
           body = Object.fromEntries(formData);
-        } catch {
+        } else {
           body = await request.text();
         }
-      } else {
-        body = await request.text();
+      } catch (err) {
+        body = null;
       }
     }
     
@@ -334,34 +403,55 @@ export class FlowExecutorDO extends DurableObject {
   private formatResponse(result: any, duration: number, flowId: string): Response {
     if (result?._httpResponse) {
       const resPayload = result._httpResponse.payload;
-      return new Response(
-        typeof resPayload === 'string' ? resPayload : JSON.stringify(resPayload),
-        {
-          status: result._httpResponse.statusCode,
-          headers: {
-            ...result._httpResponse.headers,
-            'X-Execution-Time': duration + 'ms',
-            'X-Flow-ID': flowId
+      const body = typeof resPayload === 'string' ? resPayload : JSON.stringify(resPayload);
+      
+      // Stream large responses
+      if (body.length > 1_000_000) {
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(body));
+              controller.close();
+            }
+          }),
+          {
+            status: result._httpResponse.statusCode,
+            headers: {
+              ...result._httpResponse.headers,
+              'X-Execution-Time': duration + 'ms',
+              'X-Flow-ID': flowId
+            }
           }
+        );
+      }
+      
+      return new Response(body, {
+        status: result._httpResponse.statusCode,
+        headers: {
+          ...result._httpResponse.headers,
+          'X-Execution-Time': duration + 'ms',
+          'X-Flow-ID': flowId,
+          'X-Trace-ID': result._msgid
         }
-      );
+      });
     }
     
-    return new Response(JSON.stringify({ 
+    return this.jsonResponse({ 
       success: true, 
       duration: duration + 'ms',
       flowId
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
     });
   }
   
   private errorResponse(message: string, status: number, extra?: any): Response {
-    return new Response(JSON.stringify({ 
+    return this.jsonResponse({ 
       error: message,
       ...extra
-    }), {
+    }, status);
+  }
+  
+  private jsonResponse(data: any, status = 200): Response {
+    return new Response(JSON.stringify(data), {
       status,
       headers: { 'Content-Type': 'application/json' }
     });
@@ -372,45 +462,53 @@ export class FlowExecutorDO extends DurableObject {
   // ===================================================================
   private async handleSessionInfo(): Promise<Response> {
     const context = await this.loadSessionContext();
-    const logs = await this.state.storage.list({ prefix: 'log:' });
+    const logs = await this.state.storage.list({ prefix: StorageKeys.listPrefix('l:') });
     
-    return new Response(JSON.stringify({
+    return this.jsonResponse({
       sessionId: this.state.id.toString(),
       context,
       activeWebSockets: this.websockets.size,
       cachedFlows: Array.from(this.flowEngines.keys()),
+      cachedRoutes: this.routeCache.size,
       logCount: logs.size,
       lastActivity: await this.state.storage.get('last_activity')
-    }), {
-      headers: { 'Content-Type': 'application/json' }
     });
   }
   
   private async handleSessionClear(): Promise<Response> {
+    // Close flow engines
+    for (const engine of this.flowEngines.values()) {
+      await engine.close();
+    }
+    
     this.flowEngines.clear();
     this.sessionData.clear();
+    this.routeCache.clear();
     
     const keysToDelete: string[] = [];
     const allKeys = await this.state.storage.list();
     
     for (const key of allKeys.keys()) {
-      if (!key.startsWith('log:')) {
+      if (!key.startsWith('l:')) { // Keep logs
         keysToDelete.push(key);
       }
     }
     
     await this.state.storage.delete(keysToDelete);
     
-    return new Response(JSON.stringify({ 
+    return this.jsonResponse({ 
       success: true,
       cleared: keysToDelete.length
-    }), {
-      headers: { 'Content-Type': 'application/json' }
     });
   }
   
+  private async handleCacheClear(): Promise<Response> {
+    this.routeCache.clear();
+    return this.jsonResponse({ success: true, message: 'Cache cleared' });
+  }
+  
   private async handleDebugMessages(): Promise<Response> {
-    const allDebug = await this.state.storage.list({ prefix: 'debug:' });
+    const allDebug = await this.state.storage.list({ prefix: StorageKeys.listPrefix('d:') });
     const messages: any[] = [];
     
     for (const [key, value] of allDebug.entries()) {
@@ -419,23 +517,20 @@ export class FlowExecutorDO extends DurableObject {
     
     messages.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     
-    return new Response(JSON.stringify({
+    return this.jsonResponse({
       messages: messages.slice(0, 100)
-    }), {
-      headers: { 'Content-Type': 'application/json' }
     });
   }
   
   private async handleStatus(): Promise<Response> {
-    return new Response(JSON.stringify({
+    return this.jsonResponse({
       loaded: this.flowEngines.size > 0,
       flowIds: Array.from(this.flowEngines.keys()),
       nodeCount: Array.from(this.flowEngines.values()).reduce((sum, engine: any) => 
         sum + (engine.flowConfig?.nodes?.length || 0), 0
       ),
-      shardingType: this.shardingType
-    }), {
-      headers: { 'Content-Type': 'application/json' }
+      shardingType: this.shardingType,
+      cacheSize: this.routeCache.size
     });
   }
   
@@ -463,9 +558,11 @@ export class FlowExecutorDO extends DurableObject {
     });
   }
   
-  async webSocketMessage(ws: WebSocket, message: string): Promise<void> {
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     try {
-      const msg = JSON.parse(message);
+      const msg = typeof message === 'string' ? JSON.parse(message) : null;
+      
+      if (!msg) return;
       
       switch (msg.type) {
         case 'ping':
@@ -495,13 +592,17 @@ export class FlowExecutorDO extends DurableObject {
     }
   }
   
-  async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
+  async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
     for (const [id, socket] of this.websockets.entries()) {
       if (socket === ws) {
         this.websockets.delete(id);
         break;
       }
     }
+  }
+  
+  async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
+    console.error('[FlowExecutorDO] WebSocket error:', error);
   }
   
   private broadcastToWebSockets(message: any): void {
@@ -516,44 +617,20 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   // ===================================================================
-  // Rate Limiting & Usage
+  // Usage & Stats
   // ===================================================================
-  private async checkRateLimit(userId: string): Promise<boolean> {
-    const key = `ratelimit:${userId}`;
-    const now = Date.now();
-    const windowMs = 60000;
-    const maxRequests = 100;
-    
-    const data = await this.state.storage.get<any>(key) || { 
-      count: 0, 
-      resetAt: now + windowMs 
-    };
-    
-    if (now > data.resetAt) {
-      data.count = 0;
-      data.resetAt = now + windowMs;
-    }
-    
-    if (data.count >= maxRequests) {
-      return false;
-    }
-    
-    data.count++;
-    await this.state.storage.put(key, data);
-    
-    return true;
-  }
-  
   private async updateUsageStats(userId: string): Promise<void> {
-    const stats = await this.state.storage.get<any>('usage:stats') || {
+    const stats = await this.state.storage.get<any>(StorageKeys.usage()) || {
       totalRequests: 0,
-      lastRequest: null
+      lastRequest: null,
+      userRequests: {}
     };
     
     stats.totalRequests++;
     stats.lastRequest = new Date().toISOString();
+    stats.userRequests[userId] = (stats.userRequests[userId] || 0) + 1;
     
-    await this.state.storage.put('usage:stats', stats);
+    await this.batchedStorage.set(StorageKeys.usage(), stats);
   }
   
   // ===================================================================
@@ -561,20 +638,18 @@ export class FlowExecutorDO extends DurableObject {
   // ===================================================================
   private async processJobInBackground(request: Request, jobId: string): Promise<void> {
     try {
-      await this.state.storage.put('job:status', {
+      await this.state.storage.put(StorageKeys.job('status'), {
         state: 'processing',
         progress: 0,
         startedAt: Date.now()
       });
       
       const data = await request.json();
-      
-      // Execute flow for job processing
       const url = new URL(request.url);
       const path = url.pathname.replace('/internal/job/process', '');
       const method = 'POST';
       
-      const route = await this.lookupRoute(path || '/job', method);
+      const route = await this.lookupRouteWithCache(path || '/job', method);
       
       if (route) {
         const flowEngine = await this.getOrLoadFlow(route.flowId, route.flowConfig);
@@ -587,13 +662,13 @@ export class FlowExecutorDO extends DurableObject {
         
         const result = await flowEngine.triggerFlow(route.nodeId, msg);
         
-        await this.state.storage.put('job:status', {
+        await this.state.storage.put(StorageKeys.job('status'), {
           state: 'completed',
           progress: 100,
           completedAt: Date.now()
         });
         
-        await this.state.storage.put('job:result', {
+        await this.state.storage.put(StorageKeys.job('result'), {
           success: true,
           data: result
         });
@@ -602,7 +677,7 @@ export class FlowExecutorDO extends DurableObject {
       }
       
     } catch (err: any) {
-      await this.state.storage.put('job:status', {
+      await this.state.storage.put(StorageKeys.job('status'), {
         state: 'failed',
         error: err.message
       });
@@ -617,12 +692,10 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   private async setupCleanupAlarm(): Promise<void> {
-    const lastActivity = await this.state.storage.get<number>('last_activity');
-    if (!lastActivity) {
-      await this.updateLastActivity();
+    const currentAlarm = await this.state.storage.getAlarm();
+    if (!currentAlarm) {
+      await this.state.storage.setAlarm(Date.now() + 3600000);
     }
-    
-    await this.state.storage.setAlarm(Date.now() + 3600000);
   }
   
   async alarm(): Promise<void> {
@@ -630,12 +703,38 @@ export class FlowExecutorDO extends DurableObject {
     const now = Date.now();
     const inactiveTime = now - lastActivity;
     
+    // Cleanup after 1 hour of inactivity
     if (inactiveTime > 3600000) {
       console.log('[FlowExecutorDO] Cleaning up inactive session');
+      
+      for (const engine of this.flowEngines.values()) {
+        await engine.close();
+      }
+      
       this.flowEngines.clear();
       this.sessionData.clear();
+      this.routeCache.clear();
     }
     
+    // Cleanup old debug messages
+    const debugKeys = await this.state.storage.list({ prefix: StorageKeys.listPrefix('d:') });
+    if (debugKeys.size > 1000) {
+      const toDelete = Array.from(debugKeys.keys())
+        .sort()
+        .slice(0, debugKeys.size - 1000);
+      await this.state.storage.delete(toDelete);
+    }
+    
+    // Cleanup old logs
+    const logKeys = await this.state.storage.list({ prefix: StorageKeys.listPrefix('l:') });
+    if (logKeys.size > 100) {
+      const toDelete = Array.from(logKeys.keys())
+        .sort()
+        .slice(0, logKeys.size - 100);
+      await this.state.storage.delete(toDelete);
+    }
+    
+    // Set next alarm
     await this.state.storage.setAlarm(now + 3600000);
   }
   
@@ -649,21 +748,13 @@ export class FlowExecutorDO extends DurableObject {
     errorMessage?: string
   ): Promise<void> {
     try {
-      await this.state.storage.put(`log:${Date.now()}`, {
+      await this.state.storage.put(StorageKeys.log(Date.now()), {
         flowId,
         status,
         duration,
         errorMessage: errorMessage || null,
         timestamp: new Date().toISOString()
       });
-      
-      const logs = await this.state.storage.list({ prefix: 'log:' });
-      if (logs.size > 100) {
-        const oldLogs = Array.from(logs.keys())
-          .sort()
-          .slice(0, logs.size - 100);
-        await this.state.storage.delete(oldLogs);
-      }
     } catch (err) {
       console.error('[FlowExecutorDO] Failed to log:', err);
     }
