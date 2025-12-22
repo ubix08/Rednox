@@ -1,14 +1,17 @@
-// src/worker.ts
-import { FlowExecutorDO } from './do/FlowExecutorDO';
+
+// ===================================================================
+// RedNox - Main Worker Entry Point
+// ===================================================================
+
+import { Env } from './types/core';
 import { handleAdmin } from './handlers/adminHandler';
 import { handleApiRoute } from './handlers/apiHandler';
 
-export { FlowExecutorDO };
+// Import nodes to register them
+import './nodes';
 
-export interface Env {
-  DB: D1Database;
-  FLOW_EXECUTOR: DurableObjectNamespace<FlowExecutorDO>;
-}
+// Export Durable Object
+export { FlowExecutorDO } from './durable-objects/FlowExecutorDO';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
