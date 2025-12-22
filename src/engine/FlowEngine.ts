@@ -1,3 +1,4 @@
+
 // src/engine/FlowEngine.ts
 import { NodeInstance } from '../nodes/NodeInstance';
 import { FlowConfig, ExecutionContext, NodeMessage } from '../types/core';
@@ -57,3 +58,39 @@ export class FlowEngine {
     }
   }
   
+  private async routeMessage(nodeInstance: NodeInstance, result: NodeMessage | NodeMessage[] | NodeMessage[][]) {
+    let outputs: NodeMessage[][];
+    if (!Array.isArray(result)) {
+      outputs = [[result]];
+    } else if (!Array.isArray(result[0])) {
+      outputs = [result as NodeMessage[]];
+    } else {
+      outputs = result as NodeMessage[][];
+    }
+
+    const wires = this.flowConfig.wires || {};
+    const nodeWires = wires[nodeInstance.id] || [];
+
+    for (let outputIndex = 0; outputIndex < nodeWires.length; outputIndex++) {
+      const targets = nodeWires[outputIndex] || [];
+      const messages = outputs[outputIndex] || [];
+
+      for (const targetId of targets) {
+        for (const msg of messages) {
+          // Clone the message to avoid shared state issues across branches
+          await this.executeNode(targetId, { ...msg });
+        }
+      }
+    }
+  }
+
+  private async handleNodeError(err: any, nodeInstance: NodeInstance, msg: NodeMessage) {
+    RED.log.error(`Error in node ${nodeInstance.id}: ${err.message}`);
+    // Additional error handling can be added here, such as routing to catch nodes
+    // For example, find catch nodes connected to this node and route the error message
+    // const errorMsg = { ...msg, error: err };
+    // await this.routeToCatchNodes(nodeInstance, errorMsg);
+  }
+
+  // Optional getter for httpResponse if needed externally
+  getHttpResponse(): NodeMessage
