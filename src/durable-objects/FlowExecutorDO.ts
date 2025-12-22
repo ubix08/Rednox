@@ -1,12 +1,11 @@
 
 // ===================================================================
-// RedNox - Flow Executor DO (Optimized for 30s CPU Budget)
+// FlowExecutorDO.ts - Handles EVERYTHING (Route Lookup + Execution)
 // ===================================================================
 
 import { DurableObject } from 'cloudflare:workers';
 import { FlowEngine } from '../core/FlowEngine';
-import { FlowConfig, FlowContext, GlobalContext, ExecutionContext, NodeMessage } from '../types/core';
-import { Env } from '../types/core';  // Assuming Env is defined here or in a shared file
+import { FlowConfig, FlowContext, GlobalContext, ExecutionContext, NodeMessage, Env } from '../types/core';
 
 export class FlowExecutorDO extends DurableObject {
   private state: DurableObjectState;
@@ -22,7 +21,6 @@ export class FlowExecutorDO extends DurableObject {
     this.state = state;
     this.env = env;
     
-    // Lazy context initialization
     this.flowContext = {
       get: async (key: string) => await this.state.storage.get(`flow:${key}`),
       set: async (key: string, value: any) => 
@@ -44,89 +42,170 @@ export class FlowExecutorDO extends DurableObject {
     };
   }
   
-  // RPC Method: Execute Flow with automatic loading
-  // This is the main entry point - combines load + execute
-  async executeFlow(
-    flowConfig: FlowConfig,
-    entryNodeId: string,
-    payload: any
-  ): Promise<{ 
-    statusCode: number;
-    headers: Record<string, string>;
-    body: string;
-    duration: number;
-  }> {
+  // ===================================================================
+  // MAIN ENTRY POINT: Handle HTTP Request Directly
+  // ===================================================================
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const path = url.pathname.replace('/api', ''); // Remove /api prefix
+    const method = request.method.toUpperCase();
     const startTime = Date.now();
     
     try {
-      // Smart caching: only reload if flow changed
-      if (!this.flowEngine || this.lastFlowId !== flowConfig.id) {
-        await this.loadFlowInternal(flowConfig);
-        this.lastFlowId = flowConfig.id;
+      // 1. Route Lookup (happens in DO, not worker)
+      const route = await this.lookupRoute(path, method);
+      
+      if (!route) {
+        return new Response(JSON.stringify({ 
+          error: 'Route not found',
+          path,
+          method 
+        }), { 
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
       
-      // Create message
+      // 2. Parse request payload
+      const payload = await this.parseRequestPayload(request, path);
+      
+      // 3. Load flow if needed (with caching)
+      if (!this.flowEngine || this.lastFlowId !== route.flowId) {
+        await this.loadFlow(route.flowConfig);
+        this.lastFlowId = route.flowId;
+      }
+      
+      // 4. Create message
       const msg: NodeMessage = {
         _msgid: crypto.randomUUID(),
         payload,
         topic: ''
       };
       
-      // Execute flow (this can use full 30s if needed)
-      const result = await this.flowEngine!.triggerFlow(entryNodeId, msg);
+      // 5. Execute flow (can use full 30s)
+      const result = await this.flowEngine!.triggerFlow(route.nodeId, msg);
       const duration = Date.now() - startTime;
       
-      // Log execution asynchronously (don't block response)
-      this.state.blockConcurrencyWhile(() => 
-        this.logExecution(flowConfig.id, 'success', duration)
-      );  // Use blockConcurrencyWhile for async tasks instead of waitUntil (better for DOs)
+      // 6. Log execution asynchronously
+      this.state.blockConcurrencyWhile(async () => 
+        await this.logExecution(route.flowId, 'success', duration)
+      );
       
-      // Return HTTP response
+      // 7. Return HTTP response
       if (result?._httpResponse) {
         const resPayload = result._httpResponse.payload;
-        return {
-          statusCode: result._httpResponse.statusCode,
-          headers: result._httpResponse.headers,
-          body: typeof resPayload === 'string' ? resPayload : JSON.stringify(resPayload),
-          duration
-        };
+        return new Response(
+          typeof resPayload === 'string' ? resPayload : JSON.stringify(resPayload),
+          {
+            status: result._httpResponse.statusCode,
+            headers: {
+              ...result._httpResponse.headers,
+              'X-Execution-Time': duration + 'ms'
+            }
+          }
+        );
       }
       
       // Default success response
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          success: true, 
-          duration: duration + 'ms',
-          flowId: flowConfig.id
-        }),
-        duration
-      };
+      return new Response(JSON.stringify({ 
+        success: true, 
+        duration: duration + 'ms',
+        flowId: route.flowId
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
       
     } catch (err: any) {
       const duration = Date.now() - startTime;
-      console.error('[FlowExecutor] Error:', err);
+      console.error('[FlowExecutorDO] Error:', err);
       
-      // Log error asynchronously
-      this.state.blockConcurrencyWhile(() => 
-        this.logExecution(flowConfig.id, 'error', duration, err.message)
-      );
-      
-      return {
-        statusCode: 500,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          error: err.message,
-          duration: duration + 'ms'
-        }),
-        duration
-      };
+      return new Response(JSON.stringify({ 
+        error: err.message,
+        stack: err.stack,
+        duration: duration + 'ms'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
   }
   
-  // Internal flow loading (cached in DO memory)
-  private async loadFlowInternal(flowConfig: FlowConfig): Promise<void> {
+  // ===================================================================
+  // Route Lookup (uses DO's env.DB access)
+  // ===================================================================
+  private async lookupRoute(path: string, method: string): Promise<{
+    flowId: string;
+    nodeId: string;
+    flowConfig: FlowConfig;
+  } | null> {
+    if (!this.env.DB) {
+      throw new Error('Database not configured');
+    }
+    
+    const route = await this.env.DB.prepare(`
+      SELECT r.flow_id, r.node_id, f.config 
+      FROM http_routes r
+      JOIN flows f ON f.id = r.flow_id
+      WHERE r.path = ? AND r.method = ? AND r.enabled = 1 AND f.enabled = 1
+      LIMIT 1
+    `).bind(path, method).first();
+    
+    if (!route) {
+      return null;
+    }
+    
+    return {
+      flowId: route.flow_id as string,
+      nodeId: route.node_id as string,
+      flowConfig: JSON.parse(route.config as string)
+    };
+  }
+  
+  // ===================================================================
+  // Parse Request Payload
+  // ===================================================================
+  private async parseRequestPayload(request: Request, path: string): Promise<any> {
+    const url = new URL(request.url);
+    const contentType = request.headers.get('content-type') || '';
+    
+    let body: any = null;
+    
+    // Parse body based on content-type
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      if (contentType.includes('application/json')) {
+        try {
+          body = await request.json();
+        } catch {
+          body = null;
+        }
+      } else if (contentType.includes('application/x-www-form-urlencoded')) {
+        const formData = await request.formData();
+        body = Object.fromEntries(formData);
+      } else if (contentType.includes('multipart/form-data')) {
+        const formData = await request.formData();
+        body = Object.fromEntries(formData);
+      } else {
+        body = await request.text();
+      }
+    }
+    
+    // Build payload matching Node-RED's http-in format
+    return {
+      body,
+      headers: Object.fromEntries(request.headers),
+      query: Object.fromEntries(url.searchParams),
+      params: {}, // Could extract route params if needed
+      method: request.method,
+      url: request.url,
+      path
+    };
+  }
+  
+  // ===================================================================
+  // Load Flow (cached in DO memory)
+  // ===================================================================
+  private async loadFlow(flowConfig: FlowConfig): Promise<void> {
     const context: ExecutionContext = {
       storage: this.state.storage,
       env: this.env,
@@ -139,7 +218,9 @@ export class FlowExecutorDO extends DurableObject {
     await this.flowEngine.initialize();
   }
   
-  // Async logging (uses blockConcurrencyWhile to not block response)
+  // ===================================================================
+  // Async Logging
+  // ===================================================================
   private async logExecution(
     flowId: string,
     status: string,
@@ -155,7 +236,7 @@ export class FlowExecutorDO extends DurableObject {
         timestamp: new Date().toISOString()
       });
       
-      // Optionally clean old logs (keep last 100)
+      // Clean old logs (keep last 100)
       const logs = await this.state.storage.list({ prefix: 'log:' });
       if (logs.size > 100) {
         const oldLogs = Array.from(logs.keys())
@@ -164,11 +245,13 @@ export class FlowExecutorDO extends DurableObject {
         await this.state.storage.delete(oldLogs);
       }
     } catch (err) {
-      console.error('[FlowExecutor] Failed to log:', err);
+      console.error('[FlowExecutorDO] Failed to log:', err);
     }
   }
   
-  // RPC Method: Get Debug Messages
+  // ===================================================================
+  // Admin RPC Methods (still accessible via RPC if needed)
+  // ===================================================================
   async getDebugMessages(): Promise<any[]> {
     const allDebug = await this.state.storage.list({ prefix: 'debug:' });
     const messages: any[] = [];
@@ -181,24 +264,20 @@ export class FlowExecutorDO extends DurableObject {
     return messages.slice(0, 100);
   }
   
-  // RPC Method: Get Flow Status
   async getStatus(): Promise<{
     loaded: boolean;
     flowId?: string;
     flowName?: string;
     nodeCount: number;
-    uptime: number;
   }> {
     return {
       loaded: !!this.flowEngine,
       flowId: this.flowConfig?.id,
       flowName: this.flowConfig?.name,
-      nodeCount: this.flowConfig?.nodes?.length || 0,
-      uptime: Date.now()  // Could track actual uptime if needed (e.g., store start time in storage)
+      nodeCount: this.flowConfig?.nodes?.length || 0
     };
   }
   
-  // RPC Method: Clear cache (force reload)
   async clearCache(): Promise<{ success: boolean }> {
     this.flowEngine = undefined;
     this.flowConfig = undefined;
@@ -206,9 +285,82 @@ export class FlowExecutorDO extends DurableObject {
     return { success: true };
   }
   
-  // Alarm handler for scheduled flows (future enhancement)
   async alarm(): Promise<void> {
-    // Handle scheduled/cron triggers
-    console.log('[FlowExecutor] Alarm triggered');
+    console.log('[FlowExecutorDO] Alarm triggered');
   }
 }
+
+// ===================================================================
+// index.ts - MINIMAL Worker (Just Routes to DO)
+// ===================================================================
+
+import { Env } from './types/core';
+import { handleAdmin } from './handlers/adminHandler';
+
+// Import nodes to register them
+import './nodes';
+
+// Export Durable Object
+export { FlowExecutorDO } from './durable-objects/FlowExecutorDO';
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    
+    // CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        }
+      });
+    }
+    
+    // Admin endpoints (still handled in worker for simplicity)
+    if (path.startsWith('/admin/')) {
+      return handleAdmin(request, env);
+    }
+    
+    // API endpoints - IMMEDIATELY DELEGATE TO DO
+    if (path.startsWith('/api/')) {
+      if (!env.FLOW_EXECUTOR) {
+        return new Response(JSON.stringify({ 
+          error: 'Flow executor not configured'
+        }), { 
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      // Use a single global DO instance (or shard by path if needed)
+      const doId = env.FLOW_EXECUTOR.idFromName('global');
+      const doStub = env.FLOW_EXECUTOR.get(doId);
+      
+      // Forward entire request to DO - it handles everything
+      return doStub.fetch(request);
+    }
+    
+    // Health check
+    if (path === '/health') {
+      return new Response(JSON.stringify({ status: 'ok' }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Info endpoint
+    return new Response(JSON.stringify({
+      name: 'RedNox',
+      version: '2.0.0',
+      endpoints: {
+        admin: '/admin/flows',
+        api: '/api/{path}',
+        health: '/health'
+      }
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+};
