@@ -1,27 +1,27 @@
 
 // ===================================================================
-// FlowExecutorDO.ts - Session-Aware Executor
+// FlowExecutorDO.ts - CORRECTED (No Duplication)
 // ===================================================================
 
 import { DurableObject } from 'cloudflare:workers';
 import { FlowEngine } from '../core/FlowEngine';
-import { FlowConfig, FlowContext, GlobalContext, ExecutionContext, NodeMessage, Env } from '../types/core';
+import { FlowConfig, FlowContext, GlobalContext, ExecutionContext, NodeMessage } from '../types/core';
 
 export class FlowExecutorDO extends DurableObject {
   private state: DurableObjectState;
-  private env: Env;
-  private flowEngines: Map<string, FlowEngine> = new Map(); // Cache multiple flows
-  private sessionData: Map<string, any> = new Map(); // In-memory session cache
+  private env: any; // Using 'any' to avoid circular dependency
+  private flowEngines: Map<string, FlowEngine> = new Map();
+  private sessionData: Map<string, any> = new Map();
   private websockets: Map<string, WebSocket> = new Map();
   private flowContext: FlowContext;
   private globalContext: GlobalContext;
+  private shardingType?: string;
   
-  constructor(state: DurableObjectState, env: Env) {
+  constructor(state: DurableObjectState, env: any) {
     super(state, env);
     this.state = state;
     this.env = env;
     
-    // Context wrappers
     this.flowContext = {
       get: async (key: string) => await this.state.storage.get(`flow:${key}`),
       set: async (key: string, value: any) => 
@@ -42,33 +42,52 @@ export class FlowExecutorDO extends DurableObject {
       }
     };
     
-    // Set up auto-cleanup alarm (1 hour of inactivity)
     this.setupCleanupAlarm();
   }
   
   // ===================================================================
-  // MAIN ENTRY POINT: Handle All Requests for This Session
+  // MAIN ENTRY POINT
   // ===================================================================
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const path = url.pathname;
+    this.shardingType = request.headers.get('X-Sharding-Type') || 'session';
     
-    // WebSocket upgrade for real-time communication
+    // WebSocket upgrade
     if (request.headers.get('Upgrade') === 'websocket') {
       return this.handleWebSocketUpgrade(request);
     }
     
-    // Session management endpoints
-    if (path.endsWith('/session/info')) {
+    // Admin endpoints (RPC-style)
+    if (url.pathname === '/internal/session/info') {
       return this.handleSessionInfo();
     }
     
-    if (path.endsWith('/session/clear')) {
+    if (url.pathname === '/internal/session/clear') {
       return this.handleSessionClear();
     }
     
-    // Main flow execution
-    return this.handleFlowExecution(request);
+    if (url.pathname === '/internal/debug/messages') {
+      return this.handleDebugMessages();
+    }
+    
+    if (url.pathname === '/internal/status') {
+      return this.handleStatus();
+    }
+    
+    // Route to pattern-specific handler
+    switch (this.shardingType) {
+      case 'job':
+        return this.handleJobRequest(request);
+      case 'user':
+        return this.handleUserRequest(request);
+      case 'workspace':
+        return this.handleWorkspaceRequest(request);
+      case 'global':
+        return this.handleStatelessRequest(request);
+      case 'session':
+      default:
+        return this.handleFlowExecution(request);
+    }
   }
   
   // ===================================================================
@@ -76,183 +95,131 @@ export class FlowExecutorDO extends DurableObject {
   // ===================================================================
   private async handleFlowExecution(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const path = url.pathname.replace('/api', '');
+    const path = url.pathname.replace('/api', '').replace('/api/chat', '');
     const method = request.method.toUpperCase();
     const startTime = Date.now();
     
     try {
-      // Update last activity (for cleanup alarm)
       await this.updateLastActivity();
       
-      // 1. Route lookup
+      // Route lookup
       const route = await this.lookupRoute(path, method);
       
       if (!route) {
         return this.errorResponse('Route not found', 404, { path, method });
       }
       
-      // 2. Load/cache flow engine
+      // Load flow engine
       const flowEngine = await this.getOrLoadFlow(route.flowId, route.flowConfig);
       
-      // 3. Parse request payload
+      // Parse request
       const payload = await this.parseRequestPayload(request, path);
       
-      // 4. Load session context (conversation history, user data, etc.)
+      // Load session context
       const sessionContext = await this.loadSessionContext();
-      
-      // 5. Merge session context into payload
       payload._session = sessionContext;
       
-      // 6. Create message
+      // Create message
       const msg: NodeMessage = {
         _msgid: crypto.randomUUID(),
         payload,
         topic: ''
       };
       
-      // 7. Execute flow
+      // Execute flow
       const result = await flowEngine.triggerFlow(route.nodeId, msg);
       const duration = Date.now() - startTime;
       
-      // 8. Update session context if flow modified it
+      // Update session
       if (result?._session) {
         await this.saveSessionContext(result._session);
       }
       
-      // 9. Broadcast to WebSocket clients if any
+      // Broadcast to WebSockets
       if (this.websockets.size > 0) {
         this.broadcastToWebSockets({
           type: 'flow_result',
           flowId: route.flowId,
-          result: result,
+          result,
           duration
         });
       }
       
-      // 10. Log execution (async)
+      // Log async
       this.state.blockConcurrencyWhile(async () => 
         await this.logExecution(route.flowId, 'success', duration)
       );
       
-      // 11. Return HTTP response
       return this.formatResponse(result, duration, route.flowId);
       
     } catch (err: any) {
       const duration = Date.now() - startTime;
-      console.error('[FlowExecutorDO] Execution error:', err);
-      
-      // Broadcast error to WebSockets
-      if (this.websockets.size > 0) {
-        this.broadcastToWebSockets({
-          type: 'error',
-          error: err.message,
-          duration
-        });
-      }
-      
+      console.error('[FlowExecutorDO] Error:', err);
       return this.errorResponse(err.message, 500, { duration });
     }
   }
   
-  // ===================================================================
-  // WebSocket Support for Real-Time Updates
-  // ===================================================================
-  private handleWebSocketUpgrade(request: Request): Response {
-    const pair = new WebSocketPair();
-    const [client, server] = Object.values(pair);
+  // User request handler
+  private async handleUserRequest(request: Request): Promise<Response> {
+    const userId = request.headers.get('X-User-ID')!;
     
-    this.state.acceptWebSocket(server);
+    if (!await this.checkRateLimit(userId)) {
+      return this.errorResponse('Rate limit exceeded', 429);
+    }
     
-    const wsId = crypto.randomUUID();
-    this.websockets.set(wsId, server);
+    const result = await this.handleFlowExecution(request);
+    await this.updateUsageStats(userId);
     
-    // Send initial connection message
-    server.send(JSON.stringify({
-      type: 'connected',
-      sessionId: this.state.id.toString(),
-      timestamp: new Date().toISOString()
-    }));
-    
-    return new Response(null, {
-      status: 101,
-      webSocket: client
-    });
+    return result;
   }
   
-  async webSocketMessage(ws: WebSocket, message: string): Promise<void> {
-    try {
-      const msg = JSON.parse(message);
-      
-      // Handle different message types
-      switch (msg.type) {
-        case 'ping':
-          ws.send(JSON.stringify({ type: 'pong' }));
-          break;
-          
-        case 'execute_flow':
-          // Execute flow and stream results
-          const result = await this.executeFlowFromWebSocket(msg);
-          ws.send(JSON.stringify({
-            type: 'flow_result',
-            requestId: msg.requestId,
-            result
-          }));
-          break;
-          
-        case 'get_session':
-          const session = await this.loadSessionContext();
-          ws.send(JSON.stringify({
-            type: 'session_data',
-            requestId: msg.requestId,
-            session
-          }));
-          break;
-          
-        default:
-          ws.send(JSON.stringify({
-            type: 'error',
-            error: 'Unknown message type'
-          }));
-      }
-    } catch (err: any) {
-      ws.send(JSON.stringify({
-        type: 'error',
-        error: err.message
-      }));
+  // Job request handler
+  private async handleJobRequest(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const jobId = request.headers.get('X-Job-ID')!;
+    
+    if (url.pathname.includes('/process')) {
+      this.processJobInBackground(request, jobId);
+      return new Response(JSON.stringify({ started: true, jobId }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
+    
+    if (url.pathname.includes('/status')) {
+      const status = await this.state.storage.get('job:status');
+      return new Response(JSON.stringify(status || { state: 'not_found' }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    if (url.pathname.includes('/result')) {
+      const result = await this.state.storage.get('job:result');
+      return new Response(JSON.stringify(result || { error: 'No result available' }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    return this.errorResponse('Invalid job endpoint', 404);
   }
   
-  async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
-    // Remove from active connections
-    for (const [id, socket] of this.websockets.entries()) {
-      if (socket === ws) {
-        this.websockets.delete(id);
-        break;
-      }
-    }
+  // Workspace request handler
+  private async handleWorkspaceRequest(request: Request): Promise<Response> {
+    return this.handleFlowExecution(request);
   }
   
-  private broadcastToWebSockets(message: any): void {
-    const data = JSON.stringify(message);
-    for (const ws of this.websockets.values()) {
-      try {
-        ws.send(data);
-      } catch (err) {
-        console.error('[FlowExecutorDO] WebSocket send error:', err);
-      }
-    }
+  // Stateless request handler
+  private async handleStatelessRequest(request: Request): Promise<Response> {
+    return this.handleFlowExecution(request);
   }
   
   // ===================================================================
-  // Flow Engine Management (Cached)
+  // Flow Engine Management
   // ===================================================================
   private async getOrLoadFlow(flowId: string, flowConfig: FlowConfig): Promise<FlowEngine> {
-    // Check memory cache first
     if (this.flowEngines.has(flowId)) {
       return this.flowEngines.get(flowId)!;
     }
     
-    // Load and cache
     const context: ExecutionContext = {
       storage: this.state.storage,
       env: this.env,
@@ -268,15 +235,13 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   // ===================================================================
-  // Session Context Management
+  // Session Management
   // ===================================================================
   private async loadSessionContext(): Promise<any> {
-    // Check memory cache
     if (this.sessionData.has('context')) {
       return this.sessionData.get('context');
     }
     
-    // Load from durable storage
     const stored = await this.state.storage.get('session:context');
     const context = stored || {
       createdAt: new Date().toISOString(),
@@ -340,12 +305,14 @@ export class FlowExecutorDO extends DurableObject {
         } catch {
           body = null;
         }
-      } else if (contentType.includes('application/x-www-form-urlencoded')) {
-        const formData = await request.formData();
-        body = Object.fromEntries(formData);
-      } else if (contentType.includes('multipart/form-data')) {
-        const formData = await request.formData();
-        body = Object.fromEntries(formData);
+      } else if (contentType.includes('application/x-www-form-urlencoded') ||
+                 contentType.includes('multipart/form-data')) {
+        try {
+          const formData = await request.formData();
+          body = Object.fromEntries(formData);
+        } catch {
+          body = await request.text();
+        }
       } else {
         body = await request.text();
       }
@@ -401,7 +368,7 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   // ===================================================================
-  // Session Management Endpoints
+  // Admin/RPC Endpoints
   // ===================================================================
   private async handleSessionInfo(): Promise<Response> {
     const context = await this.loadSessionContext();
@@ -420,11 +387,9 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   private async handleSessionClear(): Promise<Response> {
-    // Clear memory caches
     this.flowEngines.clear();
     this.sessionData.clear();
     
-    // Clear durable storage (keep logs for debugging)
     const keysToDelete: string[] = [];
     const allKeys = await this.state.storage.list();
     
@@ -444,6 +409,206 @@ export class FlowExecutorDO extends DurableObject {
     });
   }
   
+  private async handleDebugMessages(): Promise<Response> {
+    const allDebug = await this.state.storage.list({ prefix: 'debug:' });
+    const messages: any[] = [];
+    
+    for (const [key, value] of allDebug.entries()) {
+      messages.push({ key, ...value as any });
+    }
+    
+    messages.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    
+    return new Response(JSON.stringify({
+      messages: messages.slice(0, 100)
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+  
+  private async handleStatus(): Promise<Response> {
+    return new Response(JSON.stringify({
+      loaded: this.flowEngines.size > 0,
+      flowIds: Array.from(this.flowEngines.keys()),
+      nodeCount: Array.from(this.flowEngines.values()).reduce((sum, engine: any) => 
+        sum + (engine.flowConfig?.nodes?.length || 0), 0
+      ),
+      shardingType: this.shardingType
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+  
+  // ===================================================================
+  // WebSocket Support
+  // ===================================================================
+  private handleWebSocketUpgrade(request: Request): Response {
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+    
+    this.state.acceptWebSocket(server);
+    
+    const wsId = crypto.randomUUID();
+    this.websockets.set(wsId, server);
+    
+    server.send(JSON.stringify({
+      type: 'connected',
+      sessionId: this.state.id.toString(),
+      timestamp: new Date().toISOString()
+    }));
+    
+    return new Response(null, {
+      status: 101,
+      webSocket: client
+    });
+  }
+  
+  async webSocketMessage(ws: WebSocket, message: string): Promise<void> {
+    try {
+      const msg = JSON.parse(message);
+      
+      switch (msg.type) {
+        case 'ping':
+          ws.send(JSON.stringify({ type: 'pong' }));
+          break;
+          
+        case 'get_session':
+          const session = await this.loadSessionContext();
+          ws.send(JSON.stringify({
+            type: 'session_data',
+            requestId: msg.requestId,
+            session
+          }));
+          break;
+          
+        default:
+          ws.send(JSON.stringify({
+            type: 'error',
+            error: 'Unknown message type'
+          }));
+      }
+    } catch (err: any) {
+      ws.send(JSON.stringify({
+        type: 'error',
+        error: err.message
+      }));
+    }
+  }
+  
+  async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
+    for (const [id, socket] of this.websockets.entries()) {
+      if (socket === ws) {
+        this.websockets.delete(id);
+        break;
+      }
+    }
+  }
+  
+  private broadcastToWebSockets(message: any): void {
+    const data = JSON.stringify(message);
+    for (const ws of this.websockets.values()) {
+      try {
+        ws.send(data);
+      } catch (err) {
+        console.error('[FlowExecutorDO] WebSocket send error:', err);
+      }
+    }
+  }
+  
+  // ===================================================================
+  // Rate Limiting & Usage
+  // ===================================================================
+  private async checkRateLimit(userId: string): Promise<boolean> {
+    const key = `ratelimit:${userId}`;
+    const now = Date.now();
+    const windowMs = 60000;
+    const maxRequests = 100;
+    
+    const data = await this.state.storage.get<any>(key) || { 
+      count: 0, 
+      resetAt: now + windowMs 
+    };
+    
+    if (now > data.resetAt) {
+      data.count = 0;
+      data.resetAt = now + windowMs;
+    }
+    
+    if (data.count >= maxRequests) {
+      return false;
+    }
+    
+    data.count++;
+    await this.state.storage.put(key, data);
+    
+    return true;
+  }
+  
+  private async updateUsageStats(userId: string): Promise<void> {
+    const stats = await this.state.storage.get<any>('usage:stats') || {
+      totalRequests: 0,
+      lastRequest: null
+    };
+    
+    stats.totalRequests++;
+    stats.lastRequest = new Date().toISOString();
+    
+    await this.state.storage.put('usage:stats', stats);
+  }
+  
+  // ===================================================================
+  // Background Job Processing
+  // ===================================================================
+  private async processJobInBackground(request: Request, jobId: string): Promise<void> {
+    try {
+      await this.state.storage.put('job:status', {
+        state: 'processing',
+        progress: 0,
+        startedAt: Date.now()
+      });
+      
+      const data = await request.json();
+      
+      // Execute flow for job processing
+      const url = new URL(request.url);
+      const path = url.pathname.replace('/internal/job/process', '');
+      const method = 'POST';
+      
+      const route = await this.lookupRoute(path || '/job', method);
+      
+      if (route) {
+        const flowEngine = await this.getOrLoadFlow(route.flowId, route.flowConfig);
+        
+        const msg: NodeMessage = {
+          _msgid: crypto.randomUUID(),
+          payload: data,
+          topic: 'job'
+        };
+        
+        const result = await flowEngine.triggerFlow(route.nodeId, msg);
+        
+        await this.state.storage.put('job:status', {
+          state: 'completed',
+          progress: 100,
+          completedAt: Date.now()
+        });
+        
+        await this.state.storage.put('job:result', {
+          success: true,
+          data: result
+        });
+      } else {
+        throw new Error('No job processing flow found');
+      }
+      
+    } catch (err: any) {
+      await this.state.storage.put('job:status', {
+        state: 'failed',
+        error: err.message
+      });
+    }
+  }
+  
   // ===================================================================
   // Cleanup & Alarms
   // ===================================================================
@@ -457,7 +622,6 @@ export class FlowExecutorDO extends DurableObject {
       await this.updateLastActivity();
     }
     
-    // Set alarm for 1 hour from now
     await this.state.storage.setAlarm(Date.now() + 3600000);
   }
   
@@ -466,17 +630,12 @@ export class FlowExecutorDO extends DurableObject {
     const now = Date.now();
     const inactiveTime = now - lastActivity;
     
-    // If inactive for > 1 hour, clear caches
     if (inactiveTime > 3600000) {
       console.log('[FlowExecutorDO] Cleaning up inactive session');
       this.flowEngines.clear();
       this.sessionData.clear();
-      
-      // Optionally clear storage too
-      // await this.state.storage.deleteAll();
     }
     
-    // Set next alarm
     await this.state.storage.setAlarm(now + 3600000);
   }
   
@@ -498,7 +657,6 @@ export class FlowExecutorDO extends DurableObject {
         timestamp: new Date().toISOString()
       });
       
-      // Keep last 100 logs
       const logs = await this.state.storage.list({ prefix: 'log:' });
       if (logs.size > 100) {
         const oldLogs = Array.from(logs.keys())
@@ -510,118 +668,4 @@ export class FlowExecutorDO extends DurableObject {
       console.error('[FlowExecutorDO] Failed to log:', err);
     }
   }
-  
-  // ===================================================================
-  // WebSocket Flow Execution
-  // ===================================================================
-  private async executeFlowFromWebSocket(msg: any): Promise<any> {
-    const { flowId, nodeId, payload } = msg;
-    
-    // This would need actual flow lookup - simplified for example
-    throw new Error('Not implemented - use HTTP endpoint');
-  }
 }
-
-// ===================================================================
-// index.ts - Session-Aware Worker
-// ===================================================================
-
-import { Env } from './types/core';
-import { handleAdmin } from './handlers/adminHandler';
-
-export { FlowExecutorDO } from './durable-objects/FlowExecutorDO';
-
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-    const path = url.pathname;
-    
-    // CORS
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, X-Session-ID',
-        }
-      });
-    }
-    
-    // Admin endpoints
-    if (path.startsWith('/admin/')) {
-      return handleAdmin(request, env);
-    }
-    
-    // API endpoints - route by session
-    if (path.startsWith('/api/')) {
-      if (!env.FLOW_EXECUTOR) {
-        return new Response(JSON.stringify({ 
-          error: 'Flow executor not configured'
-        }), { 
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      
-      // Get or create session ID
-      let sessionId = 
-        url.searchParams.get('session_id') ||
-        request.headers.get('X-Session-ID');
-      
-      if (!sessionId) {
-        // Generate new session for new users
-        sessionId = crypto.randomUUID();
-      }
-      
-      // Route to session-specific DO
-      const doId = env.FLOW_EXECUTOR.idFromName(sessionId);
-      const doStub = env.FLOW_EXECUTOR.get(doId);
-      
-      // Forward request with session ID in header
-      const modifiedRequest = new Request(request.url, {
-        method: request.method,
-        headers: {
-          ...Object.fromEntries(request.headers),
-          'X-Session-ID': sessionId
-        },
-        body: request.body
-      });
-      
-      const response = await doStub.fetch(modifiedRequest);
-      
-      // Add session ID to response headers
-      const modifiedResponse = new Response(response.body, {
-        status: response.status,
-        headers: {
-          ...Object.fromEntries(response.headers),
-          'X-Session-ID': sessionId
-        }
-      });
-      
-      return modifiedResponse;
-    }
-    
-    // Health check
-    if (path === '/health') {
-      return new Response(JSON.stringify({ 
-        status: 'ok',
-        version: '2.0.0'
-      }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-    
-    return new Response(JSON.stringify({
-      name: 'RedNox',
-      version: '2.0.0',
-      endpoints: {
-        admin: '/admin/flows',
-        api: '/api/{path}?session_id={uuid}',
-        websocket: 'wss://{host}/api/{path}?session_id={uuid}',
-        health: '/health'
-      }
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-};
