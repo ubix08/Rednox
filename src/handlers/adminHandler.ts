@@ -1,8 +1,10 @@
-// src/handlers/adminHandler.ts
-import { Env } from '../worker';
-import { jsonResponse } from '../utils/requestUtils';
-import { D1_SCHEMA } from '../schema';
-import { FlowConfig } from '../types/core';
+// ===================================================================
+// RedNox - Admin API Handler
+// ===================================================================
+
+import { Env, FlowConfig } from '../types/core';
+import { D1_SCHEMA } from '../db/schema';
+import { jsonResponse } from '../utils';
 
 export async function handleAdmin(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
