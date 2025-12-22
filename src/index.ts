@@ -3,6 +3,7 @@ import { FlowExecutorDO } from './do/FlowExecutorDO';
 import { handleAdmin } from './handlers/adminHandler';
 import { handleApiRoute } from './handlers/apiHandler';
 
+export { FlowExecutorDO };
 export interface Env {
   DB: D1Database;
   FLOW_EXECUTOR: DurableObjectNamespace<FlowExecutorDO>;
