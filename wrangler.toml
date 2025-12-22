@@ -1,34 +1,22 @@
-name = "rednode"
+name = "rednox"
 main = "src/index.ts"
-compatibility_date = "2024-12-15"
-workers_dev = true
+compatibility_date = "2024-01-01"
 
-# Durable Objects Configuration
-[durable_objects]
-bindings = [
-  { name = "FLOWS", class_name = "FlowStorage" }
-]
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "rednox-flows"
+database_id = "YOUR_DATABASE_ID"
 
-# Durable Objects Migrations
+# Durable Objects
+[[durable_objects.bindings]]
+name = "FLOW_EXECUTOR"
+class_name = "FlowExecutorDO"
+
 [[migrations]]
 tag = "v1"
-new_classes = ["FlowStorage"]
+new_classes = ["FlowExecutorDO"]
 
-# Environment Variables
-[vars]
-ENVIRONMENT = "production"
-
-# Free tier limits (for reference):
-# - 100,000 requests/day
-# - 10ms CPU time per request
-# - Durable Objects: 1 GB storage per account
-# - Durable Objects: 1 million requests/month
-
-# For production, add:
-# [env.production]
-# vars = { ENVIRONMENT = "production" }
-# 
-# [env.production.durable_objects]
-# bindings = [
-#   { name = "FLOWS", class_name = "FlowStorage" }
-# ]
+# Increased CPU limit for complex agent operations (5 minutes)
+[durable_objects.limits]
+cpu_ms = 300000
