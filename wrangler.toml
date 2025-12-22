@@ -15,7 +15,7 @@ class_name = "FlowExecutorDO"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["FlowExecutorDO"]
+new_sqlite_classes = ["FlowExecutorDO"]
 
 # Increased CPU limit for complex agent operations (5 minutes)
 [durable_objects.limits]
