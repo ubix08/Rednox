@@ -5,7 +5,7 @@ compatibility_date = "2024-01-01"
 # D1 Database
 [[d1_databases]]
 binding = "DB"
-database_name = "flow-db"
+database_name = "rednox-db"
 database_id = "71cdffcd-79bf-4902-8e3a-86257862425c"
 
 # Durable Objects
