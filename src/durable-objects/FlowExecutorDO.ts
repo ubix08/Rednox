@@ -18,6 +18,7 @@ export class FlowExecutorDO extends DurableObject {
   private lastFlowId?: string;
   
   constructor(state: DurableObjectState, env: Env) {
+    super(state, env);
     this.state = state;
     this.env = env;
     
