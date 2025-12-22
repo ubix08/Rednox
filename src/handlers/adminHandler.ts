@@ -1,10 +1,10 @@
 
 // ===================================================================
-// RedNox - Admin API Handler (Corrected)
+// RedNox - Admin API Handler (Final Fix)
 // ===================================================================
 
 import { Env, FlowConfig } from '../types/core';
-import { D1_SCHEMA } from '../db/schema';
+import { D1_SCHEMA_STATEMENTS } from '../db/schema';
 import { jsonResponse } from '../utils';
 
 export async function handleAdmin(request: Request, env: Env): Promise<Response> {
@@ -33,17 +33,53 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     // Initialize database
     if (path === '/admin/init' && request.method === 'POST') {
       try {
-        await env.DB.exec(D1_SCHEMA);
+        console.log('Starting database initialization...');
+        
+        // Execute each statement individually to avoid batch().exec() issues
+        const results = [];
+        for (const statement of D1_SCHEMA_STATEMENTS) {
+          try {
+            console.log('Executing:', statement.substring(0, 50) + '...');
+            const result = await env.DB.prepare(statement).run();
+            results.push({ 
+              statement: statement.substring(0, 50),
+              success: true,
+              meta: result.meta 
+            });
+          } catch (stmtErr: any) {
+            console.error('Statement error:', stmtErr);
+            results.push({ 
+              statement: statement.substring(0, 50),
+              success: false,
+              error: stmtErr.message 
+            });
+          }
+        }
+        
+        const failed = results.filter(r => !r.success);
+        
+        if (failed.length > 0) {
+          return jsonResponse({ 
+            error: 'Database initialization partially failed',
+            results,
+            failed: failed.length,
+            details: failed.map(f => f.error).join('; ')
+          }, corsHeaders, 500);
+        }
+        
         return jsonResponse({ 
           success: true, 
-          message: 'Database initialized successfully' 
+          message: 'Database initialized successfully',
+          statements: results.length
         }, corsHeaders);
       } catch (err: any) {
         console.error('Database initialization error:', err);
+        console.error('Error stack:', err.stack);
         return jsonResponse({ 
           error: 'Database initialization failed',
           details: err.message,
-          hint: 'Make sure the D1 database exists: npx wrangler d1 create rednox-db'
+          stack: err.stack,
+          hint: 'Check the worker logs for detailed error information'
         }, corsHeaders, 500);
       }
     }
@@ -463,6 +499,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     
   } catch (err: any) {
     console.error('Admin error:', err);
+    console.error('Error stack:', err.stack);
     return jsonResponse({ 
       error: 'Internal server error',
       details: err.message,
