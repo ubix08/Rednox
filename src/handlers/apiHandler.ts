@@ -1,9 +1,15 @@
-// src/handlers/apiHandler.ts
-import { Env } from '../worker';
-import { parseRequestPayload, logExecution } from '../utils/requestUtils';
-import { FlowConfig } from '../types/core';
+// ===================================================================
+// RedNox - API Route Handler
+// ===================================================================
 
-export async function handleApiRoute(request: Request, env: Env, triggerPath: string): Promise<Response> {
+import { Env, FlowConfig } from '../types/core';
+import { parseRequestPayload } from '../utils';
+
+export async function handleApiRoute(
+  request: Request,
+  env: Env,
+  triggerPath: string
+): Promise<Response> {
   const method = request.method.toUpperCase();
   const startTime = Date.now();
   
@@ -66,4 +72,18 @@ export async function handleApiRoute(request: Request, env: Env, triggerPath: st
       headers: { 'Content-Type': 'application/json' }
     });
   }
+}
+
+function logExecution(
+  env: Env,
+  flowId: string,
+  status: string,
+  duration: number,
+  errorMessage?: string
+): void {
+  // Fire and forget - don't block response
+  env.DB.prepare(`
+    INSERT INTO flow_logs (flow_id, status, duration_ms, error_message) 
+    VALUES (?, ?, ?, ?)
+  `).bind(flowId, status, duration, errorMessage || null).run().catch(() => {});
 }
