@@ -6,34 +6,38 @@
 import { DurableObject } from 'cloudflare:workers';
 import { FlowEngine } from '../core/FlowEngine';
 import { FlowConfig, FlowContext, GlobalContext, ExecutionContext, NodeMessage } from '../types/core';
+import { Env } from '../types/core';  // Assuming Env is defined here or in a shared file
 
-export class FlowExecutorDO extends DurableObject {
+export class FlowExecutorDO implements DurableObject {
+  private state: DurableObjectState;
+  private env: Env;
   private flowEngine?: FlowEngine;
   private flowConfig?: FlowConfig;
   private flowContext: FlowContext;
   private globalContext: GlobalContext;
   private lastFlowId?: string;
   
-  constructor(state: DurableObjectState, env: any) {
-    super(state, env);
+  constructor(state: DurableObjectState, env: Env) {
+    this.state = state;
+    this.env = env;
     
     // Lazy context initialization
     this.flowContext = {
-      get: async (key: string) => this.ctx.storage.get(`flow:${key}`),
+      get: async (key: string) => await this.state.storage.get(`flow:${key}`),
       set: async (key: string, value: any) => 
-        await this.ctx.storage.put(`flow:${key}`, value),
+        await this.state.storage.put(`flow:${key}`, value),
       keys: async () => {
-        const list = await this.ctx.storage.list({ prefix: 'flow:' });
+        const list = await this.state.storage.list({ prefix: 'flow:' });
         return Array.from(list.keys()).map(k => k.replace('flow:', ''));
       }
     };
     
     this.globalContext = {
-      get: async (key: string) => this.ctx.storage.get(`global:${key}`),
+      get: async (key: string) => await this.state.storage.get(`global:${key}`),
       set: async (key: string, value: any) => 
-        await this.ctx.storage.put(`global:${key}`, value),
+        await this.state.storage.put(`global:${key}`, value),
       keys: async () => {
-        const list = await this.ctx.storage.list({ prefix: 'global:' });
+        const list = await this.state.storage.list({ prefix: 'global:' });
         return Array.from(list.keys()).map(k => k.replace('global:', ''));
       }
     };
@@ -72,9 +76,9 @@ export class FlowExecutorDO extends DurableObject {
       const duration = Date.now() - startTime;
       
       // Log execution asynchronously (don't block response)
-      this.ctx.waitUntil(
+      this.state.blockConcurrencyWhile(() => 
         this.logExecution(flowConfig.id, 'success', duration)
-      );
+      );  // Use blockConcurrencyWhile for async tasks instead of waitUntil (better for DOs)
       
       // Return HTTP response
       if (result?._httpResponse) {
@@ -104,7 +108,7 @@ export class FlowExecutorDO extends DurableObject {
       console.error('[FlowExecutor] Error:', err);
       
       // Log error asynchronously
-      this.ctx.waitUntil(
+      this.state.blockConcurrencyWhile(() => 
         this.logExecution(flowConfig.id, 'error', duration, err.message)
       );
       
@@ -123,7 +127,7 @@ export class FlowExecutorDO extends DurableObject {
   // Internal flow loading (cached in DO memory)
   private async loadFlowInternal(flowConfig: FlowConfig): Promise<void> {
     const context: ExecutionContext = {
-      storage: this.ctx.storage,
+      storage: this.state.storage,
       env: this.env,
       flow: this.flowContext,
       global: this.globalContext
@@ -134,7 +138,7 @@ export class FlowExecutorDO extends DurableObject {
     await this.flowEngine.initialize();
   }
   
-  // Async logging (uses waitUntil to not block response)
+  // Async logging (uses blockConcurrencyWhile to not block response)
   private async logExecution(
     flowId: string,
     status: string,
@@ -142,7 +146,7 @@ export class FlowExecutorDO extends DurableObject {
     errorMessage?: string
   ): Promise<void> {
     try {
-      await this.ctx.storage.put(`log:${Date.now()}`, {
+      await this.state.storage.put(`log:${Date.now()}`, {
         flowId,
         status,
         duration,
@@ -151,12 +155,12 @@ export class FlowExecutorDO extends DurableObject {
       });
       
       // Optionally clean old logs (keep last 100)
-      const logs = await this.ctx.storage.list({ prefix: 'log:' });
+      const logs = await this.state.storage.list({ prefix: 'log:' });
       if (logs.size > 100) {
         const oldLogs = Array.from(logs.keys())
           .sort()
           .slice(0, logs.size - 100);
-        await this.ctx.storage.delete(oldLogs);
+        await this.state.storage.delete(oldLogs);
       }
     } catch (err) {
       console.error('[FlowExecutor] Failed to log:', err);
@@ -165,7 +169,7 @@ export class FlowExecutorDO extends DurableObject {
   
   // RPC Method: Get Debug Messages
   async getDebugMessages(): Promise<any[]> {
-    const allDebug = await this.ctx.storage.list({ prefix: 'debug:' });
+    const allDebug = await this.state.storage.list({ prefix: 'debug:' });
     const messages: any[] = [];
     
     for (const [key, value] of allDebug.entries()) {
@@ -188,8 +192,8 @@ export class FlowExecutorDO extends DurableObject {
       loaded: !!this.flowEngine,
       flowId: this.flowConfig?.id,
       flowName: this.flowConfig?.name,
-      nodeCount: this.flowConfig?.nodes.length || 0,
-      uptime: Date.now() // Could track actual uptime if needed
+      nodeCount: this.flowConfig?.nodes?.length || 0,
+      uptime: Date.now()  // Could track actual uptime if needed (e.g., store start time in storage)
     };
   }
   
