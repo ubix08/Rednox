@@ -1,6 +1,6 @@
 
 // ===================================================================
-// RedNox - API Route Handler (Corrected)
+// RedNox - API Handler (Optimized for <10ms Worker CPU)
 // ===================================================================
 
 import { Env, FlowConfig } from '../types/core';
@@ -12,22 +12,19 @@ export async function handleApiRoute(
   triggerPath: string
 ): Promise<Response> {
   const method = request.method.toUpperCase();
-  const startTime = Date.now();
-  let flowId = 'unknown';
   
   try {
-    // Check if DB is configured
+    // CRITICAL: Minimize worker CPU time - only do route lookup
     if (!env.DB) {
       return new Response(JSON.stringify({ 
-        error: 'Database not configured',
-        hint: 'Make sure D1 database is bound in wrangler.toml'
+        error: 'Database not configured'
       }), { 
         status: 500,
         headers: { 'Content-Type': 'application/json' }
       });
     }
     
-    // Fast route lookup using indexed query
+    // Fast indexed lookup (~2ms)
     const route = await env.DB.prepare(`
       SELECT r.flow_id, r.node_id, f.config 
       FROM http_routes r
@@ -47,81 +44,53 @@ export async function handleApiRoute(
       });
     }
     
-    flowId = route.flow_id as string;
-    const flowConfig: FlowConfig = JSON.parse(route.config as string);
-    
-    // Check if FLOW_EXECUTOR is configured
     if (!env.FLOW_EXECUTOR) {
-      const duration = Date.now() - startTime;
-      await logExecution(env, flowId, 'error', duration, 'Durable Object not configured');
-      
       return new Response(JSON.stringify({ 
-        error: 'Flow executor not configured',
-        hint: 'Make sure Durable Object binding is configured in wrangler.toml'
+        error: 'Flow executor not configured'
       }), { 
         status: 500,
         headers: { 'Content-Type': 'application/json' }
       });
     }
     
-    // Get DO stub using RPC
+    const flowId = route.flow_id as string;
+    const flowConfig: FlowConfig = JSON.parse(route.config as string);
+    
+    // IMPORTANT: Get DO stub and immediately delegate
+    // This keeps worker CPU minimal
     const doId = env.FLOW_EXECUTOR.idFromName(flowId);
     const doStub = env.FLOW_EXECUTOR.get(doId);
     
-    // Load flow configuration (cached in DO)
-    await doStub.loadFlow(flowConfig);
-    
-    // Parse request payload
+    // Parse request (lightweight operation)
     const payload = await parseRequestPayload(request, triggerPath);
     
-    // Execute flow via RPC
-    const result = await doStub.executeFlow(route.node_id as string, payload);
+    // DELEGATE TO DO: All heavy lifting happens here (30s budget)
+    // The DO will:
+    // 1. Load/cache the flow if needed
+    // 2. Execute all nodes
+    // 3. Handle async operations
+    // 4. Log results
+    const result = await doStub.executeFlow(
+      flowConfig,
+      route.node_id as string,
+      payload
+    );
     
-    // Log execution (async, don't wait)
-    const duration = Date.now() - startTime;
-    await logExecution(env, flowId, 'success', duration);
-    
-    // Return response
+    // Worker just returns the response (minimal CPU)
     return new Response(result.body, {
       status: result.statusCode,
       headers: result.headers
     });
     
   } catch (err: any) {
-    const duration = Date.now() - startTime;
     console.error('API route error:', err);
-    
-    await logExecution(env, flowId, 'error', duration, err.message);
     
     return new Response(JSON.stringify({ 
       error: err.message,
-      stack: err.stack
+      hint: 'Check worker logs for details'
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
-  }
-}
-
-async function logExecution(
-  env: Env,
-  flowId: string,
-  status: string,
-  duration: number,
-  errorMessage?: string
-): Promise<void> {
-  // Fire and forget - don't block response
-  try {
-    if (!env.DB) {
-      console.warn('Cannot log execution: DB not configured');
-      return;
-    }
-    
-    await env.DB.prepare(`
-      INSERT INTO flow_logs (flow_id, status, duration_ms, error_message) 
-      VALUES (?, ?, ?, ?)
-    `).bind(flowId, status, duration, errorMessage || null).run();
-  } catch (err: any) {
-    console.error('Failed to log execution:', err);
   }
 }
