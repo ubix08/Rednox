@@ -1,5 +1,6 @@
+
 // ===================================================================
-// RedNox - Admin API Handler
+// RedNox - Admin API Handler (Corrected)
 // ===================================================================
 
 import { Env, FlowConfig } from '../types/core';
@@ -21,165 +22,236 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   }
   
   try {
+    // Check if DB is configured
+    if (!env.DB) {
+      return jsonResponse({ 
+        error: 'Database not configured',
+        hint: 'Make sure D1 database is bound in wrangler.toml'
+      }, corsHeaders, 500);
+    }
+    
     // Initialize database
     if (path === '/admin/init' && request.method === 'POST') {
-      await env.DB.exec(D1_SCHEMA);
-      return jsonResponse({ success: true, message: 'Database initialized' }, corsHeaders);
+      try {
+        await env.DB.exec(D1_SCHEMA);
+        return jsonResponse({ 
+          success: true, 
+          message: 'Database initialized successfully' 
+        }, corsHeaders);
+      } catch (err: any) {
+        console.error('Database initialization error:', err);
+        return jsonResponse({ 
+          error: 'Database initialization failed',
+          details: err.message,
+          hint: 'Make sure the D1 database exists: npx wrangler d1 create rednox-db'
+        }, corsHeaders, 500);
+      }
     }
     
     // List all flows
     if (path === '/admin/flows' && request.method === 'GET') {
-      const flows = await env.DB.prepare(
-        'SELECT id, name, description, enabled, created_at, updated_at FROM flows ORDER BY created_at DESC'
-      ).all();
-      
-      return jsonResponse({ flows: flows.results, count: flows.results.length }, corsHeaders);
+      try {
+        const flows = await env.DB.prepare(
+          'SELECT id, name, description, enabled, created_at, updated_at FROM flows ORDER BY created_at DESC'
+        ).all();
+        
+        return jsonResponse({ 
+          flows: flows.results || [], 
+          count: flows.results?.length || 0 
+        }, corsHeaders);
+      } catch (err: any) {
+        console.error('Error fetching flows:', err);
+        return jsonResponse({ 
+          error: 'Failed to fetch flows',
+          details: err.message,
+          hint: 'Database might not be initialized. Call POST /admin/init first'
+        }, corsHeaders, 500);
+      }
     }
     
     // Get specific flow
     if (path.match(/^\/admin\/flows\/[^/]+$/) && request.method === 'GET') {
       const flowId = path.split('/').pop();
-      const flow = await env.DB.prepare('SELECT * FROM flows WHERE id = ?').bind(flowId).first();
       
-      if (!flow) {
-        return jsonResponse({ error: 'Flow not found' }, corsHeaders, 404);
+      try {
+        const flow = await env.DB.prepare('SELECT * FROM flows WHERE id = ?').bind(flowId).first();
+        
+        if (!flow) {
+          return jsonResponse({ error: 'Flow not found' }, corsHeaders, 404);
+        }
+        
+        const routes = await env.DB.prepare(
+          'SELECT * FROM http_routes WHERE flow_id = ?'
+        ).bind(flowId).all();
+        
+        return jsonResponse({
+          ...flow,
+          config: JSON.parse(flow.config as string),
+          routes: routes.results || []
+        }, corsHeaders);
+      } catch (err: any) {
+        console.error('Error fetching flow:', err);
+        return jsonResponse({ 
+          error: 'Failed to fetch flow',
+          details: err.message
+        }, corsHeaders, 500);
       }
-      
-      const routes = await env.DB.prepare(
-        'SELECT * FROM http_routes WHERE flow_id = ?'
-      ).bind(flowId).all();
-      
-      return jsonResponse({
-        ...flow,
-        config: JSON.parse(flow.config as string),
-        routes: routes.results
-      }, corsHeaders);
     }
     
     // Create new flow
     if (path === '/admin/flows' && request.method === 'POST') {
-      const flowData = await request.json() as FlowConfig;
-      const flowId = flowData.id || crypto.randomUUID();
-      
-      if (!flowData.name || !flowData.nodes || flowData.nodes.length === 0) {
-        return jsonResponse({ error: 'Invalid flow: name and nodes required' }, corsHeaders, 400);
-      }
-      
-      // Extract HTTP triggers
-      const httpTriggers: Array<{ nodeId: string; path: string; method: string }> = [];
-      for (const node of flowData.nodes) {
-        if (node.type === 'http-in' && node.url) {
-          httpTriggers.push({
-            nodeId: node.id,
-            path: node.url,
-            method: (node.method || 'get').toUpperCase()
-          });
+      try {
+        const flowData = await request.json() as FlowConfig;
+        const flowId = flowData.id || crypto.randomUUID();
+        
+        if (!flowData.name || !flowData.nodes || flowData.nodes.length === 0) {
+          return jsonResponse({ 
+            error: 'Invalid flow: name and nodes required' 
+          }, corsHeaders, 400);
         }
-      }
-      
-      flowData.httpTriggers = httpTriggers;
-      
-      // Insert flow
-      await env.DB.prepare(`
-        INSERT INTO flows (id, name, description, config, enabled)
-        VALUES (?, ?, ?, ?, 1)
-      `).bind(
-        flowId,
-        flowData.name,
-        flowData.description || '',
-        JSON.stringify({ ...flowData, id: flowId })
-      ).run();
-      
-      // Insert HTTP routes
-      for (const trigger of httpTriggers) {
+        
+        // Extract HTTP triggers
+        const httpTriggers: Array<{ nodeId: string; path: string; method: string }> = [];
+        for (const node of flowData.nodes) {
+          if (node.type === 'http-in' && node.url) {
+            httpTriggers.push({
+              nodeId: node.id,
+              path: node.url,
+              method: (node.method || 'get').toUpperCase()
+            });
+          }
+        }
+        
+        flowData.httpTriggers = httpTriggers;
+        
+        // Insert flow
         await env.DB.prepare(`
-          INSERT INTO http_routes (id, flow_id, node_id, path, method, enabled)
-          VALUES (?, ?, ?, ?, ?, 1)
+          INSERT INTO flows (id, name, description, config, enabled)
+          VALUES (?, ?, ?, ?, 1)
         `).bind(
-          crypto.randomUUID(),
           flowId,
-          trigger.nodeId,
-          trigger.path,
-          trigger.method
+          flowData.name,
+          flowData.description || '',
+          JSON.stringify({ ...flowData, id: flowId })
         ).run();
+        
+        // Insert HTTP routes
+        for (const trigger of httpTriggers) {
+          await env.DB.prepare(`
+            INSERT INTO http_routes (id, flow_id, node_id, path, method, enabled)
+            VALUES (?, ?, ?, ?, ?, 1)
+          `).bind(
+            crypto.randomUUID(),
+            flowId,
+            trigger.nodeId,
+            trigger.path,
+            trigger.method
+          ).run();
+        }
+        
+        return jsonResponse({ 
+          success: true, 
+          flowId,
+          httpTriggers: httpTriggers.length,
+          message: 'Flow created successfully'
+        }, corsHeaders, 201);
+      } catch (err: any) {
+        console.error('Error creating flow:', err);
+        return jsonResponse({ 
+          error: 'Failed to create flow',
+          details: err.message
+        }, corsHeaders, 500);
       }
-      
-      return jsonResponse({ 
-        success: true, 
-        flowId,
-        httpTriggers: httpTriggers.length,
-        message: 'Flow created successfully'
-      }, corsHeaders, 201);
     }
     
     // Update flow
     if (path.match(/^\/admin\/flows\/[^/]+$/) && request.method === 'PUT') {
       const flowId = path.split('/').pop();
-      const flowData = await request.json() as FlowConfig;
       
-      // Extract HTTP triggers
-      const httpTriggers: Array<{ nodeId: string; path: string; method: string }> = [];
-      for (const node of flowData.nodes) {
-        if (node.type === 'http-in' && node.url) {
-          httpTriggers.push({
-            nodeId: node.id,
-            path: node.url,
-            method: (node.method || 'get').toUpperCase()
-          });
+      try {
+        const flowData = await request.json() as FlowConfig;
+        
+        // Extract HTTP triggers
+        const httpTriggers: Array<{ nodeId: string; path: string; method: string }> = [];
+        for (const node of flowData.nodes) {
+          if (node.type === 'http-in' && node.url) {
+            httpTriggers.push({
+              nodeId: node.id,
+              path: node.url,
+              method: (node.method || 'get').toUpperCase()
+            });
+          }
         }
-      }
-      
-      flowData.httpTriggers = httpTriggers;
-      
-      // Update flow
-      const result = await env.DB.prepare(`
-        UPDATE flows 
-        SET name = ?, description = ?, config = ?, updated_at = datetime('now')
-        WHERE id = ?
-      `).bind(
-        flowData.name,
-        flowData.description || '',
-        JSON.stringify({ ...flowData, id: flowId }),
-        flowId
-      ).run();
-      
-      if (result.meta.changes === 0) {
-        return jsonResponse({ error: 'Flow not found' }, corsHeaders, 404);
-      }
-      
-      // Delete old routes and insert new ones
-      await env.DB.prepare('DELETE FROM http_routes WHERE flow_id = ?').bind(flowId).run();
-      
-      for (const trigger of httpTriggers) {
-        await env.DB.prepare(`
-          INSERT INTO http_routes (id, flow_id, node_id, path, method, enabled)
-          VALUES (?, ?, ?, ?, ?, 1)
+        
+        flowData.httpTriggers = httpTriggers;
+        
+        // Update flow
+        const result = await env.DB.prepare(`
+          UPDATE flows 
+          SET name = ?, description = ?, config = ?, updated_at = datetime('now')
+          WHERE id = ?
         `).bind(
-          crypto.randomUUID(),
-          flowId,
-          trigger.nodeId,
-          trigger.path,
-          trigger.method
+          flowData.name,
+          flowData.description || '',
+          JSON.stringify({ ...flowData, id: flowId }),
+          flowId
         ).run();
+        
+        if (result.meta.changes === 0) {
+          return jsonResponse({ error: 'Flow not found' }, corsHeaders, 404);
+        }
+        
+        // Delete old routes and insert new ones
+        await env.DB.prepare('DELETE FROM http_routes WHERE flow_id = ?').bind(flowId).run();
+        
+        for (const trigger of httpTriggers) {
+          await env.DB.prepare(`
+            INSERT INTO http_routes (id, flow_id, node_id, path, method, enabled)
+            VALUES (?, ?, ?, ?, ?, 1)
+          `).bind(
+            crypto.randomUUID(),
+            flowId,
+            trigger.nodeId,
+            trigger.path,
+            trigger.method
+          ).run();
+        }
+        
+        return jsonResponse({ 
+          success: true, 
+          message: 'Flow updated successfully' 
+        }, corsHeaders);
+      } catch (err: any) {
+        console.error('Error updating flow:', err);
+        return jsonResponse({ 
+          error: 'Failed to update flow',
+          details: err.message
+        }, corsHeaders, 500);
       }
-      
-      return jsonResponse({ 
-        success: true, 
-        message: 'Flow updated successfully' 
-      }, corsHeaders);
     }
     
     // Delete flow
     if (path.match(/^\/admin\/flows\/[^/]+$/) && request.method === 'DELETE') {
       const flowId = path.split('/').pop();
       
-      const result = await env.DB.prepare('DELETE FROM flows WHERE id = ?').bind(flowId).run();
-      
-      if (result.meta.changes === 0) {
-        return jsonResponse({ error: 'Flow not found' }, corsHeaders, 404);
+      try {
+        const result = await env.DB.prepare('DELETE FROM flows WHERE id = ?').bind(flowId).run();
+        
+        if (result.meta.changes === 0) {
+          return jsonResponse({ error: 'Flow not found' }, corsHeaders, 404);
+        }
+        
+        return jsonResponse({ 
+          success: true, 
+          message: 'Flow deleted successfully' 
+        }, corsHeaders);
+      } catch (err: any) {
+        console.error('Error deleting flow:', err);
+        return jsonResponse({ 
+          error: 'Failed to delete flow',
+          details: err.message
+        }, corsHeaders, 500);
       }
-      
-      return jsonResponse({ success: true, message: 'Flow deleted successfully' }, corsHeaders);
     }
     
     // Enable/disable flow
@@ -189,19 +261,27 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const action = parts[parts.length - 1];
       const enabled = action === 'enable' ? 1 : 0;
       
-      await env.DB.prepare(
-        'UPDATE flows SET enabled = ?, updated_at = datetime(\'now\') WHERE id = ?'
-      ).bind(enabled, flowId).run();
-      
-      await env.DB.prepare(
-        'UPDATE http_routes SET enabled = ? WHERE flow_id = ?'
-      ).bind(enabled, flowId).run();
-      
-      return jsonResponse({ 
-        success: true, 
-        enabled: enabled === 1,
-        message: `Flow ${action}d successfully`
-      }, corsHeaders);
+      try {
+        await env.DB.prepare(
+          'UPDATE flows SET enabled = ?, updated_at = datetime(\'now\') WHERE id = ?'
+        ).bind(enabled, flowId).run();
+        
+        await env.DB.prepare(
+          'UPDATE http_routes SET enabled = ? WHERE flow_id = ?'
+        ).bind(enabled, flowId).run();
+        
+        return jsonResponse({ 
+          success: true, 
+          enabled: enabled === 1,
+          message: `Flow ${action}d successfully`
+        }, corsHeaders);
+      } catch (err: any) {
+        console.error(`Error ${action}ing flow:`, err);
+        return jsonResponse({ 
+          error: `Failed to ${action} flow`,
+          details: err.message
+        }, corsHeaders, 500);
+      }
     }
     
     // Get flow logs
@@ -209,129 +289,184 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const flowId = path.split('/')[3];
       const limit = parseInt(url.searchParams.get('limit') || '50');
       
-      const logs = await env.DB.prepare(
-        'SELECT * FROM flow_logs WHERE flow_id = ? ORDER BY executed_at DESC LIMIT ?'
-      ).bind(flowId, limit).all();
-      
-      return jsonResponse({ logs: logs.results }, corsHeaders);
+      try {
+        const logs = await env.DB.prepare(
+          'SELECT * FROM flow_logs WHERE flow_id = ? ORDER BY executed_at DESC LIMIT ?'
+        ).bind(flowId, limit).all();
+        
+        return jsonResponse({ logs: logs.results || [] }, corsHeaders);
+      } catch (err: any) {
+        console.error('Error fetching logs:', err);
+        return jsonResponse({ 
+          error: 'Failed to fetch logs',
+          details: err.message
+        }, corsHeaders, 500);
+      }
     }
     
     // Get debug messages from DO via RPC
     if (path.match(/^\/admin\/flows\/[^/]+\/debug$/) && request.method === 'GET') {
       const flowId = path.split('/')[3];
       
-      const doId = env.FLOW_EXECUTOR.idFromName(flowId);
-      const doStub = env.FLOW_EXECUTOR.get(doId);
-      
-      const messages = await doStub.getDebugMessages();
-      return jsonResponse({ messages }, corsHeaders);
+      try {
+        const doId = env.FLOW_EXECUTOR.idFromName(flowId);
+        const doStub = env.FLOW_EXECUTOR.get(doId);
+        
+        const messages = await doStub.getDebugMessages();
+        return jsonResponse({ messages }, corsHeaders);
+      } catch (err: any) {
+        console.error('Error fetching debug messages:', err);
+        return jsonResponse({ 
+          error: 'Failed to fetch debug messages',
+          details: err.message
+        }, corsHeaders, 500);
+      }
     }
     
     // Get flow status from DO via RPC
     if (path.match(/^\/admin\/flows\/[^/]+\/status$/) && request.method === 'GET') {
       const flowId = path.split('/')[3];
       
-      const doId = env.FLOW_EXECUTOR.idFromName(flowId);
-      const doStub = env.FLOW_EXECUTOR.get(doId);
-      
-      const status = await doStub.getStatus();
-      return jsonResponse(status, corsHeaders);
+      try {
+        const doId = env.FLOW_EXECUTOR.idFromName(flowId);
+        const doStub = env.FLOW_EXECUTOR.get(doId);
+        
+        const status = await doStub.getStatus();
+        return jsonResponse(status, corsHeaders);
+      } catch (err: any) {
+        console.error('Error fetching flow status:', err);
+        return jsonResponse({ 
+          error: 'Failed to fetch flow status',
+          details: err.message
+        }, corsHeaders, 500);
+      }
     }
     
     // List all HTTP routes
     if (path === '/admin/routes' && request.method === 'GET') {
-      const routes = await env.DB.prepare(`
-        SELECT r.*, f.name as flow_name 
-        FROM http_routes r
-        JOIN flows f ON f.id = r.flow_id
-        WHERE r.enabled = 1
-        ORDER BY r.path, r.method
-      `).all();
-      
-      return jsonResponse({ routes: routes.results, count: routes.results.length }, corsHeaders);
+      try {
+        const routes = await env.DB.prepare(`
+          SELECT r.*, f.name as flow_name 
+          FROM http_routes r
+          JOIN flows f ON f.id = r.flow_id
+          WHERE r.enabled = 1
+          ORDER BY r.path, r.method
+        `).all();
+        
+        return jsonResponse({ 
+          routes: routes.results || [], 
+          count: routes.results?.length || 0 
+        }, corsHeaders);
+      } catch (err: any) {
+        console.error('Error fetching routes:', err);
+        return jsonResponse({ 
+          error: 'Failed to fetch routes',
+          details: err.message
+        }, corsHeaders, 500);
+      }
     }
     
     // Import flows (bulk)
     if (path === '/admin/flows/import' && request.method === 'POST') {
-      const { flows } = await request.json() as { flows: FlowConfig[] };
-      const results = [];
-      
-      for (const flowData of flows) {
-        try {
-          const flowId = flowData.id || crypto.randomUUID();
-          
-          // Extract HTTP triggers
-          const httpTriggers: Array<{ nodeId: string; path: string; method: string }> = [];
-          for (const node of flowData.nodes) {
-            if (node.type === 'http-in' && node.url) {
-              httpTriggers.push({
-                nodeId: node.id,
-                path: node.url,
-                method: (node.method || 'get').toUpperCase()
-              });
+      try {
+        const { flows } = await request.json() as { flows: FlowConfig[] };
+        const results = [];
+        
+        for (const flowData of flows) {
+          try {
+            const flowId = flowData.id || crypto.randomUUID();
+            
+            // Extract HTTP triggers
+            const httpTriggers: Array<{ nodeId: string; path: string; method: string }> = [];
+            for (const node of flowData.nodes) {
+              if (node.type === 'http-in' && node.url) {
+                httpTriggers.push({
+                  nodeId: node.id,
+                  path: node.url,
+                  method: (node.method || 'get').toUpperCase()
+                });
+              }
             }
-          }
-          
-          flowData.httpTriggers = httpTriggers;
-          
-          await env.DB.prepare(`
-            INSERT OR REPLACE INTO flows (id, name, description, config, enabled)
-            VALUES (?, ?, ?, ?, 1)
-          `).bind(
-            flowId,
-            flowData.name,
-            flowData.description || '',
-            JSON.stringify({ ...flowData, id: flowId })
-          ).run();
-          
-          // Delete old routes
-          await env.DB.prepare('DELETE FROM http_routes WHERE flow_id = ?').bind(flowId).run();
-          
-          // Insert new routes
-          for (const trigger of httpTriggers) {
+            
+            flowData.httpTriggers = httpTriggers;
+            
             await env.DB.prepare(`
-              INSERT INTO http_routes (id, flow_id, node_id, path, method, enabled)
-              VALUES (?, ?, ?, ?, ?, 1)
+              INSERT OR REPLACE INTO flows (id, name, description, config, enabled)
+              VALUES (?, ?, ?, ?, 1)
             `).bind(
-              crypto.randomUUID(),
               flowId,
-              trigger.nodeId,
-              trigger.path,
-              trigger.method
+              flowData.name,
+              flowData.description || '',
+              JSON.stringify({ ...flowData, id: flowId })
             ).run();
+            
+            // Delete old routes
+            await env.DB.prepare('DELETE FROM http_routes WHERE flow_id = ?').bind(flowId).run();
+            
+            // Insert new routes
+            for (const trigger of httpTriggers) {
+              await env.DB.prepare(`
+                INSERT INTO http_routes (id, flow_id, node_id, path, method, enabled)
+                VALUES (?, ?, ?, ?, ?, 1)
+              `).bind(
+                crypto.randomUUID(),
+                flowId,
+                trigger.nodeId,
+                trigger.path,
+                trigger.method
+              ).run();
+            }
+            
+            results.push({ flowId, success: true, routes: httpTriggers.length });
+          } catch (err: any) {
+            results.push({ flowId: flowData.id, success: false, error: err.message });
           }
-          
-          results.push({ flowId, success: true, routes: httpTriggers.length });
-        } catch (err: any) {
-          results.push({ flowId: flowData.id, success: false, error: err.message });
         }
+        
+        return jsonResponse({ 
+          results,
+          imported: results.filter(r => r.success).length,
+          failed: results.filter(r => !r.success).length
+        }, corsHeaders);
+      } catch (err: any) {
+        console.error('Error importing flows:', err);
+        return jsonResponse({ 
+          error: 'Failed to import flows',
+          details: err.message
+        }, corsHeaders, 500);
       }
-      
-      return jsonResponse({ 
-        results,
-        imported: results.filter(r => r.success).length,
-        failed: results.filter(r => !r.success).length
-      }, corsHeaders);
     }
     
     // Export flows
     if (path === '/admin/flows/export' && request.method === 'GET') {
-      const flows = await env.DB.prepare('SELECT config FROM flows WHERE enabled = 1').all();
-      const exportData = flows.results.map(f => JSON.parse(f.config as string));
-      
-      return new Response(JSON.stringify(exportData, null, 2), {
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Disposition': 'attachment; filename="flows-export.json"',
-          ...corsHeaders
-        }
-      });
+      try {
+        const flows = await env.DB.prepare('SELECT config FROM flows WHERE enabled = 1').all();
+        const exportData = flows.results?.map(f => JSON.parse(f.config as string)) || [];
+        
+        return new Response(JSON.stringify(exportData, null, 2), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Disposition': 'attachment; filename="flows-export.json"',
+            ...corsHeaders
+          }
+        });
+      } catch (err: any) {
+        console.error('Error exporting flows:', err);
+        return jsonResponse({ 
+          error: 'Failed to export flows',
+          details: err.message
+        }, corsHeaders, 500);
+      }
     }
     
     return jsonResponse({ error: 'Not found' }, corsHeaders, 404);
     
   } catch (err: any) {
     console.error('Admin error:', err);
-    return jsonResponse({ error: err.message }, corsHeaders, 500);
+    return jsonResponse({ 
+      error: 'Internal server error',
+      details: err.message,
+      stack: err.stack
+    }, corsHeaders, 500);
   }
 }
