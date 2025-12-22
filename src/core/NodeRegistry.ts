@@ -1,4 +1,7 @@
-// src/nodes/NodeRegistry.ts
+// ===================================================================
+// RedNox - Node Registry
+// ===================================================================
+
 import { RuntimeNodeDefinition } from '../types/core';
 
 export class NodeRegistry {
