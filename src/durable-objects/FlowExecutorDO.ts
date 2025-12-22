@@ -8,7 +8,7 @@ import { FlowEngine } from '../core/FlowEngine';
 import { FlowConfig, FlowContext, GlobalContext, ExecutionContext, NodeMessage } from '../types/core';
 import { Env } from '../types/core';  // Assuming Env is defined here or in a shared file
 
-export class FlowExecutorDO implements DurableObject {
+export class FlowExecutorDO extends DurableObject {
   private state: DurableObjectState;
   private env: Env;
   private flowEngine?: FlowEngine;
