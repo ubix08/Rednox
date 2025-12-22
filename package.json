@@ -1,0 +1,25 @@
+{
+  "name": "nodered-cloudflare",
+  "version": "1.0.0",
+  "description": "Node-RED adaptation for Cloudflare Workers with Durable Objects",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "keywords": [
+    "node-red",
+    "cloudflare",
+    "workers",
+    "durable-objects",
+    "edge-computing"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "wrangler": "^3.87.0",
+    "typescript": "^5.7.2"
+  }
+}
