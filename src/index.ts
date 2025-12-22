@@ -1,6 +1,6 @@
 
 // ===================================================================
-// RedNox - Main Worker Entry Point
+// RedNox - Optimized Worker Entry (CPU Budget Conscious)
 // ===================================================================
 
 import { Env } from './types/core';
@@ -18,23 +18,43 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     
-    // Admin endpoints
+    // Quick CORS preflight handling (minimize CPU)
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        }
+      });
+    }
+    
+    // Admin endpoints - these run in worker context
     if (path.startsWith('/admin/')) {
       return handleAdmin(request, env);
     }
     
-    // API endpoints - Fast route lookup
+    // API endpoints - immediately delegate to DO
+    // Worker only does route lookup, execution happens in DO
     if (path.startsWith('/api/')) {
       return handleApiRoute(request, env, path.replace('/api', ''));
     }
     
+    // Health check - minimal CPU
+    if (path === '/health') {
+      return new Response(JSON.stringify({ status: 'ok' }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
     // Info endpoint
     return new Response(JSON.stringify({
-      name: 'RedNox - Optimized Node-RED Worker',
+      name: 'RedNox',
       version: '2.0.0',
       endpoints: {
         admin: '/admin/flows',
-        api: '/api/{path}'
+        api: '/api/{path}',
+        health: '/health'
       }
     }), {
       headers: { 'Content-Type': 'application/json' }
