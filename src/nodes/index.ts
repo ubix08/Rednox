@@ -1,17 +1,16 @@
 
 // ===================================================================
-// RedNox - Extended Node Implementations
+// RedNox - Enhanced Node Implementations with Safety
 // ===================================================================
 
 import { registry } from '../core/NodeRegistry';
 import { NodeMessage, Node, ExecutionContext } from '../types/core';
-import { RED, evaluateProperty } from '../utils';
+import { RED, evaluateProperty, executeSafeFunction, StorageKeys } from '../utils';
 
 // ===================================================================
-// CORE INPUT/OUTPUT NODES
+// HTTP NODES
 // ===================================================================
 
-// HTTP Input Node (already exists)
 registry.register('http-in', {
   type: 'http-in',
   category: 'input',
@@ -23,7 +22,6 @@ registry.register('http-in', {
   execute: async (msg: NodeMessage) => msg
 });
 
-// HTTP Response Node (already exists)
 registry.register('http-response', {
   type: 'http-response',
   category: 'output',
@@ -34,7 +32,6 @@ registry.register('http-response', {
   execute: async (msg: NodeMessage, node: Node) => {
     const headers = { 'Content-Type': 'application/json', ...msg.headers };
     
-    // Allow node to override headers
     if (node.config.headers) {
       Object.assign(headers, node.config.headers);
     }
@@ -49,10 +46,9 @@ registry.register('http-response', {
 });
 
 // ===================================================================
-// FUNCTION NODES
+// FUNCTION NODE - Enhanced with Safety
 // ===================================================================
 
-// Function Node (already exists, enhanced)
 registry.register('function', {
   type: 'function',
   category: 'function',
@@ -67,25 +63,14 @@ registry.register('function', {
   outputs: 1,
   execute: async (msg: NodeMessage, node: Node, context: ExecutionContext) => {
     try {
-      const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-      const func = new AsyncFunction(
-        'msg',
-        'node',
-        'context',
-        'flow',
-        'global',
-        'env',
-        node.config.func
-      );
-      
-      const result = await func(
+      const result = await executeSafeFunction(node.config.func, {
         msg,
         node,
-        node.context(),
-        node.context().flow,
-        node.context().global,
-        context.env
-      );
+        context: node.context(),
+        flow: node.context().flow,
+        global: node.context().global,
+        env: context.env
+      });
       
       return result === undefined || result === null ? null : result;
     } catch (error: any) {
@@ -95,7 +80,10 @@ registry.register('function', {
   }
 });
 
-// Switch Node - Route messages based on conditions
+// ===================================================================
+// SWITCH NODE
+// ===================================================================
+
 registry.register('switch', {
   type: 'switch',
   category: 'function',
@@ -104,8 +92,7 @@ registry.register('switch', {
     name: { value: '' }, 
     property: { value: 'payload' },
     rules: { value: [{ t: 'eq', v: '', vt: 'str' }] },
-    checkall: { value: true },
-    repair: { value: false }
+    checkall: { value: true }
   },
   inputs: 1,
   outputs: 1,
@@ -118,46 +105,22 @@ registry.register('switch', {
       const ruleValue = await evaluateProperty(rule, msg, node, context);
       
       switch (rule.t) {
-        case 'eq':
-          match = property == ruleValue;
-          break;
-        case 'neq':
-          match = property != ruleValue;
-          break;
-        case 'lt':
-          match = Number(property) < Number(ruleValue);
-          break;
-        case 'lte':
-          match = Number(property) <= Number(ruleValue);
-          break;
-        case 'gt':
-          match = Number(property) > Number(ruleValue);
-          break;
-        case 'gte':
-          match = Number(property) >= Number(ruleValue);
-          break;
+        case 'eq': match = property == ruleValue; break;
+        case 'neq': match = property != ruleValue; break;
+        case 'lt': match = Number(property) < Number(ruleValue); break;
+        case 'lte': match = Number(property) <= Number(ruleValue); break;
+        case 'gt': match = Number(property) > Number(ruleValue); break;
+        case 'gte': match = Number(property) >= Number(ruleValue); break;
         case 'btwn':
           const val = Number(property);
           match = val >= Number(rule.v) && val <= Number(rule.v2);
           break;
-        case 'cont':
-          match = String(property).includes(String(ruleValue));
-          break;
-        case 'regex':
-          match = new RegExp(String(ruleValue)).test(String(property));
-          break;
-        case 'true':
-          match = !!property;
-          break;
-        case 'false':
-          match = !property;
-          break;
-        case 'null':
-          match = property === null;
-          break;
-        case 'nnull':
-          match = property !== null;
-          break;
+        case 'cont': match = String(property).includes(String(ruleValue)); break;
+        case 'regex': match = new RegExp(String(ruleValue)).test(String(property)); break;
+        case 'true': match = !!property; break;
+        case 'false': match = !property; break;
+        case 'null': match = property === null; break;
+        case 'nnull': match = property !== null; break;
         case 'empty':
           match = property === '' || property === null || property === undefined ||
                   (Array.isArray(property) && property.length === 0);
@@ -166,13 +129,10 @@ registry.register('switch', {
           match = property !== '' && property !== null && property !== undefined &&
                   !(Array.isArray(property) && property.length === 0);
           break;
-        case 'istype':
-          match = typeof property === ruleValue;
-          break;
+        case 'istype': match = typeof property === ruleValue; break;
       }
       
       results.push(match ? RED.util.cloneMessage(msg) : null);
-      
       if (match && !node.config.checkall) break;
     }
     
@@ -180,7 +140,10 @@ registry.register('switch', {
   }
 });
 
-// Change Node (already exists)
+// ===================================================================
+// CHANGE NODE
+// ===================================================================
+
 registry.register('change', {
   type: 'change',
   category: 'function',
@@ -220,48 +183,10 @@ registry.register('change', {
   }
 });
 
-// Range Node - Scale values
-registry.register('range', {
-  type: 'range',
-  category: 'function',
-  color: '#fdd0a2',
-  defaults: {
-    name: { value: '' },
-    minin: { value: 0 },
-    maxin: { value: 100 },
-    minout: { value: 0 },
-    maxout: { value: 1 },
-    property: { value: 'payload' },
-    round: { value: false }
-  },
-  inputs: 1,
-  outputs: 1,
-  execute: async (msg: NodeMessage, node: Node) => {
-    const value = RED.util.getMessageProperty(msg, node.config.property);
-    const numValue = Number(value);
-    
-    if (isNaN(numValue)) {
-      node.error('Property is not a number', msg);
-      return null;
-    }
-    
-    const { minin, maxin, minout, maxout } = node.config;
-    let result = ((numValue - minin) / (maxin - minin)) * (maxout - minout) + minout;
-    
-    if (node.config.round) {
-      result = Math.round(result);
-    }
-    
-    RED.util.setMessageProperty(msg, node.config.property, result);
-    return msg;
-  }
-});
-
 // ===================================================================
 // PARSER NODES
 // ===================================================================
 
-// JSON Node (already exists)
 registry.register('json', {
   type: 'json',
   category: 'parser',
@@ -294,7 +219,6 @@ registry.register('json', {
   }
 });
 
-// CSV Parser Node
 registry.register('csv', {
   type: 'csv',
   category: 'parser',
@@ -309,11 +233,10 @@ registry.register('csv', {
   outputs: 1,
   execute: async (msg: NodeMessage, node: Node) => {
     const payload = msg.payload;
+    const sep = node.config.sep || ',';
     
-    // CSV to Object
     if (typeof payload === 'string') {
       const lines = payload.split('\n').filter(l => l.trim());
-      const sep = node.config.sep || ',';
       
       if (node.config.hdrin) {
         const headers = lines[0].split(sep).map(h => h.trim());
@@ -327,10 +250,7 @@ registry.register('csv', {
       } else {
         msg.payload = lines.map(line => line.split(sep).map(v => v.trim()));
       }
-    }
-    // Object to CSV
-    else if (Array.isArray(payload)) {
-      const sep = node.config.sep || ',';
+    } else if (Array.isArray(payload)) {
       let csv = '';
       
       if (payload.length > 0 && typeof payload[0] === 'object') {
@@ -355,58 +275,9 @@ registry.register('csv', {
 });
 
 // ===================================================================
-// STORAGE NODES
-// ===================================================================
-
-// File/Storage Node - Store data in DO storage
-registry.register('file', {
-  type: 'file',
-  category: 'storage',
-  color: '#ff9999',
-  defaults: {
-    name: { value: '' },
-    filename: { value: '' },
-    action: { value: 'write' },
-    append: { value: false }
-  },
-  inputs: 1,
-  outputs: 1,
-  execute: async (msg: NodeMessage, node: Node, context: ExecutionContext) => {
-    const filename = node.config.filename || msg.filename || 'file.txt';
-    const key = `file:${filename}`;
-    
-    try {
-      if (node.config.action === 'write') {
-        let content = msg.payload;
-        
-        if (node.config.append) {
-          const existing = await context.storage.get(key) || '';
-          content = existing + content;
-        }
-        
-        await context.storage.put(key, content);
-        msg.payload = `Wrote to ${filename}`;
-      } else if (node.config.action === 'read') {
-        const content = await context.storage.get(key);
-        msg.payload = content || null;
-      } else if (node.config.action === 'delete') {
-        await context.storage.delete(key);
-        msg.payload = `Deleted ${filename}`;
-      }
-      
-      return msg;
-    } catch (err: any) {
-      node.error(err.message, msg);
-      return null;
-    }
-  }
-});
-
-// ===================================================================
 // UTILITY NODES
 // ===================================================================
 
-// Delay Node
 registry.register('delay', {
   type: 'delay',
   category: 'function',
@@ -423,17 +294,10 @@ registry.register('delay', {
     let delay = node.config.timeout || 1;
     
     switch (node.config.timeoutUnits) {
-      case 'milliseconds':
-        break;
-      case 'seconds':
-        delay *= 1000;
-        break;
-      case 'minutes':
-        delay *= 60000;
-        break;
-      case 'hours':
-        delay *= 3600000;
-        break;
+      case 'milliseconds': break;
+      case 'seconds': delay *= 1000; break;
+      case 'minutes': delay *= 60000; break;
+      case 'hours': delay *= 3600000; break;
     }
     
     await new Promise(resolve => setTimeout(resolve, delay));
@@ -441,96 +305,13 @@ registry.register('delay', {
   }
 });
 
-// Trigger Node - Send message after delay
-registry.register('trigger', {
-  type: 'trigger',
-  category: 'function',
-  color: '#fdd0a2',
-  defaults: {
-    name: { value: '' },
-    op1: { value: '1' },
-    op2: { value: '0' },
-    op1type: { value: 'str' },
-    op2type: { value: 'str' },
-    duration: { value: '250' },
-    extend: { value: false }
-  },
-  inputs: 1,
-  outputs: 1,
-  execute: async (msg: NodeMessage, node: Node) => {
-    // Send first output immediately
-    const msg1 = RED.util.cloneMessage(msg);
-    msg1.payload = node.config.op1type === 'str' ? node.config.op1 : 
-                   node.config.op1type === 'num' ? Number(node.config.op1) :
-                   node.config.op1type === 'bool' ? node.config.op1 === 'true' : node.config.op1;
-    
-    node.send(msg1);
-    
-    // Send second output after delay
-    if (node.config.op2 !== '') {
-      await new Promise(resolve => setTimeout(resolve, Number(node.config.duration)));
-      
-      const msg2 = RED.util.cloneMessage(msg);
-      msg2.payload = node.config.op2type === 'str' ? node.config.op2 : 
-                     node.config.op2type === 'num' ? Number(node.config.op2) :
-                     node.config.op2type === 'bool' ? node.config.op2 === 'true' : node.config.op2;
-      
-      return msg2;
-    }
-    
-    return null;
-  }
-});
-
-// Batch/Join Node - Combine messages
-registry.register('join', {
-  type: 'join',
-  category: 'function',
-  color: '#fdd0a2',
-  defaults: {
-    name: { value: '' },
-    mode: { value: 'auto' },
-    count: { value: 2 },
-    timeout: { value: 0 }
-  },
-  inputs: 1,
-  outputs: 1,
-  onInit: async (node: Node, context: ExecutionContext) => {
-    await context.storage.put(`join:${node.id}:messages`, []);
-  },
-  execute: async (msg: NodeMessage, node: Node, context: ExecutionContext) => {
-    const key = `join:${node.id}:messages`;
-    const messages: NodeMessage[] = await context.storage.get(key) || [];
-    
-    messages.push(msg);
-    
-    if (messages.length >= (node.config.count || 2)) {
-      await context.storage.put(key, []);
-      const result = RED.util.cloneMessage(msg);
-      result.payload = messages.map(m => m.payload);
-      result.parts = {
-        id: msg.parts?.id || RED.util.generateId(),
-        count: messages.length,
-        index: 0,
-        type: 'array'
-      };
-      return result;
-    }
-    
-    await context.storage.put(key, messages);
-    return null;
-  }
-});
-
-// Split Node - Split arrays/objects
 registry.register('split', {
   type: 'split',
   category: 'function',
   color: '#fdd0a2',
   defaults: {
     name: { value: '' },
-    splt: { value: '\\n' },
-    spltType: { value: 'str' }
+    splt: { value: '\\n' }
   },
   inputs: 1,
   outputs: 1,
@@ -543,12 +324,7 @@ registry.register('split', {
       payload.forEach((item, index) => {
         const newMsg = RED.util.cloneMessage(msg);
         newMsg.payload = item;
-        newMsg.parts = {
-          id: partsId,
-          index,
-          count: payload.length,
-          type: 'array'
-        };
+        newMsg.parts = { id: partsId, index, count: payload.length, type: 'array' };
         results.push(newMsg);
       });
     } else if (typeof payload === 'object' && payload !== null) {
@@ -556,13 +332,7 @@ registry.register('split', {
       keys.forEach((key, index) => {
         const newMsg = RED.util.cloneMessage(msg);
         newMsg.payload = payload[key];
-        newMsg.parts = {
-          id: partsId,
-          index,
-          count: keys.length,
-          type: 'object',
-          key
-        };
+        newMsg.parts = { id: partsId, index, count: keys.length, type: 'object', key };
         results.push(newMsg);
       });
     } else if (typeof payload === 'string') {
@@ -571,12 +341,7 @@ registry.register('split', {
       parts.forEach((part, index) => {
         const newMsg = RED.util.cloneMessage(msg);
         newMsg.payload = part;
-        newMsg.parts = {
-          id: partsId,
-          index,
-          count: parts.length,
-          type: 'string'
-        };
+        newMsg.parts = { id: partsId, index, count: parts.length, type: 'string' };
         results.push(newMsg);
       });
     }
@@ -585,11 +350,48 @@ registry.register('split', {
   }
 });
 
+registry.register('join', {
+  type: 'join',
+  category: 'function',
+  color: '#fdd0a2',
+  defaults: {
+    name: { value: '' },
+    mode: { value: 'auto' },
+    count: { value: 2 }
+  },
+  inputs: 1,
+  outputs: 1,
+  onInit: async (node: Node, context: ExecutionContext) => {
+    await context.batchedStorage?.set(StorageKeys.join(node.id), []);
+  },
+  execute: async (msg: NodeMessage, node: Node, context: ExecutionContext) => {
+    const key = StorageKeys.join(node.id);
+    const messages: NodeMessage[] = await context.batchedStorage?.get(key) || [];
+    
+    messages.push(msg);
+    
+    if (messages.length >= (node.config.count || 2)) {
+      await context.batchedStorage?.set(key, []);
+      const result = RED.util.cloneMessage(msg);
+      result.payload = messages.map(m => m.payload);
+      result.parts = {
+        id: msg.parts?.id || RED.util.generateId(),
+        count: messages.length,
+        index: 0,
+        type: 'array'
+      };
+      return result;
+    }
+    
+    await context.batchedStorage?.set(key, messages);
+    return null;
+  }
+});
+
 // ===================================================================
-// DEBUG & MONITORING
+// DEBUG NODE
 // ===================================================================
 
-// Debug Node (already exists)
 registry.register('debug', {
   type: 'debug',
   category: 'output',
@@ -613,8 +415,8 @@ registry.register('debug', {
       console.log(`[DEBUG ${node.name || node.id}]`, output);
     }
     
-    const debugKey = `debug:${node.id}:${Date.now()}`;
-    await context.storage.put(debugKey, {
+    const debugKey = StorageKeys.debug(node.id, Date.now());
+    await context.batchedStorage?.set(debugKey, {
       timestamp: Date.now(),
       output,
       msgid: msg._msgid,
@@ -625,7 +427,10 @@ registry.register('debug', {
   }
 });
 
-// Catch Node - Error handling
+// ===================================================================
+// ERROR HANDLING NODES
+// ===================================================================
+
 registry.register('catch', {
   type: 'catch',
   category: 'input',
@@ -636,13 +441,9 @@ registry.register('catch', {
   },
   inputs: 0,
   outputs: 1,
-  execute: async (msg: NodeMessage) => {
-    // This is triggered by the flow engine when errors occur
-    return msg;
-  }
+  execute: async (msg: NodeMessage) => msg
 });
 
-// Status Node - Monitor node status
 registry.register('status', {
   type: 'status',
   category: 'input',
@@ -653,8 +454,5 @@ registry.register('status', {
   },
   inputs: 0,
   outputs: 1,
-  execute: async (msg: NodeMessage) => {
-    // This is triggered by the flow engine when status changes
-    return msg;
-  }
+  execute: async (msg: NodeMessage) => msg
 });
