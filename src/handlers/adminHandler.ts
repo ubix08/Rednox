@@ -1,6 +1,6 @@
 
 // ===================================================================
-// RedNox - Admin API Handler (Final Fix)
+// adminHandler.ts - CORRECTED Admin Handler with Proper DO Access
 // ===================================================================
 
 import { Env, FlowConfig } from '../types/core';
@@ -22,7 +22,6 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   }
   
   try {
-    // Check if DB is configured
     if (!env.DB) {
       return jsonResponse({ 
         error: 'Database not configured',
@@ -30,12 +29,13 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       }, corsHeaders, 500);
     }
     
-    // Initialize database
+    // ===================================================================
+    // Database Initialization
+    // ===================================================================
     if (path === '/admin/init' && request.method === 'POST') {
       try {
         console.log('Starting database initialization...');
         
-        // Execute each statement individually to avoid batch().exec() issues
         const results = [];
         for (const statement of D1_SCHEMA_STATEMENTS) {
           try {
@@ -74,15 +74,17 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         }, corsHeaders);
       } catch (err: any) {
         console.error('Database initialization error:', err);
-        console.error('Error stack:', err.stack);
         return jsonResponse({ 
           error: 'Database initialization failed',
           details: err.message,
-          stack: err.stack,
-          hint: 'Check the worker logs for detailed error information'
+          stack: err.stack
         }, corsHeaders, 500);
       }
     }
+    
+    // ===================================================================
+    // Flow Management
+    // ===================================================================
     
     // List all flows
     if (path === '/admin/flows' && request.method === 'GET') {
@@ -320,6 +322,97 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       }
     }
     
+    // ===================================================================
+    // DO Integration - CORRECTED RPC Calls
+    // ===================================================================
+    
+    // Get debug messages from DO
+    if (path.match(/^\/admin\/flows\/[^/]+\/debug$/) && request.method === 'GET') {
+      const flowId = path.split('/')[3];
+      
+      try {
+        if (!env.FLOW_EXECUTOR) {
+          return jsonResponse({ 
+            error: 'Flow executor not configured'
+          }, corsHeaders, 500);
+        }
+        
+        // Get DO stub (use session-based sharding by default)
+        const doId = env.FLOW_EXECUTOR.idFromName(`session:${flowId}`);
+        const doStub = env.FLOW_EXECUTOR.get(doId);
+        
+        // Call internal endpoint
+        const response = await doStub.fetch(new Request('http://do/internal/debug/messages'));
+        const data = await response.json();
+        
+        return jsonResponse(data, corsHeaders);
+      } catch (err: any) {
+        console.error('Error fetching debug messages:', err);
+        return jsonResponse({ 
+          error: 'Failed to fetch debug messages',
+          details: err.message
+        }, corsHeaders, 500);
+      }
+    }
+    
+    // Get flow status from DO
+    if (path.match(/^\/admin\/flows\/[^/]+\/status$/) && request.method === 'GET') {
+      const flowId = path.split('/')[3];
+      
+      try {
+        if (!env.FLOW_EXECUTOR) {
+          return jsonResponse({ 
+            error: 'Flow executor not configured'
+          }, corsHeaders, 500);
+        }
+        
+        const doId = env.FLOW_EXECUTOR.idFromName(`session:${flowId}`);
+        const doStub = env.FLOW_EXECUTOR.get(doId);
+        
+        const response = await doStub.fetch(new Request('http://do/internal/status'));
+        const data = await response.json();
+        
+        return jsonResponse(data, corsHeaders);
+      } catch (err: any) {
+        console.error('Error fetching flow status:', err);
+        return jsonResponse({ 
+          error: 'Failed to fetch flow status',
+          details: err.message
+        }, corsHeaders, 500);
+      }
+    }
+    
+    // Clear DO cache for flow
+    if (path.match(/^\/admin\/flows\/[^/]+\/clear-cache$/) && request.method === 'POST') {
+      const flowId = path.split('/')[3];
+      
+      try {
+        if (!env.FLOW_EXECUTOR) {
+          return jsonResponse({ 
+            error: 'Flow executor not configured'
+          }, corsHeaders, 500);
+        }
+        
+        const doId = env.FLOW_EXECUTOR.idFromName(`session:${flowId}`);
+        const doStub = env.FLOW_EXECUTOR.get(doId);
+        
+        const response = await doStub.fetch(new Request('http://do/internal/session/clear'));
+        const data = await response.json();
+        
+        return jsonResponse(data, corsHeaders);
+      } catch (err: any) {
+        console.error('Error clearing cache:', err);
+        return jsonResponse({ 
+          error: 'Failed to clear cache',
+          details: err.message
+        }, corsHeaders, 500);
+      }
+    }
+    
+    // ===================================================================
+    // Logs & Routes
+    // ===================================================================
+    
     // Get flow logs
     if (path.match(/^\/admin\/flows\/[^/]+\/logs$/) && request.method === 'GET') {
       const flowId = path.split('/')[3];
@@ -335,44 +428,6 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         console.error('Error fetching logs:', err);
         return jsonResponse({ 
           error: 'Failed to fetch logs',
-          details: err.message
-        }, corsHeaders, 500);
-      }
-    }
-    
-    // Get debug messages from DO via RPC
-    if (path.match(/^\/admin\/flows\/[^/]+\/debug$/) && request.method === 'GET') {
-      const flowId = path.split('/')[3];
-      
-      try {
-        const doId = env.FLOW_EXECUTOR.idFromName(flowId);
-        const doStub = env.FLOW_EXECUTOR.get(doId);
-        
-        const messages = await doStub.getDebugMessages();
-        return jsonResponse({ messages }, corsHeaders);
-      } catch (err: any) {
-        console.error('Error fetching debug messages:', err);
-        return jsonResponse({ 
-          error: 'Failed to fetch debug messages',
-          details: err.message
-        }, corsHeaders, 500);
-      }
-    }
-    
-    // Get flow status from DO via RPC
-    if (path.match(/^\/admin\/flows\/[^/]+\/status$/) && request.method === 'GET') {
-      const flowId = path.split('/')[3];
-      
-      try {
-        const doId = env.FLOW_EXECUTOR.idFromName(flowId);
-        const doStub = env.FLOW_EXECUTOR.get(doId);
-        
-        const status = await doStub.getStatus();
-        return jsonResponse(status, corsHeaders);
-      } catch (err: any) {
-        console.error('Error fetching flow status:', err);
-        return jsonResponse({ 
-          error: 'Failed to fetch flow status',
           details: err.message
         }, corsHeaders, 500);
       }
@@ -401,6 +456,10 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         }, corsHeaders, 500);
       }
     }
+    
+    // ===================================================================
+    // Import/Export
+    // ===================================================================
     
     // Import flows (bulk)
     if (path === '/admin/flows/import' && request.method === 'POST') {
