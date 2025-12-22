@@ -1,4 +1,8 @@
-// src/types/core.ts
+
+// ===================================================================
+// RedNox - Core Type Definitions
+// ===================================================================
+
 export interface NodeMessage {
   _msgid: string;
   topic?: string;
@@ -125,4 +129,9 @@ export interface FlowRecord {
   enabled: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface Env {
+  DB: D1Database;
+  FLOW_EXECUTOR: DurableObjectNamespace;
 }
