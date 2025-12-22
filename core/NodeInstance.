@@ -1,6 +1,16 @@
-// src/nodes/NodeInstance.ts
-import { Node, NodeStatus, NodeMessage, NodeContext, ExecutionContext, NodeConfig } from '../types/core';
-import { RED } from '../utils/red';
+
+// ===================================================================
+// RedNox - Node Instance Implementation
+// ===================================================================
+
+import {
+  Node,
+  NodeConfig,
+  NodeContext,
+  NodeMessage,
+  NodeStatus,
+  ExecutionContext
+} from '../types/core';
 
 export class NodeInstance implements Node {
   id: string;
@@ -24,7 +34,8 @@ export class NodeInstance implements Node {
       flow: context.flow,
       global: context.global,
       get: async (key: string) => context.storage.get(`node:${this.id}:${key}`),
-      set: async (key: string, value: any) => await context.storage.put(`node:${this.id}:${key}`, value),
+      set: async (key: string, value: any) => 
+        await context.storage.put(`node:${this.id}:${key}`, value),
       keys: async () => {
         const list = await context.storage.list({ prefix: `node:${this.id}:` });
         return Array.from(list.keys()).map(k => k.replace(`node:${this.id}:`, ''));
