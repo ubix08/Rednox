@@ -1,11 +1,10 @@
 
 // ===================================================================
-// RedNox - Optimized Worker Entry (CPU Budget Conscious)
+// index.ts - MINIMAL Worker (Just Routes to DO)
 // ===================================================================
 
 import { Env } from './types/core';
 import { handleAdmin } from './handlers/adminHandler';
-import { handleApiRoute } from './handlers/apiHandler';
 
 // Import nodes to register them
 import './nodes';
@@ -18,7 +17,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     
-    // Quick CORS preflight handling (minimize CPU)
+    // CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: {
@@ -29,18 +28,31 @@ export default {
       });
     }
     
-    // Admin endpoints - these run in worker context
+    // Admin endpoints (still handled in worker for simplicity)
     if (path.startsWith('/admin/')) {
       return handleAdmin(request, env);
     }
     
-    // API endpoints - immediately delegate to DO
-    // Worker only does route lookup, execution happens in DO
+    // API endpoints - IMMEDIATELY DELEGATE TO DO
     if (path.startsWith('/api/')) {
-      return handleApiRoute(request, env, path.replace('/api', ''));
+      if (!env.FLOW_EXECUTOR) {
+        return new Response(JSON.stringify({ 
+          error: 'Flow executor not configured'
+        }), { 
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      // Use a single global DO instance (or shard by path if needed)
+      const doId = env.FLOW_EXECUTOR.idFromName('global');
+      const doStub = env.FLOW_EXECUTOR.get(doId);
+      
+      // Forward entire request to DO - it handles everything
+      return doStub.fetch(request);
     }
     
-    // Health check - minimal CPU
+    // Health check
     if (path === '/health') {
       return new Response(JSON.stringify({ status: 'ok' }), {
         headers: { 'Content-Type': 'application/json' }
