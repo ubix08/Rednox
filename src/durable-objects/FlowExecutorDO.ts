@@ -1,6 +1,10 @@
-// src/do/FlowExecutorDO.ts
-import { FlowEngine } from '../engine/FlowEngine';
-import { FlowConfig, FlowContext, GlobalContext, NodeMessage } from '../types/core';
+// ===================================================================
+// RedNox - Durable Object with RPC - Flow Executor
+// ===================================================================
+
+import { DurableObject } from 'cloudflare:workers';
+import { FlowEngine } from '../core/FlowEngine';
+import { FlowConfig, FlowContext, GlobalContext, ExecutionContext, NodeMessage } from '../types/core';
 
 export class FlowExecutorDO extends DurableObject {
   private flowEngine?: FlowEngine;
@@ -13,7 +17,8 @@ export class FlowExecutorDO extends DurableObject {
     
     this.flowContext = {
       get: async (key: string) => this.ctx.storage.get(`flow:${key}`),
-      set: async (key: string, value: any) => await this.ctx.storage.put(`flow:${key}`, value),
+      set: async (key: string, value: any) => 
+        await this.ctx.storage.put(`flow:${key}`, value),
       keys: async () => {
         const list = await this.ctx.storage.list({ prefix: 'flow:' });
         return Array.from(list.keys()).map(k => k.replace('flow:', ''));
@@ -22,7 +27,8 @@ export class FlowExecutorDO extends DurableObject {
     
     this.globalContext = {
       get: async (key: string) => this.ctx.storage.get(`global:${key}`),
-      set: async (key: string, value: any) => await this.ctx.storage.put(`global:${key}`, value),
+      set: async (key: string, value: any) => 
+        await this.ctx.storage.put(`global:${key}`, value),
       keys: async () => {
         const list = await this.ctx.storage.list({ prefix: 'global:' });
         return Array.from(list.keys()).map(k => k.replace('global:', ''));
@@ -34,7 +40,7 @@ export class FlowExecutorDO extends DurableObject {
   async loadFlow(flowConfig: FlowConfig): Promise<{ success: boolean; nodeCount: number }> {
     this.flowConfig = flowConfig;
     
-    const context = {
+    const context: ExecutionContext = {
       storage: this.ctx.storage,
       env: this.env,
       flow: this.flowContext,
