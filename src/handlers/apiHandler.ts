@@ -1,5 +1,6 @@
+
 // ===================================================================
-// RedNox - API Route Handler
+// RedNox - API Route Handler (Corrected)
 // ===================================================================
 
 import { Env, FlowConfig } from '../types/core';
@@ -12,8 +13,20 @@ export async function handleApiRoute(
 ): Promise<Response> {
   const method = request.method.toUpperCase();
   const startTime = Date.now();
+  let flowId = 'unknown';
   
   try {
+    // Check if DB is configured
+    if (!env.DB) {
+      return new Response(JSON.stringify({ 
+        error: 'Database not configured',
+        hint: 'Make sure D1 database is bound in wrangler.toml'
+      }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
     // Fast route lookup using indexed query
     const route = await env.DB.prepare(`
       SELECT r.flow_id, r.node_id, f.config 
@@ -34,10 +47,25 @@ export async function handleApiRoute(
       });
     }
     
+    flowId = route.flow_id as string;
     const flowConfig: FlowConfig = JSON.parse(route.config as string);
     
+    // Check if FLOW_EXECUTOR is configured
+    if (!env.FLOW_EXECUTOR) {
+      const duration = Date.now() - startTime;
+      await logExecution(env, flowId, 'error', duration, 'Durable Object not configured');
+      
+      return new Response(JSON.stringify({ 
+        error: 'Flow executor not configured',
+        hint: 'Make sure Durable Object binding is configured in wrangler.toml'
+      }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
     // Get DO stub using RPC
-    const doId = env.FLOW_EXECUTOR.idFromName(route.flow_id as string);
+    const doId = env.FLOW_EXECUTOR.idFromName(flowId);
     const doStub = env.FLOW_EXECUTOR.get(doId);
     
     // Load flow configuration (cached in DO)
@@ -51,7 +79,7 @@ export async function handleApiRoute(
     
     // Log execution (async, don't wait)
     const duration = Date.now() - startTime;
-    logExecution(env, route.flow_id as string, 'success', duration);
+    await logExecution(env, flowId, 'success', duration);
     
     // Return response
     return new Response(result.body, {
@@ -63,10 +91,11 @@ export async function handleApiRoute(
     const duration = Date.now() - startTime;
     console.error('API route error:', err);
     
-    logExecution(env, 'unknown', 'error', duration, err.message);
+    await logExecution(env, flowId, 'error', duration, err.message);
     
     return new Response(JSON.stringify({ 
-      error: err.message
+      error: err.message,
+      stack: err.stack
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -74,16 +103,25 @@ export async function handleApiRoute(
   }
 }
 
-function logExecution(
+async function logExecution(
   env: Env,
   flowId: string,
   status: string,
   duration: number,
   errorMessage?: string
-): void {
+): Promise<void> {
   // Fire and forget - don't block response
-  env.DB.prepare(`
-    INSERT INTO flow_logs (flow_id, status, duration_ms, error_message) 
-    VALUES (?, ?, ?, ?)
-  `).bind(flowId, status, duration, errorMessage || null).run().catch(() => {});
+  try {
+    if (!env.DB) {
+      console.warn('Cannot log execution: DB not configured');
+      return;
+    }
+    
+    await env.DB.prepare(`
+      INSERT INTO flow_logs (flow_id, status, duration_ms, error_message) 
+      VALUES (?, ?, ?, ?)
+    `).bind(flowId, status, duration, errorMessage || null).run();
+  } catch (err: any) {
+    console.error('Failed to log execution:', err);
+  }
 }
