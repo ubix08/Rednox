@@ -1,21 +1,21 @@
 
 // ===================================================================
-// index.ts - Enhanced Worker Entry Point with Smart Routing
+// index.ts - Worker Entry Point
 // ===================================================================
 
 import { Env } from './types/core';
 import { handleAdmin } from './handlers/adminHandler';
 
-// Import nodes to register them
-import './nodes';
+// Import all nodes
+import './nodes/nodes';
 
-// Export the DO (ONLY ONCE!)
+// Export the DO
 export { FlowExecutorDO } from './durable-objects/FlowExecutorDO';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-Session-ID, X-User-ID, X-Job-ID, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Session-ID, X-User-ID, X-Flow-ID, Authorization',
 };
 
 export default {
@@ -37,7 +37,8 @@ export default {
     if (path === '/health') {
       return new Response(JSON.stringify({ 
         status: 'ok',
-        version: '2.0.0',
+        version: '3.0.0',
+        description: 'Pure Node-RED Compatible Runtime',
         timestamp: new Date().toISOString()
       }), {
         headers: { 
@@ -47,48 +48,71 @@ export default {
       });
     }
     
-    // API routing
+    // API routing - All flow requests go through /api/{flow-id}/{endpoint}
     if (path.startsWith('/api/')) {
-      return routeToAppropriateSharding(request, env);
+      return routeFlowRequest(request, env);
     }
     
     // Root info
     return new Response(JSON.stringify({
       name: 'RedNox',
-      version: '2.0.0',
-      description: 'Flow-based programming runtime on Cloudflare Workers',
-      patterns: {
-        session: {
-          path: '/api/chat/{path}',
-          params: 'session_id (query or X-Session-ID header)',
-          description: 'Session-based stateful flows (chatbots, conversations)'
+      version: '3.0.0',
+      description: 'Pure Node-RED Compatible Flow Execution Runtime',
+      
+      routing: {
+        pattern: '/api/{flow-id}/{endpoint}',
+        description: 'Each flow has its own namespace',
+        examples: [
+          '/api/my-chatbot/chat',
+          '/api/my-chatbot/reset',
+          '/api/my-api/users',
+          '/api/webhook-handler/payment'
+        ]
+      },
+      
+      features: [
+        'Pure Node-RED compatibility',
+        'Ephemeral execution (no state retention)',
+        'HTTP webhooks (multiple per flow)',
+        'Scheduled execution (inject nodes)',
+        'Context storage (flow/global scope)',
+        'Standard Node-RED nodes',
+        'No templates - all flows stored in D1',
+        'No hardcoded sessions/AI - use function nodes'
+      ],
+      
+      quickStart: {
+        step1: 'Initialize database: POST /admin/init',
+        step2: 'Create flow with JSON: POST /admin/flows',
+        step3: 'Use endpoint: POST /api/{flow-id}/{endpoint}'
+      },
+      
+      endpoints: {
+        admin: {
+          init: 'POST /admin/init',
+          listFlows: 'GET /admin/flows',
+          createFlow: 'POST /admin/flows',
+          getFlow: 'GET /admin/flows/{id}',
+          updateFlow: 'PUT /admin/flows/{id}',
+          deleteFlow: 'DELETE /admin/flows/{id}',
+          toggleFlow: 'POST /admin/flows/{id}/{enable|disable}',
+          routes: 'GET /admin/routes',
+          logs: 'GET /admin/flows/{id}/logs',
+          stats: 'GET /admin/stats'
         },
-        user: {
-          path: '/api/user/{tool}',
-          params: 'X-User-ID header or Authorization token',
-          description: 'User-scoped flows with rate limiting'
-        },
-        job: {
-          path: '/api/jobs/submit',
-          params: 'X-User-ID header (optional)',
-          description: 'Async job processing with status tracking'
-        },
-        workspace: {
-          path: '/api/workspace/{id}/{action}',
-          params: 'workspace id in path',
-          description: 'Multi-tenant workspace isolation'
-        },
-        stateless: {
-          path: '/api/tools/{toolName}',
-          params: 'none',
-          description: 'Stateless utility flows'
+        flows: {
+          pattern: 'POST /api/{flow-id}/{endpoint}',
+          description: 'Execute flow via HTTP trigger'
         }
       },
-      endpoints: {
-        admin: '/admin/*',
-        health: '/health',
-        api: '/api/*'
-      }
+      
+      standardNodes: [
+        'http-in', 'http-response',
+        'inject', 'function', 'context',
+        'switch', 'change',
+        'json', 'delay', 'split', 'join',
+        'debug', 'catch', 'status'
+      ]
     }, null, 2), {
       headers: { 
         'Content-Type': 'application/json',
@@ -99,15 +123,13 @@ export default {
 };
 
 // ===================================================================
-// Smart Routing Logic
+// Flow Request Routing
 // ===================================================================
 
-async function routeToAppropriateSharding(
-  request: Request, 
-  env: Env
-): Promise<Response> {
+async function routeFlowRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const path = url.pathname;
+  const path = url.pathname.replace('/api', '');
+  const method = request.method.toUpperCase();
   
   if (!env.FLOW_EXECUTOR) {
     return new Response(JSON.stringify({ 
@@ -122,84 +144,17 @@ async function routeToAppropriateSharding(
     });
   }
   
-  // Pattern detection by URL prefix
-  if (path.startsWith('/api/chat/')) {
-    return routeBySession(request, env);
-  }
+  // Parse path: /{flow-id}/{endpoint}
+  const pathParts = path.split('/').filter(p => p);
   
-  if (path.startsWith('/api/user/')) {
-    return routeByUser(request, env);
-  }
-  
-  if (path.startsWith('/api/jobs/')) {
-    return routeByJob(request, env);
-  }
-  
-  if (path.startsWith('/api/workspace/')) {
-    return routeByWorkspace(request, env);
-  }
-  
-  if (path.startsWith('/api/tools/')) {
-    return routeStatelessTool(request, env);
-  }
-  
-  // Default: Session-based for backwards compatibility
-  return routeBySession(request, env);
-}
-
-// ===================================================================
-// Session-based routing
-// ===================================================================
-async function routeBySession(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  
-  let sessionId = 
-    url.searchParams.get('session_id') ||
-    request.headers.get('X-Session-ID');
-  
-  if (!sessionId) {
-    sessionId = crypto.randomUUID();
-  }
-  
-  const doId = env.FLOW_EXECUTOR.idFromName(`session:${sessionId}`);
-  const doStub = env.FLOW_EXECUTOR.get(doId);
-  
-  const modifiedRequest = new Request(request.url, {
-    method: request.method,
-    headers: {
-      ...Object.fromEntries(request.headers),
-      'X-Session-ID': sessionId,
-      'X-Sharding-Type': 'session'
-    },
-    body: request.body
-  });
-  
-  const response = await doStub.fetch(modifiedRequest);
-  
-  return new Response(response.body, {
-    status: response.status,
-    headers: {
-      ...Object.fromEntries(response.headers),
-      'X-Session-ID': sessionId,
-      ...corsHeaders
-    }
-  });
-}
-
-// ===================================================================
-// User-based routing
-// ===================================================================
-async function routeByUser(request: Request, env: Env): Promise<Response> {
-  const userId = 
-    request.headers.get('X-User-ID') ||
-    await extractUserIdFromAuth(request);
-  
-  if (!userId) {
+  if (pathParts.length < 1) {
     return new Response(JSON.stringify({ 
-      error: 'Authentication required',
-      hint: 'Provide X-User-ID header or Authorization token'
+      error: 'Invalid path format',
+      expected: '/api/{flow-id}/{endpoint}',
+      received: path,
+      hint: 'Flow ID is required in the path'
     }), { 
-      status: 401,
+      status: 400,
       headers: { 
         'Content-Type': 'application/json',
         ...corsHeaders
@@ -207,200 +162,47 @@ async function routeByUser(request: Request, env: Env): Promise<Response> {
     });
   }
   
-  const doId = env.FLOW_EXECUTOR.idFromName(`user:${userId}`);
+  // Extract flow-id from path
+  const flowId = pathParts[0];
+  
+  // Route to DO (one DO per flow)
+  const doId = env.FLOW_EXECUTOR.idFromName(`flow:${flowId}`);
   const doStub = env.FLOW_EXECUTOR.get(doId);
   
+  // Forward request with metadata
   const modifiedRequest = new Request(request.url, {
     method: request.method,
     headers: {
       ...Object.fromEntries(request.headers),
-      'X-User-ID': userId,
-      'X-Sharding-Type': 'user'
+      'X-Flow-ID': flowId
     },
     body: request.body
   });
   
-  const response = await doStub.fetch(modifiedRequest);
-  
-  return new Response(response.body, {
-    status: response.status,
-    headers: {
-      ...Object.fromEntries(response.headers),
-      ...corsHeaders
-    }
-  });
-}
-
-// ===================================================================
-// Job-based routing
-// ===================================================================
-async function routeByJob(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const pathParts = url.pathname.split('/');
-  
-  // Submit new job
-  if (pathParts[3] === 'submit' && request.method === 'POST') {
-    const jobId = crypto.randomUUID();
-    const userId = request.headers.get('X-User-ID');
+  try {
+    const response = await doStub.fetch(modifiedRequest);
     
-    const doId = env.FLOW_EXECUTOR.idFromName(`job:${jobId}`);
-    const doStub = env.FLOW_EXECUTOR.get(doId);
-    
-    const jobRequest = new Request(`${url.origin}/internal/job/process`, {
-      method: 'POST',
+    return new Response(response.body, {
+      status: response.status,
       headers: {
-        ...Object.fromEntries(request.headers),
-        'X-Job-ID': jobId,
-        'X-User-ID': userId || 'anonymous',
-        'X-Sharding-Type': 'job'
-      },
-      body: request.body
+        ...Object.fromEntries(response.headers),
+        'X-Flow-ID': flowId,
+        ...corsHeaders
+      }
     });
-    
-    // Fire and forget
-    doStub.fetch(jobRequest);
-    
+  } catch (err: any) {
+    console.error('[Worker] Flow request error:', err);
     return new Response(JSON.stringify({
-      jobId,
-      status: 'queued',
-      statusUrl: `/api/jobs/${jobId}/status`,
-      resultUrl: `/api/jobs/${jobId}/result`
+      error: 'Flow execution failed',
+      flowId,
+      details: err.message
     }), {
-      status: 202,
-      headers: { 
+      status: 500,
+      headers: {
         'Content-Type': 'application/json',
+        'X-Flow-ID': flowId,
         ...corsHeaders
       }
     });
   }
-  
-  // Get job status or result
-  const jobId = pathParts[3];
-  if (!jobId || jobId === 'submit') {
-    return new Response(JSON.stringify({ 
-      error: 'Invalid job ID' 
-    }), { 
-      status: 400,
-      headers: { 
-        'Content-Type': 'application/json',
-        ...corsHeaders
-      }
-    });
-  }
-  
-  const doId = env.FLOW_EXECUTOR.idFromName(`job:${jobId}`);
-  const doStub = env.FLOW_EXECUTOR.get(doId);
-  
-  const modifiedRequest = new Request(request.url, {
-    method: request.method,
-    headers: {
-      ...Object.fromEntries(request.headers),
-      'X-Job-ID': jobId,
-      'X-Sharding-Type': 'job'
-    }
-  });
-  
-  const response = await doStub.fetch(modifiedRequest);
-  
-  return new Response(response.body, {
-    status: response.status,
-    headers: {
-      ...Object.fromEntries(response.headers),
-      ...corsHeaders
-    }
-  });
-}
-
-// ===================================================================
-// Workspace-based routing
-// ===================================================================
-async function routeByWorkspace(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const pathParts = url.pathname.split('/');
-  const workspaceId = pathParts[3];
-  
-  if (!workspaceId) {
-    return new Response(JSON.stringify({ 
-      error: 'Workspace ID required' 
-    }), { 
-      status: 400,
-      headers: { 
-        'Content-Type': 'application/json',
-        ...corsHeaders
-      }
-    });
-  }
-  
-  const doId = env.FLOW_EXECUTOR.idFromName(`workspace:${workspaceId}`);
-  const doStub = env.FLOW_EXECUTOR.get(doId);
-  
-  const modifiedRequest = new Request(request.url, {
-    method: request.method,
-    headers: {
-      ...Object.fromEntries(request.headers),
-      'X-Workspace-ID': workspaceId,
-      'X-Sharding-Type': 'workspace'
-    },
-    body: request.body
-  });
-  
-  const response = await doStub.fetch(modifiedRequest);
-  
-  return new Response(response.body, {
-    status: response.status,
-    headers: {
-      ...Object.fromEntries(response.headers),
-      ...corsHeaders
-    }
-  });
-}
-
-// ===================================================================
-// Stateless tool routing
-// ===================================================================
-async function routeStatelessTool(request: Request, env: Env): Promise<Response> {
-  const doId = env.FLOW_EXECUTOR.idFromName('global');
-  const doStub = env.FLOW_EXECUTOR.get(doId);
-  
-  const modifiedRequest = new Request(request.url, {
-    method: request.method,
-    headers: {
-      ...Object.fromEntries(request.headers),
-      'X-Sharding-Type': 'global'
-    },
-    body: request.body
-  });
-  
-  const response = await doStub.fetch(modifiedRequest);
-  
-  return new Response(response.body, {
-    status: response.status,
-    headers: {
-      ...Object.fromEntries(response.headers),
-      ...corsHeaders
-    }
-  });
-}
-
-// ===================================================================
-// Helper: Extract user ID from auth token
-// ===================================================================
-async function extractUserIdFromAuth(request: Request): Promise<string | null> {
-  const authHeader = request.headers.get('Authorization');
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-  
-  const token = authHeader.substring(7);
-  
-  // TODO: Validate JWT and extract user ID
-  // For now, use a simple hash of the token
-  const encoder = new TextEncoder();
-  const data = encoder.encode(token);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  
-  return hashHex.substring(0, 16);
 }
