@@ -35,7 +35,7 @@
     }
 
     .container {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
       padding: 1rem;
     }
@@ -50,7 +50,7 @@
     }
 
     .header-content {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
       padding: 1rem;
       display: flex;
@@ -63,23 +63,29 @@
     .logo {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.75rem;
       font-size: 1.5rem;
       font-weight: 700;
       color: var(--primary);
     }
 
     .logo-icon {
-      width: 32px;
-      height: 32px;
+      width: 36px;
+      height: 36px;
       background: linear-gradient(135deg, var(--primary), var(--secondary));
       border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
     }
 
     .header-actions {
       display: flex;
       gap: 0.5rem;
       flex-wrap: wrap;
+      align-items: center;
     }
 
     /* Buttons */
@@ -97,12 +103,17 @@
       white-space: nowrap;
     }
 
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .btn-primary {
       background: var(--primary);
       color: white;
     }
 
-    .btn-primary:hover {
+    .btn-primary:hover:not(:disabled) {
       background: var(--primary-dark);
       box-shadow: var(--shadow);
     }
@@ -113,7 +124,7 @@
       border: 1px solid var(--border);
     }
 
-    .btn-secondary:hover {
+    .btn-secondary:hover:not(:disabled) {
       background: var(--bg);
     }
 
@@ -122,14 +133,31 @@
       color: white;
     }
 
+    .btn-danger:hover:not(:disabled) {
+      background: #c5221f;
+    }
+
     .btn-success {
       background: var(--secondary);
       color: white;
     }
 
+    .btn-success:hover:not(:disabled) {
+      background: #0f9d58;
+    }
+
     .btn-sm {
       padding: 0.375rem 0.75rem;
       font-size: 0.8125rem;
+    }
+
+    .btn-icon {
+      padding: 0.5rem;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     /* Tabs */
@@ -153,6 +181,10 @@
       cursor: pointer;
       white-space: nowrap;
       transition: all 0.2s;
+    }
+
+    .tab:hover {
+      color: var(--primary);
     }
 
     .tab.active {
@@ -216,6 +248,13 @@
       color: var(--text);
     }
 
+    .form-help {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-top: 0.25rem;
+    }
+
     .form-input,
     .form-select,
     .form-textarea {
@@ -235,10 +274,22 @@
       border-color: var(--primary);
     }
 
+    .form-input.error,
+    .form-textarea.error {
+      border-color: var(--danger);
+    }
+
     .form-textarea {
       resize: vertical;
       min-height: 100px;
-      font-family: 'Monaco', 'Menlo', monospace;
+      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+      font-size: 0.8125rem;
+    }
+
+    .form-error {
+      color: var(--danger);
+      font-size: 0.75rem;
+      margin-top: 0.25rem;
     }
 
     /* Status Badge */
@@ -267,6 +318,11 @@
       color: #b95000;
     }
 
+    .badge-info {
+      background: #e8f0fe;
+      color: #1967d2;
+    }
+
     .badge-dot {
       width: 6px;
       height: 6px;
@@ -286,6 +342,12 @@
       z-index: 1000;
       padding: 1rem;
       overflow-y: auto;
+      animation: fadeIn 0.2s;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
 
     .modal.active {
@@ -299,11 +361,23 @@
       background: var(--surface);
       border-radius: 12px;
       padding: 1.5rem;
-      max-width: 600px;
+      max-width: 800px;
       width: 100%;
       max-height: 90vh;
       overflow-y: auto;
       box-shadow: var(--shadow-lg);
+      animation: slideUp 0.3s;
+    }
+
+    @keyframes slideUp {
+      from { 
+        opacity: 0;
+        transform: translateY(20px); 
+      }
+      to { 
+        opacity: 1;
+        transform: translateY(0); 
+      }
     }
 
     .modal-header {
@@ -374,16 +448,21 @@
       to { transform: rotate(360deg); }
     }
 
-    /* Code Block */
-    .code-block {
-      background: #f8f9fa;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1rem;
-      font-family: 'Monaco', 'Menlo', monospace;
-      font-size: 0.8125rem;
-      overflow-x: auto;
-      white-space: pre;
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255, 255, 255, 0.9);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+    }
+
+    .loading-overlay.active {
+      display: flex;
     }
 
     /* Stats Grid */
@@ -413,31 +492,6 @@
       color: var(--text);
     }
 
-    /* Responsive */
-    @media (max-width: 640px) {
-      .container {
-        padding: 0.75rem;
-      }
-
-      .card {
-        padding: 1rem;
-        border-radius: 8px;
-      }
-
-      .modal-content {
-        margin: 1rem;
-      }
-
-      .btn {
-        padding: 0.5rem 1rem;
-        font-size: 0.8125rem;
-      }
-
-      .stats-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
     /* Alert */
     .alert {
       padding: 1rem;
@@ -446,21 +500,42 @@
       display: flex;
       align-items: flex-start;
       gap: 0.75rem;
+      animation: slideDown 0.3s;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     .alert-success {
       background: #e6f4ea;
       color: #137333;
+      border-left: 4px solid #34A853;
     }
 
     .alert-error {
       background: #fce8e6;
       color: #c5221f;
+      border-left: 4px solid #EA4335;
     }
 
     .alert-info {
       background: #e8f0fe;
       color: #1967d2;
+      border-left: 4px solid #4285F4;
+    }
+
+    .alert-warning {
+      background: #fef7e0;
+      color: #b95000;
+      border-left: 4px solid #FBBC04;
     }
 
     .flow-meta {
@@ -478,15 +553,17 @@
       gap: 0.375rem;
     }
 
-    .json-editor {
+    .code-editor {
       background: #1e1e1e;
       color: #d4d4d4;
       border-radius: 8px;
       padding: 1rem;
-      font-family: 'Monaco', 'Menlo', monospace;
+      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
       font-size: 0.8125rem;
       overflow-x: auto;
       min-height: 400px;
+      line-height: 1.5;
+      white-space: pre;
     }
 
     .endpoint-list {
@@ -521,27 +598,188 @@
 
     .endpoint-path {
       flex: 1;
-      font-family: 'Monaco', 'Menlo', monospace;
+      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
       word-break: break-all;
+      font-size: 0.8125rem;
+    }
+
+    /* Search & Filter */
+    .toolbar {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .search-box {
+      flex: 1;
+      min-width: 200px;
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 0.625rem 0.625rem 0.625rem 2.5rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.875rem;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-secondary);
+    }
+
+    /* Template Cards */
+    .template-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .template-card {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .template-card:hover {
+      border-color: var(--primary);
+      box-shadow: var(--shadow-lg);
+      transform: translateY(-2px);
+    }
+
+    .template-icon {
+      font-size: 2rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .template-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .template-description {
+      font-size: 0.8125rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    /* JSON Validator */
+    .json-validator {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      margin-top: 0.5rem;
+      font-size: 0.8125rem;
+    }
+
+    .json-validator.valid {
+      border-color: var(--secondary);
+      background: #e6f4ea;
+      color: #137333;
+    }
+
+    .json-validator.invalid {
+      border-color: var(--danger);
+      background: #fce8e6;
+      color: #c5221f;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container {
+        padding: 0.75rem;
+      }
+
+      .card {
+        padding: 1rem;
+        border-radius: 8px;
+      }
+
+      .modal-content {
+        margin: 1rem;
+        padding: 1rem;
+      }
+
+      .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.8125rem;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .template-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .code-editor {
+        font-size: 0.75rem;
+      }
+    }
+
+    .copy-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: var(--border);
+    }
+
+    .copy-btn.copied {
+      background: var(--secondary);
+      color: white;
+      border-color: var(--secondary);
     }
   </style>
 </head>
 <body>
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div style="text-align: center;">
+      <div class="loading" style="width: 40px; height: 40px; border-width: 4px;"></div>
+      <p style="margin-top: 1rem; color: var(--text-secondary);">Loading...</p>
+    </div>
+  </div>
+
   <!-- Header -->
   <header>
     <div class="header-content">
       <div class="logo">
-        <div class="logo-icon"></div>
+        <div class="logo-icon">R</div>
         <span>RedNox</span>
+        <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 400;">Flow Management</span>
       </div>
       <div class="header-actions">
-        <button class="btn btn-secondary btn-sm" onclick="loadStats()">
+        <button class="btn btn-secondary btn-sm" onclick="loadStats()" title="Refresh">
           <span>↻</span>
           <span>Refresh</span>
         </button>
         <button class="btn btn-primary btn-sm" onclick="showCreateFlowModal()">
           <span>+</span>
           <span>New Flow</span>
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="importFlow()" title="Import JSON">
+          <span>📥</span>
+          <span>Import</span>
         </button>
         <button class="btn btn-secondary btn-sm" onclick="initializeDatabase()">
           <span>⚙</span>
@@ -567,6 +805,15 @@
         <div class="stat-label">Total Logs</div>
         <div class="stat-value" id="stat-logs">-</div>
       </div>
+      <div class="stat-card">
+        <div class="stat-label">System Status</div>
+        <div class="stat-value" style="font-size: 1.5rem;">
+          <span class="badge badge-success">
+            <span class="badge-dot"></span>
+            <span>Online</span>
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- Alerts Container -->
@@ -577,10 +824,22 @@
       <button class="tab active" onclick="switchTab('flows')">Flows</button>
       <button class="tab" onclick="switchTab('routes')">Routes</button>
       <button class="tab" onclick="switchTab('templates')">Templates</button>
+      <button class="tab" onclick="switchTab('docs')">Documentation</button>
     </div>
 
     <!-- Flows Tab -->
     <div id="flows-tab" class="tab-content active">
+      <div class="toolbar">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="flow-search" placeholder="Search flows..." oninput="filterFlows()">
+        </div>
+        <select class="form-select" id="flow-filter" style="width: auto;" onchange="filterFlows()">
+          <option value="all">All Flows</option>
+          <option value="enabled">Enabled Only</option>
+          <option value="disabled">Disabled Only</option>
+        </select>
+      </div>
       <div id="flows-list"></div>
     </div>
 
@@ -595,14 +854,96 @@
         <div class="card-header">
           <h3 class="card-title">Quick Start Templates</h3>
         </div>
-        <div class="empty-state">
-          <div class="empty-icon">📄</div>
-          <p>Choose a template to get started quickly</p>
-          <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
-            <button class="btn btn-primary" onclick="createFromTemplate('simple-chat')">Simple Chat</button>
-            <button class="btn btn-primary" onclick="createFromTemplate('chat-with-tools')">Chat with Tools</button>
-            <button class="btn btn-primary" onclick="createFromTemplate('webhook')">Webhook Handler</button>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+          Choose a template to get started quickly with pre-configured flows
+        </p>
+        <div class="template-grid">
+          <div class="template-card" onclick="createFromTemplate('simple-chat')">
+            <div class="template-icon">💬</div>
+            <div class="template-title">Simple Chatbot</div>
+            <div class="template-description">
+              Basic conversational AI with Gemini. Perfect for getting started.
+            </div>
           </div>
+          <div class="template-card" onclick="createFromTemplate('chat-with-tools')">
+            <div class="template-icon">🧰</div>
+            <div class="template-title">Chat with Tools</div>
+            <div class="template-description">
+              AI assistant with function calling capabilities. Includes calculator tool.
+            </div>
+          </div>
+          <div class="template-card" onclick="createFromTemplate('webhook')">
+            <div class="template-icon">🔗</div>
+            <div class="template-title">Webhook Handler</div>
+            <div class="template-description">
+              Process incoming webhooks and store data in context.
+            </div>
+          </div>
+          <div class="template-card" onclick="createFromTemplate('rest-api')">
+            <div class="template-icon">🌐</div>
+            <div class="template-title">REST API</div>
+            <div class="template-description">
+              Full CRUD REST API with routing and data validation.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Documentation Tab -->
+    <div id="docs-tab" class="tab-content">
+      <div class="card">
+        <h3 class="card-title">Getting Started</h3>
+        <div style="margin-top: 1rem; line-height: 1.8;">
+          <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">1. Initialize Database</h4>
+          <p style="color: var(--text-secondary);">
+            Click "Init DB" to create the necessary database tables.
+          </p>
+
+          <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">2. Create Your First Flow</h4>
+          <p style="color: var(--text-secondary);">
+            Use a template or create a custom flow with the "New Flow" button.
+          </p>
+
+          <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">3. Test Your Flow</h4>
+          <p style="color: var(--text-secondary);">
+            Each flow gets endpoints based on http-in nodes. Test them using curl or Postman.
+          </p>
+
+          <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">API Endpoints</h4>
+          <div class="endpoint-list" style="margin-top: 0.75rem;">
+            <div class="endpoint-item">
+              <span class="method-badge method-post">POST</span>
+              <span class="endpoint-path">/api/{flow-id}/{endpoint}</span>
+            </div>
+          </div>
+
+          <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Example Flow Structure</h4>
+          <pre class="code-editor" style="margin-top: 0.75rem;">{
+  "id": "my-chatbot",
+  "name": "My Chatbot",
+  "description": "A simple chatbot",
+  "nodes": [
+    {
+      "id": "http-in-1",
+      "type": "http-in",
+      "url": "/chat",
+      "method": "post",
+      "wires": [["function-1"]]
+    },
+    {
+      "id": "function-1",
+      "type": "function",
+      "func": "msg.payload = { response: 'Hello!' }; return msg;",
+      "wires": [["http-out-1"]]
+    },
+    {
+      "id": "http-out-1",
+      "type": "http-response",
+      "wires": []
+    }
+  ]
+}</pre>
         </div>
       </div>
     </div>
@@ -617,23 +958,43 @@
       </div>
       
       <div class="form-group">
-        <label class="form-label">Flow Name</label>
-        <input type="text" id="flow-name" class="form-input" placeholder="my-chatbot">
+        <label class="form-label">Flow Name *</label>
+        <input 
+          type="text" 
+          id="flow-name" 
+          class="form-input" 
+          placeholder="my-chatbot"
+          oninput="validateFlowForm()">
+        <span class="form-help">Alphanumeric characters and hyphens only</span>
+        <span id="name-error" class="form-error"></span>
       </div>
 
       <div class="form-group">
         <label class="form-label">Description</label>
-        <input type="text" id="flow-description" class="form-input" placeholder="AI chatbot with tools">
+        <input 
+          type="text" 
+          id="flow-description" 
+          class="form-input" 
+          placeholder="AI chatbot with tools">
       </div>
 
       <div class="form-group">
-        <label class="form-label">Flow Configuration (JSON)</label>
-        <textarea id="flow-config" class="form-textarea json-editor" rows="15" placeholder='{"nodes": [...], "id": "my-flow", "name": "My Flow"}'></textarea>
+        <label class="form-label">Flow Configuration (JSON) *</label>
+        <textarea 
+          id="flow-config" 
+          class="form-textarea code-editor" 
+          rows="20" 
+          placeholder='{"nodes": [...], "id": "my-flow", "name": "My Flow"}'
+          oninput="validateJSON()"
+          style="min-height: 400px;"></textarea>
+        <div id="json-validation" class="json-validator"></div>
+        <span id="config-error" class="form-error"></span>
       </div>
 
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveFlow()">
+        <button class="btn btn-secondary" onclick="formatJSON()">Format JSON</button>
+        <button class="btn btn-primary" id="save-flow-btn" onclick="saveFlow()" disabled>
           <span id="save-btn-text">Create Flow</span>
         </button>
       </div>
@@ -642,7 +1003,7 @@
 
   <!-- View Flow Modal -->
   <div id="view-modal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width: 900px;">
       <div class="modal-header">
         <h3 class="modal-title" id="view-title">Flow Details</h3>
         <button class="modal-close" onclick="closeViewModal()">&times;</button>
@@ -651,16 +1012,22 @@
       <div id="view-content"></div>
 
       <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="exportFlow()">Export JSON</button>
         <button class="btn btn-secondary" onclick="closeViewModal()">Close</button>
       </div>
     </div>
   </div>
+
+  <!-- Hidden file input for import -->
+  <input type="file" id="import-file" accept=".json" style="display: none;" onchange="handleImport(event)">
 
   <script>
     // Configuration
     const API_BASE = window.location.origin;
     let currentFlowId = null;
     let editMode = false;
+    let allFlows = [];
+    let currentViewFlow = null;
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
@@ -681,17 +1048,39 @@
     }
 
     // Alert System
-    function showAlert(message, type = 'info') {
+    function showAlert(message, type = 'info', duration = 5000) {
       const alertsDiv = document.getElementById('alerts');
       const alert = document.createElement('div');
+      const icons = {
+        error: '❌',
+        success: '✅',
+        info: 'ℹ️',
+        warning: '⚠️'
+      };
+      
       alert.className = `alert alert-${type}`;
       alert.innerHTML = `
-        <span>${type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️'}</span>
-        <span>${message}</span>
+        <span style="font-size: 1.25rem;">${icons[type] || icons.info}</span>
+        <div style="flex: 1;">
+          <strong>${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
+          <div style="margin-top: 0.25rem;">${escapeHtml(message)}</div>
+        </div>
+        <button onclick="this.parentElement.remove()" style="background: none; border: none; cursor: pointer; opacity: 0.6; font-size: 1.25rem;">&times;</button>
       `;
       alertsDiv.appendChild(alert);
       
-      setTimeout(() => alert.remove(), 5000);
+      if (duration > 0) {
+        setTimeout(() => alert.remove(), duration);
+      }
+    }
+
+    // Loading Overlay
+    function showLoading() {
+      document.getElementById('loading-overlay').classList.add('active');
+    }
+
+    function hideLoading() {
+      document.getElementById('loading-overlay').classList.remove('active');
     }
 
     // Load Stats
@@ -712,10 +1101,12 @@
     async function initializeDatabase() {
       if (!confirm('Initialize database? This will create tables if they don\'t exist.')) return;
       
+      showLoading();
       try {
         const response = await fetch(`${API_BASE}/admin/init`, { method: 'POST' });
         const data = await response.json();
         
+        hideLoading();
         if (data.success) {
           showAlert('Database initialized successfully', 'success');
           loadStats();
@@ -723,6 +1114,7 @@
           showAlert(`Failed to initialize: ${data.error || 'Unknown error'}`, 'error');
         }
       } catch (err) {
+        hideLoading();
         showAlert(`Error: ${err.message}`, 'error');
       }
     }
@@ -736,68 +1128,125 @@
         const response = await fetch(`${API_BASE}/admin/flows`);
         const data = await response.json();
 
-        if (!data.flows || data.flows.length === 0) {
+        allFlows = data.flows || [];
+
+        if (allFlows.length === 0) {
           container.innerHTML = `
             <div class="empty-state">
               <div class="empty-icon">📦</div>
-              <p>No flows yet. Create your first flow to get started.</p>
-              <button class="btn btn-primary" style="margin-top: 1rem;" onclick="showCreateFlowModal()">
-                Create Flow
-              </button>
+              <h3 style="margin-bottom: 0.5rem;">No flows yet</h3>
+              <p>Create your first flow to get started with RedNox.</p>
+              <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="showCreateFlowModal()">
+                  Create Flow
+                </button>
+                <button class="btn btn-secondary" onclick="switchTab('templates'); event.stopPropagation();">
+                  Browse Templates
+                </button>
+              </div>
             </div>
           `;
           return;
         }
 
-        container.innerHTML = data.flows.map(flow => `
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <h3 class="card-title">${escapeHtml(flow.name)}</h3>
-                ${flow.description ? `<p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.25rem;">${escapeHtml(flow.description)}</p>` : ''}
-                <div class="flow-meta">
-                  <span class="flow-meta-item">
-                    <span>🆔</span>
-                    <span>${flow.id}</span>
-                  </span>
-                  <span class="flow-meta-item">
-                    <span>📅</span>
-                    <span>${new Date(flow.created_at).toLocaleDateString()}</span>
-                  </span>
-                </div>
+        filterFlows();
+      } catch (err) {
+        container.innerHTML = `
+          <div class="alert alert-error">
+            <span>❌</span>
+            <div>
+              <strong>Failed to load flows</strong>
+              <div style="margin-top: 0.25rem;">${escapeHtml(err.message)}</div>
+              <div style="margin-top: 0.5rem;">
+                <button class="btn btn-sm btn-secondary" onclick="loadFlows()">Retry</button>
               </div>
-              <div class="card-actions">
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // Filter Flows
+    function filterFlows() {
+      const searchTerm = document.getElementById('flow-search').value.toLowerCase();
+      const filter = document.getElementById('flow-filter').value;
+      
+      let filtered = allFlows.filter(flow => {
+        const matchesSearch = !searchTerm || 
+          flow.name.toLowerCase().includes(searchTerm) ||
+          (flow.description && flow.description.toLowerCase().includes(searchTerm)) ||
+          flow.id.toLowerCase().includes(searchTerm);
+        
+        const matchesFilter = filter === 'all' ||
+          (filter === 'enabled' && flow.enabled) ||
+          (filter === 'disabled' && !flow.enabled);
+        
+        return matchesSearch && matchesFilter;
+      });
+
+      const container = document.getElementById('flows-list');
+      
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <p>No flows match your search criteria</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(flow => `
+        <div class="card">
+          <div class="card-header">
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                <h3 class="card-title">${escapeHtml(flow.name)}</h3>
                 <span class="badge ${flow.enabled ? 'badge-success' : 'badge-danger'}">
                   <span class="badge-dot"></span>
                   ${flow.enabled ? 'Active' : 'Disabled'}
                 </span>
               </div>
-            </div>
-            <div class="card-actions">
-              <button class="btn btn-secondary btn-sm" onclick="viewFlow('${flow.id}')">
-                👁 View
-              </button>
-              <button class="btn btn-secondary btn-sm" onclick="editFlow('${flow.id}')">
-                ✏️ Edit
-              </button>
-              <button class="btn ${flow.enabled ? 'btn-secondary' : 'btn-success'} btn-sm" 
-                      onclick="toggleFlow('${flow.id}', ${!flow.enabled})">
-                ${flow.enabled ? '⏸ Disable' : '▶️ Enable'}
-              </button>
-              <button class="btn btn-danger btn-sm" onclick="deleteFlow('${flow.id}')">
-                🗑 Delete
-              </button>
+              ${flow.description ? `<p style="color: var(--text-secondary); font-size: 0.875rem;">${escapeHtml(flow.description)}</p>` : ''}
+              <div class="flow-meta">
+                <span class="flow-meta-item">
+                  <span>🆔</span>
+                  <code style="background: var(--bg); padding: 0.125rem 0.375rem; border-radius: 4px; font-size: 0.75rem;">${flow.id}</code>
+                </span>
+                <span class="flow-meta-item">
+                  <span>📅</span>
+                  <span>Created ${formatDate(flow.created_at)}</span>
+                </span>
+                ${flow.updated_at !== flow.created_at ? `
+                  <span class="flow-meta-item">
+                    <span>🔄</span>
+                    <span>Updated ${formatDate(flow.updated_at)}</span>
+                  </span>
+                ` : ''}
+              </div>
             </div>
           </div>
-        `).join('');
-      } catch (err) {
-        container.innerHTML = `
-          <div class="alert alert-error">
-            <span>❌</span>
-            <span>Failed to load flows: ${err.message}</span>
+          <div class="card-actions">
+            <button class="btn btn-secondary btn-sm" onclick="viewFlow('${flow.id}')" title="View details">
+              👁 View
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="editFlow('${flow.id}')" title="Edit flow">
+              ✏️ Edit
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="duplicateFlow('${flow.id}')" title="Duplicate flow">
+              📋 Duplicate
+            </button>
+            <button class="btn ${flow.enabled ? 'btn-warning' : 'btn-success'} btn-sm" 
+                    onclick="toggleFlow('${flow.id}', ${!flow.enabled})"
+                    title="${flow.enabled ? 'Disable' : 'Enable'} flow">
+              ${flow.enabled ? '⏸ Disable' : '▶️ Enable'}
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="deleteFlow('${flow.id}')" title="Delete flow">
+              🗑 Delete
+            </button>
           </div>
-        `;
-      }
+        </div>
+      `).join('');
     }
 
     // Load Routes
@@ -813,7 +1262,8 @@
           container.innerHTML = `
             <div class="empty-state">
               <div class="empty-icon">🛣️</div>
-              <p>No routes available. Routes are created automatically when you add http-in nodes to flows.</p>
+              <h3 style="margin-bottom: 0.5rem;">No routes available</h3>
+              <p>Routes are created automatically when you add http-in nodes to flows.</p>
             </div>
           `;
           return;
@@ -821,13 +1271,21 @@
 
         container.innerHTML = `
           <div class="card">
-            <h3 class="card-title" style="margin-bottom: 1rem;">Active HTTP Routes</h3>
+            <div class="card-header">
+              <h3 class="card-title">Active HTTP Routes (${data.routes.length})</h3>
+              <div class="badge badge-info">
+                ${data.routes.length} endpoint${data.routes.length !== 1 ? 's' : ''}
+              </div>
+            </div>
             <ul class="endpoint-list">
               ${data.routes.map(route => `
                 <li class="endpoint-item">
                   <span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span>
-                  <span class="endpoint-path">${route.fullUrl || route.path}</span>
-                  <span style="color: var(--text-secondary); font-size: 0.75rem;">${route.flow_name}</span>
+                  <code class="endpoint-path">${route.fullUrl || route.path}</code>
+                  <span style="color: var(--text-secondary); font-size: 0.75rem; white-space: nowrap;">${escapeHtml(route.flow_name)}</span>
+                  <button class="copy-btn" onclick="copyToClipboard('${route.fullUrl || route.path}')" title="Copy URL">
+                    📋
+                  </button>
                 </li>
               `).join('')}
             </ul>
@@ -837,7 +1295,10 @@
         container.innerHTML = `
           <div class="alert alert-error">
             <span>❌</span>
-            <span>Failed to load routes: ${err.message}</span>
+            <div>
+              <strong>Failed to load routes</strong>
+              <div style="margin-top: 0.25rem;">${escapeHtml(err.message)}</div>
+            </div>
           </div>
         `;
       }
@@ -870,11 +1331,15 @@
           }
         ]
       }, null, 2);
+      
+      validateJSON();
+      validateFlowForm();
       document.getElementById('flow-modal').classList.add('active');
     }
 
     // Edit Flow
     async function editFlow(flowId) {
+      showLoading();
       try {
         const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
         const flow = await response.json();
@@ -886,23 +1351,66 @@
         document.getElementById('flow-name').value = flow.name;
         document.getElementById('flow-description').value = flow.description || '';
         document.getElementById('flow-config').value = JSON.stringify(flow.config, null, 2);
+        
+        hideLoading();
+        validateJSON();
+        validateFlowForm();
         document.getElementById('flow-modal').classList.add('active');
       } catch (err) {
+        hideLoading();
         showAlert(`Failed to load flow: ${err.message}`, 'error');
+      }
+    }
+
+    // Duplicate Flow
+    async function duplicateFlow(flowId) {
+      showLoading();
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        const flow = await response.json();
+
+        const newName = `${flow.name} (Copy)`;
+        const newId = `${flow.id}-copy-${Date.now()}`;
+
+        editMode = false;
+        currentFlowId = null;
+        document.getElementById('modal-title').textContent = 'Duplicate Flow';
+        document.getElementById('save-btn-text').textContent = 'Create Flow';
+        document.getElementById('flow-name').value = newName;
+        document.getElementById('flow-description').value = flow.description || '';
+        
+        const config = flow.config;
+        config.id = newId;
+        config.name = newName;
+        
+        document.getElementById('flow-config').value = JSON.stringify(config, null, 2);
+        
+        hideLoading();
+        validateJSON();
+        validateFlowForm();
+        document.getElementById('flow-modal').classList.add('active');
+      } catch (err) {
+        hideLoading();
+        showAlert(`Failed to duplicate flow: ${err.message}`, 'error');
       }
     }
 
     // View Flow
     async function viewFlow(flowId) {
+      showLoading();
       try {
         const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
         const flow = await response.json();
+        currentViewFlow = flow;
 
         document.getElementById('view-title').textContent = flow.name;
         document.getElementById('view-content').innerHTML = `
           <div class="form-group">
             <label class="form-label">Flow ID</label>
-            <div class="code-block">${flow.id}</div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <code style="flex: 1; background: var(--bg); padding: 0.5rem; border-radius: 4px; font-size: 0.875rem;">${flow.id}</code>
+              <button class="copy-btn" onclick="copyToClipboard('${flow.id}')">📋 Copy</button>
+            </div>
           </div>
           
           <div class="form-group">
@@ -920,37 +1428,123 @@
 
           ${flow.routes && flow.routes.length > 0 ? `
             <div class="form-group">
-              <label class="form-label">HTTP Endpoints</label>
+              <label class="form-label">HTTP Endpoints (${flow.routes.length})</label>
               <ul class="endpoint-list">
                 ${flow.routes.map(route => `
                   <li class="endpoint-item">
                     <span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span>
-                    <span class="endpoint-path">${route.fullUrl}</span>
+                    <code class="endpoint-path">${route.fullUrl}</code>
+                    <button class="copy-btn" onclick="copyToClipboard('${route.fullUrl}')">📋</button>
                   </li>
                 `).join('')}
               </ul>
             </div>
-          ` : ''}
+          ` : '<div class="alert alert-info"><span>ℹ️</span><span>No HTTP endpoints configured</span></div>'}
+
+          <div class="form-group">
+            <label class="form-label">Node Count</label>
+            <p>${flow.config.nodes.length} nodes</p>
+          </div>
 
           <div class="form-group">
             <label class="form-label">Configuration</label>
-            <pre class="code-block">${JSON.stringify(flow.config, null, 2)}</pre>
+            <pre class="code-editor">${JSON.stringify(flow.config, null, 2)}</pre>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Created</label>
-            <p>${new Date(flow.created_at).toLocaleString()}</p>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Last Updated</label>
-            <p>${new Date(flow.updated_at).toLocaleString()}</p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+            <div>
+              <label class="form-label">Created</label>
+              <p>${new Date(flow.created_at).toLocaleString()}</p>
+            </div>
+            <div>
+              <label class="form-label">Last Updated</label>
+              <p>${new Date(flow.updated_at).toLocaleString()}</p>
+            </div>
           </div>
         `;
 
+        hideLoading();
         document.getElementById('view-modal').classList.add('active');
       } catch (err) {
+        hideLoading();
         showAlert(`Failed to load flow: ${err.message}`, 'error');
+      }
+    }
+
+    // Validate JSON
+    function validateJSON() {
+      const textarea = document.getElementById('flow-config');
+      const validator = document.getElementById('json-validation');
+      const errorSpan = document.getElementById('config-error');
+      
+      try {
+        const config = JSON.parse(textarea.value);
+        
+        // Basic validation
+        const errors = [];
+        if (!config.nodes || !Array.isArray(config.nodes)) {
+          errors.push('Missing or invalid "nodes" array');
+        }
+        if (config.nodes && config.nodes.length === 0) {
+          errors.push('At least one node is required');
+        }
+        
+        if (errors.length > 0) {
+          validator.className = 'json-validator invalid';
+          validator.textContent = '⚠️ ' + errors.join(', ');
+          textarea.classList.add('error');
+          errorSpan.textContent = errors[0];
+          return false;
+        }
+        
+        validator.className = 'json-validator valid';
+        validator.textContent = '✓ Valid JSON with ' + config.nodes.length + ' node(s)';
+        textarea.classList.remove('error');
+        errorSpan.textContent = '';
+        return true;
+      } catch (err) {
+        validator.className = 'json-validator invalid';
+        validator.textContent = '❌ Invalid JSON: ' + err.message;
+        textarea.classList.add('error');
+        errorSpan.textContent = 'Invalid JSON syntax';
+        return false;
+      }
+    }
+
+    // Validate Form
+    function validateFlowForm() {
+      const name = document.getElementById('flow-name').value.trim();
+      const nameError = document.getElementById('name-error');
+      const saveBtn = document.getElementById('save-flow-btn');
+      
+      let valid = true;
+      
+      // Validate name
+      if (!name) {
+        nameError.textContent = 'Flow name is required';
+        valid = false;
+      } else if (!/^[a-z0-9-]+$/i.test(name)) {
+        nameError.textContent = 'Only alphanumeric characters and hyphens allowed';
+        valid = false;
+      } else {
+        nameError.textContent = '';
+      }
+      
+      // Validate JSON
+      valid = validateJSON() && valid;
+      
+      saveBtn.disabled = !valid;
+    }
+
+    // Format JSON
+    function formatJSON() {
+      const textarea = document.getElementById('flow-config');
+      try {
+        const parsed = JSON.parse(textarea.value);
+        textarea.value = JSON.stringify(parsed, null, 2);
+        validateJSON();
+      } catch (err) {
+        showAlert('Cannot format invalid JSON', 'error');
       }
     }
 
@@ -960,13 +1554,8 @@
       const description = document.getElementById('flow-description').value.trim();
       const configText = document.getElementById('flow-config').value.trim();
 
-      if (!name) {
-        showAlert('Flow name is required', 'error');
-        return;
-      }
-
-      if (!configText) {
-        showAlert('Flow configuration is required', 'error');
+      if (!validateFlowForm()) {
+        showAlert('Please fix validation errors', 'error');
         return;
       }
 
@@ -978,7 +1567,6 @@
         return;
       }
 
-      // Ensure config has required fields
       config.name = name;
       config.description = description;
       
@@ -986,6 +1574,7 @@
         config.id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
       }
 
+      showLoading();
       try {
         const url = editMode 
           ? `${API_BASE}/admin/flows/${currentFlowId}`
@@ -1001,31 +1590,38 @@
 
         const data = await response.json();
 
+        hideLoading();
+
         if (data.success || response.ok) {
           showAlert(`Flow ${editMode ? 'updated' : 'created'} successfully!`, 'success');
           closeModal();
           loadFlows();
           loadStats();
 
-          // Show endpoints if created
           if (data.endpoints && data.endpoints.length > 0) {
             setTimeout(() => {
               const endpointList = data.endpoints.map(e => 
-                `${e.method} ${e.url}`
-              ).join('\n');
-              showAlert(`Endpoints created:\n${endpointList}`, 'success');
+                `<li style="margin: 0.5rem 0;"><code>${e.method} ${e.url}</code></li>`
+              ).join('');
+              showAlert(
+                `<div><strong>Endpoints created:</strong><ul style="margin-top: 0.5rem;">${endpointList}</ul></div>`,
+                'info',
+                10000
+              );
             }, 500);
           }
         } else {
           showAlert(data.error || 'Failed to save flow', 'error');
         }
       } catch (err) {
+        hideLoading();
         showAlert(`Error: ${err.message}`, 'error');
       }
     }
 
     // Toggle Flow
     async function toggleFlow(flowId, enable) {
+      showLoading();
       try {
         const action = enable ? 'enable' : 'disable';
         const response = await fetch(`${API_BASE}/admin/flows/${flowId}/${action}`, {
@@ -1034,6 +1630,7 @@
 
         const data = await response.json();
 
+        hideLoading();
         if (data.success) {
           showAlert(`Flow ${action}d successfully`, 'success');
           loadFlows();
@@ -1042,16 +1639,21 @@
           showAlert(data.error || 'Failed to toggle flow', 'error');
         }
       } catch (err) {
+        hideLoading();
         showAlert(`Error: ${err.message}`, 'error');
       }
     }
 
     // Delete Flow
     async function deleteFlow(flowId) {
-      if (!confirm('Are you sure you want to delete this flow? This cannot be undone.')) {
+      const flow = allFlows.find(f => f.id === flowId);
+      const flowName = flow ? flow.name : flowId;
+      
+      if (!confirm(`Are you sure you want to delete "${flowName}"?\n\nThis action cannot be undone and will delete:\n• The flow configuration\n• All HTTP routes\n• All execution logs`)) {
         return;
       }
 
+      showLoading();
       try {
         const response = await fetch(`${API_BASE}/admin/flows/${flowId}`, {
           method: 'DELETE'
@@ -1059,6 +1661,7 @@
 
         const data = await response.json();
 
+        hideLoading();
         if (data.success) {
           showAlert('Flow deleted successfully', 'success');
           loadFlows();
@@ -1067,8 +1670,62 @@
           showAlert(data.error || 'Failed to delete flow', 'error');
         }
       } catch (err) {
+        hideLoading();
         showAlert(`Error: ${err.message}`, 'error');
       }
+    }
+
+    // Import Flow
+    function importFlow() {
+      document.getElementById('import-file').click();
+    }
+
+    function handleImport(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const config = JSON.parse(e.target.result);
+          
+          editMode = false;
+          currentFlowId = null;
+          document.getElementById('modal-title').textContent = 'Import Flow';
+          document.getElementById('save-btn-text').textContent = 'Create Flow';
+          document.getElementById('flow-name').value = config.name || 'Imported Flow';
+          document.getElementById('flow-description').value = config.description || '';
+          document.getElementById('flow-config').value = JSON.stringify(config, null, 2);
+          
+          validateJSON();
+          validateFlowForm();
+          document.getElementById('flow-modal').classList.add('active');
+          
+          showAlert('Flow imported successfully. Review and save.', 'info');
+        } catch (err) {
+          showAlert(`Failed to import: ${err.message}`, 'error');
+        }
+      };
+      reader.readAsText(file);
+      
+      // Reset file input
+      event.target.value = '';
+    }
+
+    // Export Flow
+    function exportFlow() {
+      if (!currentViewFlow) return;
+      
+      const dataStr = JSON.stringify(currentViewFlow.config, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${currentViewFlow.id}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      showAlert('Flow exported successfully', 'success');
     }
 
     // Create from Template
@@ -1146,43 +1803,38 @@
               wires: []
             },
             {
+              id: 'calc-tool',
+              type: 'gemini-tool-function',
+              name: 'Calculator',
+              toolName: 'calculate',
+              description: 'Evaluate mathematical expressions',
+              parametersSchema: JSON.stringify({
+                properties: {
+                  expression: {
+                    type: 'string',
+                    description: 'Mathematical expression to evaluate (e.g., 2 + 2, 5 * 10)'
+                  }
+                },
+                required: ['expression']
+              }),
+              functionCode: `
+const expr = args.expression;
+try {
+  // Safe eval for math only
+  const result = Function('"use strict"; return (' + expr + ')')();
+  return { result: result, expression: expr };
+} catch (err) {
+  return { error: 'Invalid expression: ' + err.message };
+}
+              `.trim(),
+              enabled: true,
+              wires: []
+            },
+            {
               id: 'http-in',
               type: 'http-in',
               url: '/chat',
               method: 'post',
-              wires: [['register-tools']]
-            },
-            {
-              id: 'register-tools',
-              type: 'function',
-              name: 'Register Tools',
-              func: `const tools = [];
-
-tools.push({
-  name: 'calculate',
-  description: 'Evaluate mathematical expressions',
-  parameters: {
-    type: 'object',
-    properties: {
-      expression: {
-        type: 'string',
-        description: 'Mathematical expression to evaluate'
-      }
-    },
-    required: ['expression']
-  },
-  executor: async (args) => {
-    try {
-      const result = eval(args.expression);
-      return { result, expression: args.expression };
-    } catch (err) {
-      return { error: err.message };
-    }
-  }
-});
-
-await flow.set('gemini:tools', tools);
-return msg;`,
               wires: [['agent']]
             },
             {
@@ -1242,6 +1894,58 @@ return msg;`,
               wires: []
             }
           ]
+        },
+        'rest-api': {
+          id: 'rest-api-example',
+          name: 'REST API Example',
+          description: 'Full CRUD REST API with routing',
+          nodes: [
+            {
+              id: 'http-get',
+              type: 'http-in',
+              url: '/items',
+              method: 'get',
+              wires: [['get-handler']]
+            },
+            {
+              id: 'get-handler',
+              type: 'function',
+              name: 'GET Handler',
+              func: `const items = await flow.get('items') || [];
+msg.payload = { items, count: items.length };
+return msg;`,
+              wires: [['response']]
+            },
+            {
+              id: 'http-post',
+              type: 'http-in',
+              url: '/items',
+              method: 'post',
+              wires: [['post-handler']]
+            },
+            {
+              id: 'post-handler',
+              type: 'function',
+              name: 'POST Handler',
+              func: `const items = await flow.get('items') || [];
+const newItem = {
+  id: Date.now().toString(),
+  ...msg.payload.body,
+  createdAt: new Date().toISOString()
+};
+items.push(newItem);
+await flow.set('items', items);
+msg.payload = { success: true, item: newItem };
+msg.statusCode = 201;
+return msg;`,
+              wires: [['response']]
+            },
+            {
+              id: 'response',
+              type: 'http-response',
+              wires: []
+            }
+          ]
         }
       };
 
@@ -1255,6 +1959,8 @@ return msg;`,
       document.getElementById('flow-description').value = template.description;
       document.getElementById('flow-config').value = JSON.stringify(template, null, 2);
       
+      validateJSON();
+      validateFlowForm();
       showCreateFlowModal();
     }
 
@@ -1265,13 +1971,49 @@ return msg;`,
 
     function closeViewModal() {
       document.getElementById('view-modal').classList.remove('active');
+      currentViewFlow = null;
     }
 
-    // Utility
+    // Copy to Clipboard
+    async function copyToClipboard(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        
+        // Visual feedback
+        event.target.textContent = '✓';
+        event.target.classList.add('copied');
+        setTimeout(() => {
+          event.target.textContent = '📋';
+          event.target.classList.remove('copied');
+        }, 2000);
+        
+        showAlert('Copied to clipboard', 'success', 2000);
+      } catch (err) {
+        showAlert('Failed to copy', 'error');
+      }
+    }
+
+    // Utility Functions
     function escapeHtml(text) {
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    function formatDate(dateStr) {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 1) return 'just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 7) return `${diffDays}d ago`;
+      
+      return date.toLocaleDateString();
     }
 
     // Close modal on background click
@@ -1289,7 +2031,62 @@ return msg;`,
         closeModal();
         closeViewModal();
       }
+      
+      // Ctrl/Cmd + S to save in modal
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        const modalActive = document.getElementById('flow-modal').classList.contains('active');
+        if (modalActive) {
+          e.preventDefault();
+          const saveBtn = document.getElementById('save-flow-btn');
+          if (!saveBtn.disabled) {
+            saveFlow();
+          }
+        }
+      }
+      
+      // Ctrl/Cmd + K to focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        const searchBox = document.getElementById('flow-search');
+        if (searchBox) {
+          searchBox.focus();
+        }
+      }
     });
+
+    // Auto-save draft to localStorage (optional enhancement)
+    let draftTimer;
+    document.getElementById('flow-config')?.addEventListener('input', () => {
+      clearTimeout(draftTimer);
+      draftTimer = setTimeout(() => {
+        try {
+          const draft = {
+            name: document.getElementById('flow-name').value,
+            description: document.getElementById('flow-description').value,
+            config: document.getElementById('flow-config').value,
+            timestamp: Date.now()
+          };
+          localStorage.setItem('rednox-draft', JSON.stringify(draft));
+        } catch (err) {
+          console.warn('Failed to save draft:', err);
+        }
+      }, 2000);
+    });
+
+    // Load draft on page load
+    try {
+      const draft = JSON.parse(localStorage.getItem('rednox-draft'));
+      if (draft && draft.timestamp > Date.now() - 3600000) { // 1 hour
+        if (confirm('Found unsaved draft from ' + new Date(draft.timestamp).toLocaleString() + '. Load it?')) {
+          document.getElementById('flow-name').value = draft.name;
+          document.getElementById('flow-description').value = draft.description;
+          document.getElementById('flow-config').value = draft.config;
+          showCreateFlowModal();
+        }
+      }
+    } catch (err) {
+      // Ignore draft loading errors
+    }
   </script>
 </body>
 </html>
