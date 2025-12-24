@@ -1,20 +1,18 @@
 
 // ===================================================================
-// RedNox - Enhanced Flow Engine with Circuit Breaker & Tracing
+// RedNox - Ephemeral Flow Engine
 // ===================================================================
 
 import { NodeInstance } from './NodeInstance';
 import { registry } from './NodeRegistry';
-import { RED, CircuitBreaker } from '../utils';
-import { FlowConfig, ExecutionContext, NodeMessage, MessageTrace } from '../types/core';
+import { RED } from '../utils';
+import { FlowConfig, ExecutionContext, NodeMessage } from '../types/core';
 
 export class FlowEngine {
   private nodes = new Map<string, NodeInstance>();
   private flowConfig: FlowConfig;
   private context: ExecutionContext;
   private httpResponse: NodeMessage | null = null;
-  private circuitBreaker: CircuitBreaker;
-  private traces = new Map<string, MessageTrace>();
   private executionDepth = new Map<string, number>();
   private maxExecutionDepth = 50;
   private initializedNodes = new Set<string>();
@@ -23,14 +21,13 @@ export class FlowEngine {
     this.flowConfig = flowConfig;
     this.context = context;
     this.context.flowEngine = this;
-    this.circuitBreaker = new CircuitBreaker();
   }
   
   async initialize() {
     this.nodes.clear();
     this.initializedNodes.clear();
     
-    // Create node instances (lazy init)
+    // Create node instances
     for (const nodeConfig of this.flowConfig.nodes || []) {
       const definition = registry.get(nodeConfig.type);
       if (!definition) {
@@ -61,7 +58,7 @@ export class FlowEngine {
     nodeId: string,
     msg: NodeMessage
   ): Promise<NodeMessage | NodeMessage[] | NodeMessage[][] | null> {
-    // Check execution depth to prevent infinite loops
+    // Prevent infinite loops
     const depth = this.executionDepth.get(msg._msgid) || 0;
     if (depth > this.maxExecutionDepth) {
       throw new Error(`Maximum execution depth exceeded for message ${msg._msgid}`);
@@ -80,42 +77,18 @@ export class FlowEngine {
       return null;
     }
     
-    // Lazy initialize node
+    // Lazy initialize
     await this.initializeNode(nodeId);
     
-    // Get or create trace
-    const trace = this.traces.get(msg._msgid) || {
-      msgId: msg._msgid,
-      startTime: Date.now(),
-      nodeExecutions: []
-    };
-    
-    const execStart = Date.now();
-    
     try {
-      // Execute with circuit breaker
-      const result = await this.circuitBreaker.execute(
-        `node:${nodeId}`,
-        async () => await definition.execute(msg, nodeInstance, this.context)
-      );
-      
-      // Track execution
-      trace.nodeExecutions.push({
-        nodeId,
-        nodeType: nodeInstance.type,
-        startTime: execStart,
-        duration: Date.now() - execStart,
-        status: 'success'
-      });
-      
-      this.traces.set(msg._msgid, trace);
+      const result = await definition.execute(msg, nodeInstance, this.context);
       
       // Check for HTTP response
       if (result && (result as NodeMessage)._httpResponse) {
         this.httpResponse = result as NodeMessage;
       }
       
-      // Route message
+      // Route message to next nodes
       if (result) {
         await this.routeMessage(nodeInstance, result);
       }
@@ -124,19 +97,7 @@ export class FlowEngine {
       return result;
       
     } catch (err: any) {
-      // Track error
-      trace.nodeExecutions.push({
-        nodeId,
-        nodeType: nodeInstance.type,
-        startTime: execStart,
-        duration: Date.now() - execStart,
-        status: 'error',
-        error: err.message
-      });
-      
-      this.traces.set(msg._msgid, trace);
       this.executionDepth.set(msg._msgid, depth);
-      
       await this.handleNodeError(err, nodeInstance, msg);
       return null;
     }
@@ -149,7 +110,6 @@ export class FlowEngine {
     const wires = sourceNode.config.wires;
     if (!wires || wires.length === 0) return;
     
-    // Handle array outputs
     if (Array.isArray(msg)) {
       const promises: Promise<any>[] = [];
       
@@ -159,7 +119,6 @@ export class FlowEngine {
         
         if (outputMsg === null || outputMsg === undefined) continue;
         
-        // Handle nested array (multiple messages per output)
         if (Array.isArray(outputMsg)) {
           for (const singleMsg of outputMsg) {
             if (singleMsg) {
@@ -171,7 +130,6 @@ export class FlowEngine {
             }
           }
         } else {
-          // Single message per output
           for (const targetNodeId of targetWires) {
             promises.push(
               this.executeNode(targetNodeId, RED.util.cloneMessage(outputMsg))
@@ -180,11 +138,9 @@ export class FlowEngine {
         }
       }
       
-      // Execute all in parallel with error handling
       await Promise.allSettled(promises);
       
     } else {
-      // Single message output
       const targetWires = wires[0] || [];
       const promises = targetWires.map(nodeId => 
         this.executeNode(nodeId, RED.util.cloneMessage(msg))
@@ -205,7 +161,6 @@ export class FlowEngine {
     for (const catchNode of catchNodes) {
       const scope = catchNode.config.scope || [];
       
-      // Check if catch applies to this node
       if (scope.length === 0 || scope.includes(sourceNode.id)) {
         const errorMsg: NodeMessage = {
           _msgid: crypto.randomUUID(),
@@ -231,7 +186,6 @@ export class FlowEngine {
     initialMsg?: NodeMessage
   ): Promise<NodeMessage | null> {
     this.httpResponse = null;
-    this.traces.clear();
     this.executionDepth.clear();
     
     const msg = initialMsg || {
@@ -242,18 +196,11 @@ export class FlowEngine {
     
     try {
       await this.executeNode(entryNodeId, msg);
-      
-      // Attach trace to response
-      if (this.httpResponse) {
-        this.httpResponse._trace = this.traces.get(msg._msgid);
-      }
-      
       return this.httpResponse;
       
     } catch (err: any) {
       console.error('[FlowEngine] Flow execution error:', err);
       
-      // Return error response
       return {
         _msgid: msg._msgid,
         _httpResponse: {
@@ -261,19 +208,10 @@ export class FlowEngine {
           headers: { 'Content-Type': 'application/json' },
           payload: {
             error: 'Flow execution failed',
-            message: err.message,
-            trace: this.traces.get(msg._msgid)
+            message: err.message
           }
         }
       };
-    } finally {
-      // Cleanup old traces (keep last 100)
-      if (this.traces.size > 100) {
-        const keys = Array.from(this.traces.keys());
-        for (let i = 0; i < keys.length - 100; i++) {
-          this.traces.delete(keys[i]);
-        }
-      }
     }
   }
   
@@ -292,20 +230,6 @@ export class FlowEngine {
     
     this.nodes.clear();
     this.initializedNodes.clear();
-    this.traces.clear();
     this.executionDepth.clear();
-  }
-  
-  getNodeStatus(nodeId: string): any {
-    const nodeInstance = this.nodes.get(nodeId);
-    return nodeInstance ? (nodeInstance as any)._status : null;
-  }
-  
-  getTrace(msgId: string): MessageTrace | undefined {
-    return this.traces.get(msgId);
-  }
-  
-  resetCircuitBreaker(nodeId: string): void {
-    this.circuitBreaker.reset(`node:${nodeId}`);
   }
 }
