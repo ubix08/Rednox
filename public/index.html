@@ -40,6 +40,7 @@
       padding: 1rem;
     }
 
+    /* Header */
     header {
       background: var(--surface);
       box-shadow: var(--shadow);
@@ -81,6 +82,7 @@
       flex-wrap: wrap;
     }
 
+    /* Buttons */
     .btn {
       padding: 0.625rem 1.25rem;
       border: none;
@@ -130,6 +132,7 @@
       font-size: 0.8125rem;
     }
 
+    /* Tabs */
     .tabs {
       display: flex;
       gap: 0.5rem;
@@ -165,6 +168,7 @@
       display: block;
     }
 
+    /* Cards */
     .card {
       background: var(--surface);
       border-radius: 12px;
@@ -199,6 +203,7 @@
       flex-wrap: wrap;
     }
 
+    /* Forms */
     .form-group {
       margin-bottom: 1.25rem;
     }
@@ -236,6 +241,7 @@
       font-family: 'Monaco', 'Menlo', monospace;
     }
 
+    /* Status Badge */
     .badge {
       display: inline-flex;
       align-items: center;
@@ -256,6 +262,11 @@
       color: #c5221f;
     }
 
+    .badge-warning {
+      background: #fef7e0;
+      color: #b95000;
+    }
+
     .badge-dot {
       width: 6px;
       height: 6px;
@@ -263,6 +274,7 @@
       background: currentColor;
     }
 
+    /* Modal */
     .modal {
       display: none;
       position: fixed;
@@ -334,6 +346,7 @@
       flex-wrap: wrap;
     }
 
+    /* Empty State */
     .empty-state {
       text-align: center;
       padding: 3rem 1rem;
@@ -346,6 +359,7 @@
       opacity: 0.5;
     }
 
+    /* Loading */
     .loading {
       display: inline-block;
       width: 20px;
@@ -360,6 +374,7 @@
       to { transform: rotate(360deg); }
     }
 
+    /* Code Block */
     .code-block {
       background: #f8f9fa;
       border: 1px solid var(--border);
@@ -368,10 +383,10 @@
       font-family: 'Monaco', 'Menlo', monospace;
       font-size: 0.8125rem;
       overflow-x: auto;
-      white-space: pre-wrap;
-      word-break: break-all;
+      white-space: pre;
     }
 
+    /* Stats Grid */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -398,6 +413,32 @@
       color: var(--text);
     }
 
+    /* Responsive */
+    @media (max-width: 640px) {
+      .container {
+        padding: 0.75rem;
+      }
+
+      .card {
+        padding: 1rem;
+        border-radius: 8px;
+      }
+
+      .modal-content {
+        margin: 1rem;
+      }
+
+      .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.8125rem;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Alert */
     .alert {
       padding: 1rem;
       border-radius: 8px;
@@ -437,6 +478,17 @@
       gap: 0.375rem;
     }
 
+    .json-editor {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 0.8125rem;
+      overflow-x: auto;
+      min-height: 400px;
+    }
+
     .endpoint-list {
       list-style: none;
       padding: 0;
@@ -451,7 +503,6 @@
       border-radius: 8px;
       margin-bottom: 0.5rem;
       font-size: 0.875rem;
-      flex-wrap: wrap;
     }
 
     .method-badge {
@@ -472,44 +523,11 @@
       flex: 1;
       font-family: 'Monaco', 'Menlo', monospace;
       word-break: break-all;
-      min-width: 200px;
-    }
-
-    @media (max-width: 640px) {
-      .container {
-        padding: 0.75rem;
-      }
-
-      .card {
-        padding: 1rem;
-        border-radius: 8px;
-      }
-
-      .modal-content {
-        margin: 1rem;
-      }
-
-      .btn {
-        padding: 0.5rem 1rem;
-        font-size: 0.8125rem;
-      }
-
-      .stats-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .endpoint-item {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      .endpoint-path {
-        width: 100%;
-      }
     }
   </style>
 </head>
 <body>
+  <!-- Header -->
   <header>
     <div class="header-content">
       <div class="logo">
@@ -517,15 +535,15 @@
         <span>RedNox</span>
       </div>
       <div class="header-actions">
-        <button class="btn btn-secondary btn-sm" id="refresh-btn">
+        <button class="btn btn-secondary btn-sm" onclick="loadStats()">
           <span>↻</span>
           <span>Refresh</span>
         </button>
-        <button class="btn btn-primary btn-sm" id="new-flow-btn">
+        <button class="btn btn-primary btn-sm" onclick="showCreateFlowModal()">
           <span>+</span>
           <span>New Flow</span>
         </button>
-        <button class="btn btn-secondary btn-sm" id="init-db-btn">
+        <button class="btn btn-secondary btn-sm" onclick="initializeDatabase()">
           <span>⚙</span>
           <span>Init DB</span>
         </button>
@@ -533,7 +551,9 @@
     </div>
   </header>
 
+  <!-- Main Content -->
   <div class="container">
+    <!-- Stats -->
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-label">Total Flows</div>
@@ -549,23 +569,27 @@
       </div>
     </div>
 
+    <!-- Alerts Container -->
     <div id="alerts"></div>
 
+    <!-- Tabs -->
     <div class="tabs">
-      <button class="tab active" data-tab="flows">Flows</button>
-      <button class="tab" data-tab="routes">Routes</button>
-      <button class="tab" data-tab="templates">Templates</button>
-      <button class="tab" data-tab="settings">Settings</button>
+      <button class="tab active" onclick="switchTab('flows')">Flows</button>
+      <button class="tab" onclick="switchTab('routes')">Routes</button>
+      <button class="tab" onclick="switchTab('templates')">Templates</button>
     </div>
 
+    <!-- Flows Tab -->
     <div id="flows-tab" class="tab-content active">
       <div id="flows-list"></div>
     </div>
 
+    <!-- Routes Tab -->
     <div id="routes-tab" class="tab-content">
       <div id="routes-list"></div>
     </div>
 
+    <!-- Templates Tab -->
     <div id="templates-tab" class="tab-content">
       <div class="card">
         <div class="card-header">
@@ -575,128 +599,21 @@
           <div class="empty-icon">📄</div>
           <p>Choose a template to get started quickly</p>
           <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
-            <button class="btn btn-primary template-btn" data-template="simple-chat">Simple Chat</button>
-            <button class="btn btn-primary template-btn" data-template="chat-with-tools">Chat with Tools</button>
-            <button class="btn btn-primary template-btn" data-template="webhook">Webhook Handler</button>
+            <button class="btn btn-primary" onclick="createFromTemplate('simple-chat')">Simple Chat</button>
+            <button class="btn btn-primary" onclick="createFromTemplate('chat-with-tools')">Chat with Tools</button>
+            <button class="btn btn-primary" onclick="createFromTemplate('webhook')">Webhook Handler</button>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <div id="settings-tab" class="tab-content">
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title">⚙️ Configuration</h3>
-        </div>
-        
-        <div class="alert alert-info">
-          <span>ℹ️</span>
-          <span>API keys are stored in your browser's localStorage and sent with each request. They are never stored on the server.</span>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">
-            🔑 Gemini API Key
-            <a href="https://makersuite.google.com/app/apikey" target="_blank" style="margin-left: 0.5rem; color: var(--primary); font-size: 0.8125rem;">Get API Key</a>
-          </label>
-          <input type="password" id="gemini-api-key" class="form-input" placeholder="Enter your Gemini API key">
-          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
-            Required for Gemini AI nodes. Get yours at <a href="https://makersuite.google.com/app/apikey" target="_blank" style="color: var(--primary);">Google AI Studio</a>
-          </p>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">🤖 OpenAI API Key (Optional)</label>
-          <input type="password" id="openai-api-key" class="form-input" placeholder="sk-...">
-          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
-            For OpenAI nodes (if implemented)
-          </p>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">🌐 Anthropic API Key (Optional)</label>
-          <input type="password" id="anthropic-api-key" class="form-input" placeholder="sk-ant-...">
-          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
-            For Claude/Anthropic nodes (if implemented)
-          </p>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">🌍 API Endpoint</label>
-          <input type="text" id="api-endpoint" class="form-input" placeholder="https://your-worker.workers.dev">
-          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
-            Current: <code id="current-endpoint" style="background: var(--bg); padding: 0.125rem 0.375rem; border-radius: 4px;">${window.location.origin}</code>
-          </p>
-        </div>
-
-        <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
-          <button class="btn btn-primary" id="save-settings-btn">💾 Save Settings</button>
-          <button class="btn btn-secondary" id="clear-settings-btn">🗑 Clear All</button>
-          <button class="btn btn-secondary" id="test-connection-btn">🔌 Test Connection</button>
-        </div>
-
-        <div id="settings-status" style="margin-top: 1rem;"></div>
-      </div>
-
-      <div class="card" style="margin-top: 1rem;">
-        <div class="card-header">
-          <h3 class="card-title">📊 System Information</h3>
-        </div>
-        <div style="font-size: 0.875rem;">
-          <div style="display: grid; grid-template-columns: 150px 1fr; gap: 0.75rem; margin-bottom: 0.5rem;">
-            <strong>API Endpoint:</strong>
-            <span id="info-endpoint">-</span>
-          </div>
-          <div style="display: grid; grid-template-columns: 150px 1fr; gap: 0.75rem; margin-bottom: 0.5rem;">
-            <strong>Gemini Key Set:</strong>
-            <span id="info-gemini-key">❌ Not configured</span>
-          </div>
-          <div style="display: grid; grid-template-columns: 150px 1fr; gap: 0.75rem; margin-bottom: 0.5rem;">
-            <strong>OpenAI Key Set:</strong>
-            <span id="info-openai-key">❌ Not configured</span>
-          </div>
-          <div style="display: grid; grid-template-columns: 150px 1fr; gap: 0.75rem; margin-bottom: 0.5rem;">
-            <strong>Anthropic Key Set:</strong>
-            <span id="info-anthropic-key">❌ Not configured</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="card" style="margin-top: 1rem;">
-        <div class="card-header">
-          <h3 class="card-title">📝 How API Keys Work</h3>
-        </div>
-        <div style="font-size: 0.875rem; line-height: 1.8;">
-          <p style="margin-bottom: 1rem;">
-            <strong>1. Configuration:</strong> Set your API keys in this Settings tab. They're stored securely in your browser's localStorage.
-          </p>
-          <p style="margin-bottom: 1rem;">
-            <strong>2. Usage:</strong> When flows execute, the Worker reads API keys from environment variables:
-          </p>
-          <pre class="code-block" style="margin-bottom: 1rem;">// In wrangler.toml
-[vars]
-GEMINI_API_KEY = "your-key-here"
-OPENAI_API_KEY = "your-key-here"
-ANTHROPIC_API_KEY = "your-key-here"</pre>
-          <p style="margin-bottom: 1rem;">
-            <strong>3. Security:</strong> API keys should be set as Worker secrets in production:
-          </p>
-          <pre class="code-block" style="margin-bottom: 1rem;">npx wrangler secret put GEMINI_API_KEY
-npx wrangler secret put OPENAI_API_KEY
-npx wrangler secret put ANTHROPIC_API_KEY</pre>
-          <p>
-            <strong>⚠️ Important:</strong> The keys you set in this UI are for testing/development only. For production, always use Cloudflare Worker secrets.
-          </p>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Create/Edit Flow Modal -->
   <div id="flow-modal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
         <h3 class="modal-title" id="modal-title">Create Flow</h3>
-        <button class="modal-close" id="modal-close-btn">&times;</button>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
       </div>
       
       <div class="form-group">
@@ -711,265 +628,76 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
 
       <div class="form-group">
         <label class="form-label">Flow Configuration (JSON)</label>
-        <textarea id="flow-config" class="form-textarea" rows="15" placeholder='{"nodes": [], "id": "my-flow"}'></textarea>
+        <textarea id="flow-config" class="form-textarea json-editor" rows="15" placeholder='{"nodes": [...], "id": "my-flow", "name": "My Flow"}'></textarea>
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="modal-cancel-btn">Cancel</button>
-        <button class="btn btn-primary" id="modal-save-btn">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveFlow()">
           <span id="save-btn-text">Create Flow</span>
         </button>
       </div>
     </div>
   </div>
 
+  <!-- View Flow Modal -->
   <div id="view-modal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
         <h3 class="modal-title" id="view-title">Flow Details</h3>
-        <button class="modal-close" id="view-close-btn">&times;</button>
+        <button class="modal-close" onclick="closeViewModal()">&times;</button>
       </div>
       
       <div id="view-content"></div>
 
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="view-modal-close-btn">Close</button>
+        <button class="btn btn-secondary" onclick="closeViewModal()">Close</button>
       </div>
     </div>
   </div>
 
   <script>
+    // Configuration
     const API_BASE = window.location.origin;
     let currentFlowId = null;
     let editMode = false;
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
-      setupEventListeners();
       loadStats();
       loadFlows();
     });
 
-    function setupEventListeners() {
-      // Header buttons
-      document.getElementById('refresh-btn').addEventListener('click', () => {
-        loadStats();
-        loadFlows();
-      });
-      
-      document.getElementById('new-flow-btn').addEventListener('click', showCreateFlowModal);
-      document.getElementById('init-db-btn').addEventListener('click', initializeDatabase);
-
-      // Tabs
-      document.querySelectorAll('.tab').forEach(tab => {
-        tab.addEventListener('click', (e) => {
-          const tabName = e.target.dataset.tab;
-          switchTab(tabName);
-        });
-      });
-
-      // Templates
-      document.querySelectorAll('.template-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const template = e.target.dataset.template;
-          createFromTemplate(template);
-        });
-      });
-
-      // Settings
-      document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
-      document.getElementById('clear-settings-btn').addEventListener('click', clearSettings);
-      document.getElementById('test-connection-btn').addEventListener('click', testConnection);
-
-      // Modal buttons
-      document.getElementById('modal-close-btn').addEventListener('click', closeModal);
-      document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
-      document.getElementById('modal-save-btn').addEventListener('click', saveFlow);
-      document.getElementById('view-close-btn').addEventListener('click', closeViewModal);
-      document.getElementById('view-modal-close-btn').addEventListener('click', closeViewModal);
-
-      // Click outside modal to close
-      document.getElementById('flow-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'flow-modal') closeModal();
-      });
-
-      document.getElementById('view-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'view-modal') closeViewModal();
-      });
-
-      // Keyboard shortcuts
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          closeModal();
-          closeViewModal();
-        }
-      });
-
-      // Load settings on init
-      loadSettings();
-    }
-
+    // Tab Switching
     function switchTab(tabName) {
       document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
       
-      document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+      event.target.classList.add('active');
       document.getElementById(`${tabName}-tab`).classList.add('active');
 
       if (tabName === 'flows') loadFlows();
       if (tabName === 'routes') loadRoutes();
-      if (tabName === 'settings') updateSettingsInfo();
     }
 
-    // Settings Management
-    function loadSettings() {
-      const geminiKey = localStorage.getItem('rednox_gemini_key') || '';
-      const openaiKey = localStorage.getItem('rednox_openai_key') || '';
-      const anthropicKey = localStorage.getItem('rednox_anthropic_key') || '';
-      const endpoint = localStorage.getItem('rednox_api_endpoint') || API_BASE;
-
-      document.getElementById('gemini-api-key').value = geminiKey;
-      document.getElementById('openai-api-key').value = openaiKey;
-      document.getElementById('anthropic-api-key').value = anthropicKey;
-      document.getElementById('api-endpoint').value = endpoint;
-
-      updateSettingsInfo();
-    }
-
-    function saveSettings() {
-      const geminiKey = document.getElementById('gemini-api-key').value.trim();
-      const openaiKey = document.getElementById('openai-api-key').value.trim();
-      const anthropicKey = document.getElementById('anthropic-api-key').value.trim();
-      const endpoint = document.getElementById('api-endpoint').value.trim() || API_BASE;
-
-      localStorage.setItem('rednox_gemini_key', geminiKey);
-      localStorage.setItem('rednox_openai_key', openaiKey);
-      localStorage.setItem('rednox_anthropic_key', anthropicKey);
-      localStorage.setItem('rednox_api_endpoint', endpoint);
-
-      updateSettingsInfo();
-      showAlert('Settings saved successfully!', 'success');
-    }
-
-    function clearSettings() {
-      if (!confirm('Clear all API keys and settings?')) return;
-
-      localStorage.removeItem('rednox_gemini_key');
-      localStorage.removeItem('rednox_openai_key');
-      localStorage.removeItem('rednox_anthropic_key');
-      localStorage.removeItem('rednox_api_endpoint');
-
-      document.getElementById('gemini-api-key').value = '';
-      document.getElementById('openai-api-key').value = '';
-      document.getElementById('anthropic-api-key').value = '';
-      document.getElementById('api-endpoint').value = API_BASE;
-
-      updateSettingsInfo();
-      showAlert('Settings cleared', 'info');
-    }
-
-    function updateSettingsInfo() {
-      const geminiKey = localStorage.getItem('rednox_gemini_key');
-      const openaiKey = localStorage.getItem('rednox_openai_key');
-      const anthropicKey = localStorage.getItem('rednox_anthropic_key');
-      const endpoint = localStorage.getItem('rednox_api_endpoint') || API_BASE;
-
-      document.getElementById('info-endpoint').textContent = endpoint;
-      document.getElementById('info-gemini-key').innerHTML = geminiKey 
-        ? '✅ Configured (' + maskKey(geminiKey) + ')' 
-        : '❌ Not configured';
-      document.getElementById('info-openai-key').innerHTML = openaiKey 
-        ? '✅ Configured (' + maskKey(openaiKey) + ')' 
-        : '❌ Not configured';
-      document.getElementById('info-anthropic-key').innerHTML = anthropicKey 
-        ? '✅ Configured (' + maskKey(anthropicKey) + ')' 
-        : '❌ Not configured';
-    }
-
-    function maskKey(key) {
-      if (!key || key.length < 8) return '***';
-      return key.substring(0, 4) + '...' + key.substring(key.length - 4);
-    }
-
-    async function testConnection() {
-      const statusDiv = document.getElementById('settings-status');
-      statusDiv.innerHTML = '<div class="loading"></div> Testing connection...';
-
-      try {
-        const endpoint = localStorage.getItem('rednox_api_endpoint') || API_BASE;
-        const response = await fetch(`${endpoint}/health`);
-        const data = await response.json();
-
-        if (response.ok && data.status === 'ok') {
-          statusDiv.innerHTML = `
-            <div class="alert alert-success">
-              <span>✅</span>
-              <div>
-                <strong>Connection successful!</strong><br>
-                Version: ${data.version || 'Unknown'}<br>
-                ${data.description || ''}
-              </div>
-            </div>
-          `;
-        } else {
-          statusDiv.innerHTML = `
-            <div class="alert alert-error">
-              <span>❌</span>
-              <span>Connection failed: Invalid response</span>
-            </div>
-          `;
-        }
-      } catch (err) {
-        statusDiv.innerHTML = `
-          <div class="alert alert-error">
-            <span>❌</span>
-            <span>Connection failed: ${escapeHtml(err.message)}</span>
-          </div>
-        `;
-      }
-    }
-
-    // Get API headers with keys
-    function getApiHeaders() {
-      const headers = {
-        'Content-Type': 'application/json'
-      };
-
-      const geminiKey = localStorage.getItem('rednox_gemini_key');
-      const openaiKey = localStorage.getItem('rednox_openai_key');
-      const anthropicKey = localStorage.getItem('rednox_anthropic_key');
-
-      if (geminiKey) headers['X-Gemini-API-Key'] = geminiKey;
-      if (openaiKey) headers['X-OpenAI-API-Key'] = openaiKey;
-      if (anthropicKey) headers['X-Anthropic-API-Key'] = anthropicKey;
-
-      return headers;
-    }
-
-    // Get API endpoint
-    function getApiEndpoint() {
-      return localStorage.getItem('rednox_api_endpoint') || API_BASE;
-    }
-
+    // Alert System
     function showAlert(message, type = 'info') {
       const alertsDiv = document.getElementById('alerts');
       const alert = document.createElement('div');
       alert.className = `alert alert-${type}`;
       alert.innerHTML = `
         <span>${type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️'}</span>
-        <span>${escapeHtml(message)}</span>
+        <span>${message}</span>
       `;
       alertsDiv.appendChild(alert);
       
       setTimeout(() => alert.remove(), 5000);
     }
 
+    // Load Stats
     async function loadStats() {
       try {
-        const endpoint = getApiEndpoint();
-        const response = await fetch(`${endpoint}/admin/stats`, {
-          headers: getApiHeaders()
-        });
+        const response = await fetch(`${API_BASE}/admin/stats`);
         const data = await response.json();
         
         document.getElementById('stat-flows').textContent = data.flows || 0;
@@ -980,15 +708,12 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
       }
     }
 
+    // Initialize Database
     async function initializeDatabase() {
       if (!confirm('Initialize database? This will create tables if they don\'t exist.')) return;
       
       try {
-        const endpoint = getApiEndpoint();
-        const response = await fetch(`${endpoint}/admin/init`, { 
-          method: 'POST',
-          headers: getApiHeaders()
-        });
+        const response = await fetch(`${API_BASE}/admin/init`, { method: 'POST' });
         const data = await response.json();
         
         if (data.success) {
@@ -1002,15 +727,13 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
       }
     }
 
+    // Load Flows
     async function loadFlows() {
       const container = document.getElementById('flows-list');
       container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading"></div></div>';
 
       try {
-        const endpoint = getApiEndpoint();
-        const response = await fetch(`${endpoint}/admin/flows`, {
-          headers: getApiHeaders()
-        });
+        const response = await fetch(`${API_BASE}/admin/flows`);
         const data = await response.json();
 
         if (!data.flows || data.flows.length === 0) {
@@ -1031,11 +754,11 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
             <div class="card-header">
               <div>
                 <h3 class="card-title">${escapeHtml(flow.name)}</h3>
-                \( {flow.description ? `<p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.25rem;"> \){escapeHtml(flow.description)}</p>` : ''}
+                ${flow.description ? `<p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.25rem;">${escapeHtml(flow.description)}</p>` : ''}
                 <div class="flow-meta">
                   <span class="flow-meta-item">
                     <span>🆔</span>
-                    <span>${escapeHtml(flow.id)}</span>
+                    <span>${flow.id}</span>
                   </span>
                   <span class="flow-meta-item">
                     <span>📅</span>
@@ -1051,17 +774,17 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
               </div>
             </div>
             <div class="card-actions">
-              <button class="btn btn-secondary btn-sm" onclick="viewFlow('${escapeHtml(flow.id)}')">
+              <button class="btn btn-secondary btn-sm" onclick="viewFlow('${flow.id}')">
                 👁 View
               </button>
-              <button class="btn btn-secondary btn-sm" onclick="editFlow('${escapeHtml(flow.id)}')">
+              <button class="btn btn-secondary btn-sm" onclick="editFlow('${flow.id}')">
                 ✏️ Edit
               </button>
               <button class="btn ${flow.enabled ? 'btn-secondary' : 'btn-success'} btn-sm" 
-                      onclick="toggleFlow('${escapeHtml(flow.id)}', ${!flow.enabled})">
+                      onclick="toggleFlow('${flow.id}', ${!flow.enabled})">
                 ${flow.enabled ? '⏸ Disable' : '▶️ Enable'}
               </button>
-              <button class="btn btn-danger btn-sm" onclick="deleteFlow('${escapeHtml(flow.id)}')">
+              <button class="btn btn-danger btn-sm" onclick="deleteFlow('${flow.id}')">
                 🗑 Delete
               </button>
             </div>
@@ -1071,21 +794,19 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
         container.innerHTML = `
           <div class="alert alert-error">
             <span>❌</span>
-            <span>Failed to load flows: ${escapeHtml(err.message)}</span>
+            <span>Failed to load flows: ${err.message}</span>
           </div>
         `;
       }
     }
 
+    // Load Routes
     async function loadRoutes() {
       const container = document.getElementById('routes-list');
       container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading"></div></div>';
 
       try {
-        const endpoint = getApiEndpoint();
-        const response = await fetch(`${endpoint}/admin/routes`, {
-          headers: getApiHeaders()
-        });
+        const response = await fetch(`${API_BASE}/admin/routes`);
         const data = await response.json();
 
         if (!data.routes || data.routes.length === 0) {
@@ -1104,9 +825,9 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
             <ul class="endpoint-list">
               ${data.routes.map(route => `
                 <li class="endpoint-item">
-                  <span class="method-badge method-\( {route.method.toLowerCase()}"> \){escapeHtml(route.method)}</span>
-                  <span class="endpoint-path">${escapeHtml(route.fullUrl || route.path)}</span>
-                  <span style="color: var(--text-secondary); font-size: 0.75rem;">${escapeHtml(route.flow_name)}</span>
+                  <span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span>
+                  <span class="endpoint-path">${route.fullUrl || route.path}</span>
+                  <span style="color: var(--text-secondary); font-size: 0.75rem;">${route.flow_name}</span>
                 </li>
               `).join('')}
             </ul>
@@ -1116,12 +837,13 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
         container.innerHTML = `
           <div class="alert alert-error">
             <span>❌</span>
-            <span>Failed to load routes: ${escapeHtml(err.message)}</span>
+            <span>Failed to load routes: ${err.message}</span>
           </div>
         `;
       }
     }
 
+    // Show Create Modal
     function showCreateFlowModal() {
       editMode = false;
       currentFlowId = null;
@@ -1151,12 +873,10 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
       document.getElementById('flow-modal').classList.add('active');
     }
 
+    // Edit Flow
     async function editFlow(flowId) {
       try {
-        const endpoint = getApiEndpoint();
-        const response = await fetch(`\( {endpoint}/admin/flows/ \){flowId}`, {
-          headers: getApiHeaders()
-        });
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
         const flow = await response.json();
 
         editMode = true;
@@ -1172,24 +892,22 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
       }
     }
 
+    // View Flow
     async function viewFlow(flowId) {
       try {
-        const endpoint = getApiEndpoint();
-        const response = await fetch(`\( {endpoint}/admin/flows/ \){flowId}`, {
-          headers: getApiHeaders()
-        });
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
         const flow = await response.json();
 
         document.getElementById('view-title').textContent = flow.name;
         document.getElementById('view-content').innerHTML = `
           <div class="form-group">
-            <label class="form-label">Description</label>
-            <p>${escapeHtml(flow.description || 'No description')}</p>
-          </div>
-
-          <div class="form-group">
             <label class="form-label">Flow ID</label>
-            <div class="code-block">${escapeHtml(flow.id)}</div>
+            <div class="code-block">${flow.id}</div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <p>${flow.description || 'No description'}</p>
           </div>
 
           <div class="form-group">
@@ -1206,8 +924,8 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
               <ul class="endpoint-list">
                 ${flow.routes.map(route => `
                   <li class="endpoint-item">
-                    <span class="method-badge method-\( {route.method.toLowerCase()}"> \){escapeHtml(route.method)}</span>
-                    <span class="endpoint-path">${escapeHtml(route.fullUrl)}</span>
+                    <span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span>
+                    <span class="endpoint-path">${route.fullUrl}</span>
                   </li>
                 `).join('')}
               </ul>
@@ -1216,7 +934,7 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
 
           <div class="form-group">
             <label class="form-label">Configuration</label>
-            <pre class="code-block">${escapeHtml(JSON.stringify(flow.config, null, 2))}</pre>
+            <pre class="code-block">${JSON.stringify(flow.config, null, 2)}</pre>
           </div>
 
           <div class="form-group">
@@ -1236,6 +954,7 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
       }
     }
 
+    // Save Flow
     async function saveFlow() {
       const name = document.getElementById('flow-name').value.trim();
       const description = document.getElementById('flow-description').value.trim();
@@ -1259,6 +978,7 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
         return;
       }
 
+      // Ensure config has required fields
       config.name = name;
       config.description = description;
       
@@ -1267,16 +987,15 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
       }
 
       try {
-        const endpoint = getApiEndpoint();
         const url = editMode 
-          ? `\( {endpoint}/admin/flows/ \){currentFlowId}`
-          : `${endpoint}/admin/flows`;
+          ? `${API_BASE}/admin/flows/${currentFlowId}`
+          : `${API_BASE}/admin/flows`;
         
         const method = editMode ? 'PUT' : 'POST';
 
         const response = await fetch(url, {
           method,
-          headers: getApiHeaders(),
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(config)
         });
 
@@ -1288,12 +1007,13 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
           loadFlows();
           loadStats();
 
+          // Show endpoints if created
           if (data.endpoints && data.endpoints.length > 0) {
             setTimeout(() => {
               const endpointList = data.endpoints.map(e => 
                 `${e.method} ${e.url}`
-              ).join(', ');
-              showAlert(`Endpoints: ${endpointList}`, 'info');
+              ).join('\n');
+              showAlert(`Endpoints created:\n${endpointList}`, 'success');
             }, 500);
           }
         } else {
@@ -1304,13 +1024,12 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
       }
     }
 
+    // Toggle Flow
     async function toggleFlow(flowId, enable) {
       try {
-        const endpoint = getApiEndpoint();
         const action = enable ? 'enable' : 'disable';
-        const response = await fetch(`\( {endpoint}/admin/flows/ \){flowId}/${action}`, {
-          method: 'POST',
-          headers: getApiHeaders()
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}/${action}`, {
+          method: 'POST'
         });
 
         const data = await response.json();
@@ -1327,16 +1046,15 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
       }
     }
 
+    // Delete Flow
     async function deleteFlow(flowId) {
       if (!confirm('Are you sure you want to delete this flow? This cannot be undone.')) {
         return;
       }
 
       try {
-        const endpoint = getApiEndpoint();
-        const response = await fetch(`\( {endpoint}/admin/flows/ \){flowId}`, {
-          method: 'DELETE',
-          headers: getApiHeaders()
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`, {
+          method: 'DELETE'
         });
 
         const data = await response.json();
@@ -1353,6 +1071,7 @@ npx wrangler secret put ANTHROPIC_API_KEY</pre>
       }
     }
 
+    // Create from Template
     function createFromTemplate(templateName) {
       const templates = {
         'simple-chat': {
@@ -1499,8 +1218,10 @@ return msg;`,
               id: 'process',
               type: 'function',
               name: 'Process Data',
-              func: `const data = msg.payload.body || msg.payload;
+              func: `// Process webhook data
+const data = msg.payload.body || msg.payload;
 
+// Log to context
 await flow.set('last-webhook', {
   timestamp: Date.now(),
   data: data
@@ -1537,6 +1258,7 @@ return msg;`,
       showCreateFlowModal();
     }
 
+    // Close Modals
     function closeModal() {
       document.getElementById('flow-modal').classList.remove('active');
     }
@@ -1545,18 +1267,29 @@ return msg;`,
       document.getElementById('view-modal').classList.remove('active');
     }
 
+    // Utility
     function escapeHtml(text) {
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
     }
 
-    // Make functions available globally for onclick handlers
-    window.showCreateFlowModal = showCreateFlowModal;
-    window.editFlow = editFlow;
-    window.viewFlow = viewFlow;
-    window.toggleFlow = toggleFlow;
-    window.deleteFlow = deleteFlow;
+    // Close modal on background click
+    document.getElementById('flow-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'flow-modal') closeModal();
+    });
+
+    document.getElementById('view-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'view-modal') closeViewModal();
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeModal();
+        closeViewModal();
+      }
+    });
   </script>
 </body>
 </html>
