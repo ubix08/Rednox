@@ -1,48 +1,33 @@
 
 // ===================================================================
-// FlowExecutorDO.ts - Enhanced with Caching & Optimization
+// FlowExecutorDO - Ephemeral Flow Execution
 // ===================================================================
 
 import { DurableObject } from 'cloudflare:workers';
 import { FlowEngine } from '../core/FlowEngine';
 import { 
   FlowConfig, FlowContext, GlobalContext, ExecutionContext, 
-  NodeMessage, Env, RouteCache 
+  NodeMessage, Env, RouteInfo, InjectSchedule
 } from '../types/core';
-import { 
-  StorageKeys, BatchedStorageImpl, RateLimiter 
-} from '../utils';
+import { StorageKeys } from '../utils';
 
 export class FlowExecutorDO extends DurableObject {
   private state: DurableObjectState;
   private env: Env;
-  private flowEngines: Map<string, FlowEngine> = new Map();
-  private sessionData: Map<string, any> = new Map();
-  private websockets: Map<string, WebSocket> = new Map();
   private flowContext: FlowContext;
   private globalContext: GlobalContext;
-  private shardingType?: string;
-  private routeCache: Map<string, RouteCache> = new Map();
-  private rateLimiter: RateLimiter;
-  private batchedStorage: BatchedStorageImpl;
   
   constructor(state: DurableObjectState, env: Env) {
     super(state, env);
     this.state = state;
     this.env = env;
     
-    // Initialize batched storage
-    this.batchedStorage = new BatchedStorageImpl(state.storage, 100);
-    
-    // Initialize rate limiter
-    this.rateLimiter = new RateLimiter(state.storage);
-    
-    // Flow context with storage keys
+    // Flow context (scoped to this DO instance)
     this.flowContext = {
       get: async (key: string) => 
-        await this.batchedStorage.get(StorageKeys.flow(key)),
+        await this.state.storage.get(StorageKeys.flow(key)),
       set: async (key: string, value: any) => 
-        await this.batchedStorage.set(StorageKeys.flow(key), value),
+        await this.state.storage.put(StorageKeys.flow(key), value),
       keys: async () => {
         const list = await this.state.storage.list({ 
           prefix: StorageKeys.listPrefix('f:') 
@@ -51,12 +36,12 @@ export class FlowExecutorDO extends DurableObject {
       }
     };
     
-    // Global context with storage keys
+    // Global context (shared across all DO instances via storage)
     this.globalContext = {
       get: async (key: string) => 
-        await this.batchedStorage.get(StorageKeys.global(key)),
+        await this.state.storage.get(StorageKeys.global(key)),
       set: async (key: string, value: any) => 
-        await this.batchedStorage.set(StorageKeys.global(key), value),
+        await this.state.storage.put(StorageKeys.global(key), value),
       keys: async () => {
         const list = await this.state.storage.list({ 
           prefix: StorageKeys.listPrefix('g:') 
@@ -65,280 +50,165 @@ export class FlowExecutorDO extends DurableObject {
       }
     };
     
-    this.setupCleanupAlarm();
+    this.setupScheduler();
   }
   
   // ===================================================================
   // MAIN ENTRY POINT
   // ===================================================================
+  
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    this.shardingType = request.headers.get('X-Sharding-Type') || 'session';
-    
-    // WebSocket upgrade
-    if (request.headers.get('Upgrade') === 'websocket') {
-      return this.handleWebSocketUpgrade(request);
-    }
     
     // Internal/Admin endpoints
     if (url.pathname.startsWith('/internal/')) {
-      return this.handleInternalRequest(url.pathname, request);
+      return this.handleInternal(url.pathname, request);
     }
     
-    // Route to pattern-specific handler
-    switch (this.shardingType) {
-      case 'job':
-        return this.handleJobRequest(request);
-      case 'user':
-        return this.handleUserRequest(request);
-      case 'workspace':
-        return this.handleWorkspaceRequest(request);
-      case 'global':
-        return this.handleStatelessRequest(request);
-      case 'session':
-      default:
-        return this.handleFlowExecution(request);
-    }
+    // Flow execution (HTTP trigger)
+    return this.handleFlowExecution(request);
   }
   
   // ===================================================================
-  // Internal Endpoints
+  // EPHEMERAL FLOW EXECUTION
   // ===================================================================
-  private async handleInternalRequest(pathname: string, request: Request): Promise<Response> {
-    switch (pathname) {
-      case '/internal/session/info':
-        return this.handleSessionInfo();
-      case '/internal/session/clear':
-        return this.handleSessionClear();
-      case '/internal/debug/messages':
-        return this.handleDebugMessages();
-      case '/internal/status':
-        return this.handleStatus();
-      case '/internal/cache/clear':
-        return this.handleCacheClear();
-      default:
-        return this.errorResponse('Unknown internal endpoint', 404);
-    }
-  }
   
-  // ===================================================================
-  // Flow Execution (Main Logic)
-  // ===================================================================
   private async handleFlowExecution(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const path = url.pathname.replace('/api', '').replace('/api/chat', '');
+    const fullPath = url.pathname.replace('/api', '');
     const method = request.method.toUpperCase();
     const startTime = Date.now();
     
     try {
-      await this.updateLastActivity();
-      
-      // Route lookup with caching
-      const route = await this.lookupRouteWithCache(path, method);
+      // 1. Load flow from D1 (no caching)
+      const route = await this.lookupRoute(fullPath, method);
       
       if (!route) {
-        return this.errorResponse('Route not found', 404, { path, method });
+        return this.errorResponse('Route not found', 404, { 
+          path: fullPath,
+          method 
+        });
       }
       
-      // Load flow engine
-      const flowEngine = await this.getOrLoadFlow(route.flowId, route.flowConfig);
-      
-      // Parse request
-      const payload = await this.parseRequestPayload(request, path);
-      
-      // Load session context
-      const sessionContext = await this.loadSessionContext();
-      payload._session = sessionContext;
-      
-      // Create message
+      // 2. Parse request
+      const payload = await this.parseRequest(request, fullPath);
       const msg: NodeMessage = {
         _msgid: crypto.randomUUID(),
         payload,
         topic: ''
       };
       
-      // Execute flow
-      const result = await flowEngine.triggerFlow(route.nodeId, msg);
+      // 3. Create ephemeral execution context
+      const context: ExecutionContext = {
+        storage: this.state.storage,
+        env: this.env,
+        flow: this.flowContext,
+        global: this.globalContext
+      };
+      
+      // 4. Create fresh flow engine
+      const engine = new FlowEngine(route.flowConfig, context);
+      await engine.initialize();
+      
+      // 5. Execute flow
+      const result = await engine.triggerFlow(route.nodeId, msg);
       const duration = Date.now() - startTime;
       
-      // Update session
-      if (result?._session) {
-        await this.saveSessionContext(result._session);
-      }
+      // 6. Cleanup engine (ephemeral)
+      await engine.close();
       
-      // Flush batched storage
-      await this.batchedStorage.flush();
+      // 7. Log execution (async, non-blocking)
+      this.ctx.waitUntil(
+        this.logExecution(route.flowId, route.nodeId, 'success', duration)
+      );
       
-      // Broadcast to WebSockets
-      if (this.websockets.size > 0) {
-        this.broadcastToWebSockets({
-          type: 'flow_result',
-          flowId: route.flowId,
-          result,
-          duration
-        });
-      }
-      
-      // Log async (non-blocking)
-      this.ctx.waitUntil(this.logExecution(route.flowId, 'success', duration));
-      
+      // 8. Return response
       return this.formatResponse(result, duration, route.flowId);
       
     } catch (err: any) {
       const duration = Date.now() - startTime;
       console.error('[FlowExecutorDO] Error:', err);
       
-      // Ensure storage is flushed even on error
-      await this.batchedStorage.flush();
-      
       return this.errorResponse(err.message, 500, { 
         duration,
-        stack: err.stack 
+        stack: err.stack
       });
     }
   }
   
-  // User request handler with rate limiting
-  private async handleUserRequest(request: Request): Promise<Response> {
-    const userId = request.headers.get('X-User-ID');
-    
-    if (!userId) {
-      return this.errorResponse('User ID required', 401);
+  // ===================================================================
+  // SCHEDULED EXECUTION (Inject Nodes)
+  // ===================================================================
+  
+  private async setupScheduler() {
+    const currentAlarm = await this.state.storage.getAlarm();
+    if (!currentAlarm) {
+      // Set alarm for 1 minute from now
+      await this.state.storage.setAlarm(Date.now() + 60000);
     }
-    
-    // Check rate limit
-    const rateLimits = this.env.RATE_LIMIT || { requests: 100, window: 60000 };
-    if (!await this.rateLimiter.check(userId, rateLimits)) {
-      return this.errorResponse('Rate limit exceeded', 429, {
-        retryAfter: Math.ceil(rateLimits.window / 1000)
-      });
-    }
-    
-    const result = await this.handleFlowExecution(request);
-    await this.updateUsageStats(userId);
-    
-    return result;
   }
   
-  // Job request handler
-  private async handleJobRequest(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    const jobId = request.headers.get('X-Job-ID')!;
+  async alarm() {
+    const now = Date.now();
     
-    if (url.pathname.includes('/process')) {
-      this.ctx.waitUntil(this.processJobInBackground(request, jobId));
-      return this.jsonResponse({ started: true, jobId }, 202);
+    // Find all schedules
+    const schedules = await this.state.storage.list<InjectSchedule>({ 
+      prefix: StorageKeys.listPrefix('sched:') 
+    });
+    
+    for (const [key, schedule] of schedules) {
+      if (!schedule || !schedule.repeat) continue;
+      
+      // Check if it's time to run
+      if (schedule.nextRun && schedule.nextRun <= now) {
+        try {
+          // Load flow and execute inject node
+          const route = await this.lookupFlowById(schedule.flowId);
+          
+          if (route) {
+            const context: ExecutionContext = {
+              storage: this.state.storage,
+              env: this.env,
+              flow: this.flowContext,
+              global: this.globalContext
+            };
+            
+            const engine = new FlowEngine(route.flowConfig, context);
+            await engine.initialize();
+            
+            const msg: NodeMessage = {
+              _msgid: crypto.randomUUID(),
+              payload: Date.now(),
+              topic: 'scheduled'
+            };
+            
+            await engine.triggerFlow(schedule.nodeId, msg);
+            await engine.close();
+            
+            console.log(`[Scheduler] Executed inject node ${schedule.nodeId}`);
+          }
+          
+          // Update next run time
+          if (schedule.interval) {
+            schedule.nextRun = now + schedule.interval;
+            await this.state.storage.put(key, schedule);
+          }
+          
+        } catch (err) {
+          console.error(`[Scheduler] Error executing ${schedule.nodeId}:`, err);
+        }
+      }
     }
     
-    if (url.pathname.includes('/status')) {
-      const status = await this.state.storage.get(StorageKeys.job('status'));
-      return this.jsonResponse(status || { state: 'not_found' });
-    }
-    
-    if (url.pathname.includes('/result')) {
-      const result = await this.state.storage.get(StorageKeys.job('result'));
-      return this.jsonResponse(result || { error: 'No result available' });
-    }
-    
-    return this.errorResponse('Invalid job endpoint', 404);
-  }
-  
-  // Workspace request handler
-  private async handleWorkspaceRequest(request: Request): Promise<Response> {
-    return this.handleFlowExecution(request);
-  }
-  
-  // Stateless request handler
-  private async handleStatelessRequest(request: Request): Promise<Response> {
-    return this.handleFlowExecution(request);
+    // Set next alarm
+    await this.state.storage.setAlarm(Date.now() + 60000);
   }
   
   // ===================================================================
-  // Flow Engine Management
+  // ROUTE LOOKUP
   // ===================================================================
-  private async getOrLoadFlow(flowId: string, flowConfig: FlowConfig): Promise<FlowEngine> {
-    if (this.flowEngines.has(flowId)) {
-      return this.flowEngines.get(flowId)!;
-    }
-    
-    const context: ExecutionContext = {
-      storage: this.state.storage,
-      env: this.env,
-      flow: this.flowContext,
-      global: this.globalContext,
-      batchedStorage: this.batchedStorage
-    };
-    
-    const engine = new FlowEngine(flowConfig, context);
-    await engine.initialize();
-    
-    this.flowEngines.set(flowId, engine);
-    return engine;
-  }
   
-  // ===================================================================
-  // Session Management
-  // ===================================================================
-  private async loadSessionContext(): Promise<any> {
-    if (this.sessionData.has('context')) {
-      return this.sessionData.get('context');
-    }
-    
-    const stored = await this.state.storage.get(StorageKeys.session('context'));
-    const context = stored || {
-      createdAt: new Date().toISOString(),
-      messages: [],
-      userData: {}
-    };
-    
-    this.sessionData.set('context', context);
-    return context;
-  }
-  
-  private async saveSessionContext(context: any): Promise<void> {
-    this.sessionData.set('context', context);
-    await this.batchedStorage.set(StorageKeys.session('context'), context);
-  }
-  
-  // ===================================================================
-  // Route Lookup with Caching
-  // ===================================================================
-  private async lookupRouteWithCache(path: string, method: string): Promise<{
-    flowId: string;
-    nodeId: string;
-    flowConfig: FlowConfig;
-  } | null> {
-    const cacheKey = `${method}:${path}`;
-    const cached = this.routeCache.get(cacheKey);
-    
-    // Check cache
-    if (cached && Date.now() < cached.expiry) {
-      return {
-        flowId: cached.flowId,
-        nodeId: cached.nodeId,
-        flowConfig: cached.flowConfig
-      };
-    }
-    
-    // Fetch from database
-    const route = await this.lookupRoute(path, method);
-    
-    // Cache result
-    if (route) {
-      this.routeCache.set(cacheKey, {
-        ...route,
-        expiry: Date.now() + 60000 // 1 minute cache
-      });
-    }
-    
-    return route;
-  }
-  
-  private async lookupRoute(path: string, method: string): Promise<{
-    flowId: string;
-    nodeId: string;
-    flowConfig: FlowConfig;
-  } | null> {
+  private async lookupRoute(fullPath: string, method: string): Promise<RouteInfo | null> {
     if (!this.env.DB) {
       throw new Error('Database not configured');
     }
@@ -349,7 +219,7 @@ export class FlowExecutorDO extends DurableObject {
       JOIN flows f ON f.id = r.flow_id
       WHERE r.path = ? AND r.method = ? AND r.enabled = 1 AND f.enabled = 1
       LIMIT 1
-    `).bind(path, method).first();
+    `).bind(fullPath, method).first();
     
     if (!route) {
       return null;
@@ -362,10 +232,40 @@ export class FlowExecutorDO extends DurableObject {
     };
   }
   
+  private async lookupFlowById(flowId: string): Promise<RouteInfo | null> {
+    if (!this.env.DB) {
+      throw new Error('Database not configured');
+    }
+    
+    const flow = await this.env.DB.prepare(
+      'SELECT config FROM flows WHERE id = ? AND enabled = 1'
+    ).bind(flowId).first();
+    
+    if (!flow) {
+      return null;
+    }
+    
+    const flowConfig: FlowConfig = JSON.parse(flow.config as string);
+    
+    // Find first inject node
+    const injectNode = flowConfig.nodes.find(n => n.type === 'inject');
+    
+    if (!injectNode) {
+      return null;
+    }
+    
+    return {
+      flowId,
+      nodeId: injectNode.id,
+      flowConfig
+    };
+  }
+  
   // ===================================================================
-  // Request Parsing
+  // REQUEST PARSING
   // ===================================================================
-  private async parseRequestPayload(request: Request, path: string): Promise<any> {
+  
+  private async parseRequest(request: Request, path: string): Promise<any> {
     const url = new URL(request.url);
     const contentType = request.headers.get('content-type') || '';
     
@@ -375,8 +275,7 @@ export class FlowExecutorDO extends DurableObject {
       try {
         if (contentType.includes('application/json')) {
           body = await request.json();
-        } else if (contentType.includes('application/x-www-form-urlencoded') ||
-                   contentType.includes('multipart/form-data')) {
+        } else if (contentType.includes('application/x-www-form-urlencoded')) {
           const formData = await request.formData();
           body = Object.fromEntries(formData);
         } else {
@@ -398,32 +297,13 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   // ===================================================================
-  // Response Formatting
+  // RESPONSE FORMATTING
   // ===================================================================
+  
   private formatResponse(result: any, duration: number, flowId: string): Response {
     if (result?._httpResponse) {
       const resPayload = result._httpResponse.payload;
       const body = typeof resPayload === 'string' ? resPayload : JSON.stringify(resPayload);
-      
-      // Stream large responses
-      if (body.length > 1_000_000) {
-        return new Response(
-          new ReadableStream({
-            start(controller) {
-              controller.enqueue(new TextEncoder().encode(body));
-              controller.close();
-            }
-          }),
-          {
-            status: result._httpResponse.statusCode,
-            headers: {
-              ...result._httpResponse.headers,
-              'X-Execution-Time': duration + 'ms',
-              'X-Flow-ID': flowId
-            }
-          }
-        );
-      }
       
       return new Response(body, {
         status: result._httpResponse.statusCode,
@@ -431,7 +311,7 @@ export class FlowExecutorDO extends DurableObject {
           ...result._httpResponse.headers,
           'X-Execution-Time': duration + 'ms',
           'X-Flow-ID': flowId,
-          'X-Trace-ID': result._msgid
+          'X-Message-ID': result._msgid
         }
       });
     }
@@ -458,303 +338,53 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   // ===================================================================
-  // Admin/RPC Endpoints
+  // INTERNAL ENDPOINTS
   // ===================================================================
-  private async handleSessionInfo(): Promise<Response> {
-    const context = await this.loadSessionContext();
-    const logs = await this.state.storage.list({ prefix: StorageKeys.listPrefix('l:') });
-    
-    return this.jsonResponse({
-      sessionId: this.state.id.toString(),
-      context,
-      activeWebSockets: this.websockets.size,
-      cachedFlows: Array.from(this.flowEngines.keys()),
-      cachedRoutes: this.routeCache.size,
-      logCount: logs.size,
-      lastActivity: await this.state.storage.get('last_activity')
-    });
-  }
   
-  private async handleSessionClear(): Promise<Response> {
-    // Close flow engines
-    for (const engine of this.flowEngines.values()) {
-      await engine.close();
-    }
-    
-    this.flowEngines.clear();
-    this.sessionData.clear();
-    this.routeCache.clear();
-    
-    const keysToDelete: string[] = [];
-    const allKeys = await this.state.storage.list();
-    
-    for (const key of allKeys.keys()) {
-      if (!key.startsWith('l:')) { // Keep logs
-        keysToDelete.push(key);
-      }
-    }
-    
-    await this.state.storage.delete(keysToDelete);
-    
-    return this.jsonResponse({ 
-      success: true,
-      cleared: keysToDelete.length
-    });
-  }
-  
-  private async handleCacheClear(): Promise<Response> {
-    this.routeCache.clear();
-    return this.jsonResponse({ success: true, message: 'Cache cleared' });
-  }
-  
-  private async handleDebugMessages(): Promise<Response> {
-    const allDebug = await this.state.storage.list({ prefix: StorageKeys.listPrefix('d:') });
-    const messages: any[] = [];
-    
-    for (const [key, value] of allDebug.entries()) {
-      messages.push({ key, ...value as any });
-    }
-    
-    messages.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    
-    return this.jsonResponse({
-      messages: messages.slice(0, 100)
-    });
-  }
-  
-  private async handleStatus(): Promise<Response> {
-    return this.jsonResponse({
-      loaded: this.flowEngines.size > 0,
-      flowIds: Array.from(this.flowEngines.keys()),
-      nodeCount: Array.from(this.flowEngines.values()).reduce((sum, engine: any) => 
-        sum + (engine.flowConfig?.nodes?.length || 0), 0
-      ),
-      shardingType: this.shardingType,
-      cacheSize: this.routeCache.size
-    });
-  }
-  
-  // ===================================================================
-  // WebSocket Support
-  // ===================================================================
-  private handleWebSocketUpgrade(request: Request): Response {
-    const pair = new WebSocketPair();
-    const [client, server] = Object.values(pair);
-    
-    this.state.acceptWebSocket(server);
-    
-    const wsId = crypto.randomUUID();
-    this.websockets.set(wsId, server);
-    
-    server.send(JSON.stringify({
-      type: 'connected',
-      sessionId: this.state.id.toString(),
-      timestamp: new Date().toISOString()
-    }));
-    
-    return new Response(null, {
-      status: 101,
-      webSocket: client
-    });
-  }
-  
-  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    try {
-      const msg = typeof message === 'string' ? JSON.parse(message) : null;
-      
-      if (!msg) return;
-      
-      switch (msg.type) {
-        case 'ping':
-          ws.send(JSON.stringify({ type: 'pong' }));
-          break;
-          
-        case 'get_session':
-          const session = await this.loadSessionContext();
-          ws.send(JSON.stringify({
-            type: 'session_data',
-            requestId: msg.requestId,
-            session
-          }));
-          break;
-          
-        default:
-          ws.send(JSON.stringify({
-            type: 'error',
-            error: 'Unknown message type'
-          }));
-      }
-    } catch (err: any) {
-      ws.send(JSON.stringify({
-        type: 'error',
-        error: err.message
-      }));
-    }
-  }
-  
-  async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
-    for (const [id, socket] of this.websockets.entries()) {
-      if (socket === ws) {
-        this.websockets.delete(id);
-        break;
-      }
-    }
-  }
-  
-  async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
-    console.error('[FlowExecutorDO] WebSocket error:', error);
-  }
-  
-  private broadcastToWebSockets(message: any): void {
-    const data = JSON.stringify(message);
-    for (const ws of this.websockets.values()) {
-      try {
-        ws.send(data);
-      } catch (err) {
-        console.error('[FlowExecutorDO] WebSocket send error:', err);
-      }
-    }
-  }
-  
-  // ===================================================================
-  // Usage & Stats
-  // ===================================================================
-  private async updateUsageStats(userId: string): Promise<void> {
-    const stats = await this.state.storage.get<any>(StorageKeys.usage()) || {
-      totalRequests: 0,
-      lastRequest: null,
-      userRequests: {}
-    };
-    
-    stats.totalRequests++;
-    stats.lastRequest = new Date().toISOString();
-    stats.userRequests[userId] = (stats.userRequests[userId] || 0) + 1;
-    
-    await this.batchedStorage.set(StorageKeys.usage(), stats);
-  }
-  
-  // ===================================================================
-  // Background Job Processing
-  // ===================================================================
-  private async processJobInBackground(request: Request, jobId: string): Promise<void> {
-    try {
-      await this.state.storage.put(StorageKeys.job('status'), {
-        state: 'processing',
-        progress: 0,
-        startedAt: Date.now()
-      });
-      
-      const data = await request.json();
-      const url = new URL(request.url);
-      const path = url.pathname.replace('/internal/job/process', '');
-      const method = 'POST';
-      
-      const route = await this.lookupRouteWithCache(path || '/job', method);
-      
-      if (route) {
-        const flowEngine = await this.getOrLoadFlow(route.flowId, route.flowConfig);
-        
-        const msg: NodeMessage = {
-          _msgid: crypto.randomUUID(),
-          payload: data,
-          topic: 'job'
-        };
-        
-        const result = await flowEngine.triggerFlow(route.nodeId, msg);
-        
-        await this.state.storage.put(StorageKeys.job('status'), {
-          state: 'completed',
-          progress: 100,
-          completedAt: Date.now()
+  private async handleInternal(pathname: string, request: Request): Promise<Response> {
+    switch (pathname) {
+      case '/internal/status':
+        return this.jsonResponse({
+          doId: this.state.id.toString(),
+          ready: true,
+          timestamp: new Date().toISOString()
         });
         
-        await this.state.storage.put(StorageKeys.job('result'), {
-          success: true,
-          data: result
+      case '/internal/context':
+        const flowKeys = await this.flowContext.keys();
+        const globalKeys = await this.globalContext.keys();
+        return this.jsonResponse({
+          flow: flowKeys,
+          global: globalKeys
         });
-      } else {
-        throw new Error('No job processing flow found');
-      }
-      
-    } catch (err: any) {
-      await this.state.storage.put(StorageKeys.job('status'), {
-        state: 'failed',
-        error: err.message
-      });
+        
+      case '/internal/clear':
+        await this.state.storage.deleteAll();
+        return this.jsonResponse({ success: true, message: 'Storage cleared' });
+        
+      default:
+        return this.errorResponse('Unknown internal endpoint', 404);
     }
   }
   
   // ===================================================================
-  // Cleanup & Alarms
+  // LOGGING
   // ===================================================================
-  private async updateLastActivity(): Promise<void> {
-    await this.state.storage.put('last_activity', Date.now());
-  }
   
-  private async setupCleanupAlarm(): Promise<void> {
-    const currentAlarm = await this.state.storage.getAlarm();
-    if (!currentAlarm) {
-      await this.state.storage.setAlarm(Date.now() + 3600000);
-    }
-  }
-  
-  async alarm(): Promise<void> {
-    const lastActivity = await this.state.storage.get<number>('last_activity') || 0;
-    const now = Date.now();
-    const inactiveTime = now - lastActivity;
-    
-    // Cleanup after 1 hour of inactivity
-    if (inactiveTime > 3600000) {
-      console.log('[FlowExecutorDO] Cleaning up inactive session');
-      
-      for (const engine of this.flowEngines.values()) {
-        await engine.close();
-      }
-      
-      this.flowEngines.clear();
-      this.sessionData.clear();
-      this.routeCache.clear();
-    }
-    
-    // Cleanup old debug messages
-    const debugKeys = await this.state.storage.list({ prefix: StorageKeys.listPrefix('d:') });
-    if (debugKeys.size > 1000) {
-      const toDelete = Array.from(debugKeys.keys())
-        .sort()
-        .slice(0, debugKeys.size - 1000);
-      await this.state.storage.delete(toDelete);
-    }
-    
-    // Cleanup old logs
-    const logKeys = await this.state.storage.list({ prefix: StorageKeys.listPrefix('l:') });
-    if (logKeys.size > 100) {
-      const toDelete = Array.from(logKeys.keys())
-        .sort()
-        .slice(0, logKeys.size - 100);
-      await this.state.storage.delete(toDelete);
-    }
-    
-    // Set next alarm
-    await this.state.storage.setAlarm(now + 3600000);
-  }
-  
-  // ===================================================================
-  // Logging
-  // ===================================================================
   private async logExecution(
     flowId: string,
+    nodeId: string,
     status: string,
     duration: number,
     errorMessage?: string
   ): Promise<void> {
     try {
-      await this.state.storage.put(StorageKeys.log(Date.now()), {
-        flowId,
-        status,
-        duration,
-        errorMessage: errorMessage || null,
-        timestamp: new Date().toISOString()
-      });
+      if (this.env.DB) {
+        await this.env.DB.prepare(`
+          INSERT INTO flow_logs (flow_id, node_id, status, duration_ms, error_message)
+          VALUES (?, ?, ?, ?, ?)
+        `).bind(flowId, nodeId, status, duration, errorMessage || null).run();
+      }
     } catch (err) {
       console.error('[FlowExecutorDO] Failed to log:', err);
     }
