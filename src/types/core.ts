@@ -1,6 +1,6 @@
 
 // ===================================================================
-// RedNox - Enhanced Core Type Definitions
+// RedNox - Pure Node-RED Compatible Types
 // ===================================================================
 
 export interface NodeMessage {
@@ -18,22 +18,7 @@ export interface NodeMessage {
     headers: Record<string, string>;
     payload: any;
   };
-  _session?: any;
-  _trace?: MessageTrace;
   [key: string]: any;
-}
-
-export interface MessageTrace {
-  msgId: string;
-  startTime: number;
-  nodeExecutions: Array<{
-    nodeId: string;
-    nodeType: string;
-    startTime: number;
-    duration: number;
-    status: 'success' | 'error';
-    error?: string;
-  }>;
 }
 
 export interface MessageParts {
@@ -57,7 +42,6 @@ export interface ExecutionContext {
   flow: FlowContext;
   global: GlobalContext;
   flowEngine?: any;
-  batchedStorage?: BatchedStorage;
 }
 
 export interface FlowContext {
@@ -125,16 +109,16 @@ export interface RuntimeNodeDefinition {
   onClose?: (node: Node, context: ExecutionContext) => Promise<void>;
 }
 
+// ===================================================================
+// Flow Configuration
+// ===================================================================
+
 export interface FlowConfig {
   id: string;
   name: string;
   description?: string;
+  version?: string;
   nodes: NodeConfig[];
-  httpTriggers?: Array<{
-    nodeId: string;
-    path: string;
-    method: string;
-  }>;
 }
 
 export interface FlowRecord {
@@ -147,13 +131,21 @@ export interface FlowRecord {
   updated_at: string;
 }
 
+export interface HttpRoute {
+  id: string;
+  flow_id: string;
+  node_id: string;
+  path: string;
+  method: string;
+  enabled: boolean;
+}
+
 export interface Env {
   DB: D1Database;
   FLOW_EXECUTOR: DurableObjectNamespace;
-  RATE_LIMIT?: {
-    requests: number;
-    window: number;
-  };
+  OPENAI_API_KEY?: string;
+  ANTHROPIC_API_KEY?: string;
+  GEMINI_API_KEY?: string;
 }
 
 export interface ValidationResult {
@@ -162,23 +154,65 @@ export interface ValidationResult {
   warnings: string[];
 }
 
-export interface RouteCache {
+export interface RouteInfo {
   flowId: string;
   nodeId: string;
   flowConfig: FlowConfig;
-  expiry: number;
 }
 
-export interface CircuitBreakerState {
-  failures: number;
-  lastFailure: number;
-  state: 'closed' | 'open' | 'half-open';
+// ===================================================================
+// Inject Node Schedule
+// ===================================================================
+
+export interface InjectSchedule {
+  nodeId: string;
+  flowId: string;
+  repeat: boolean;
+  cron?: string;
+  interval?: number;
+  nextRun?: number;
 }
 
-// Batched Storage Interface
-export interface BatchedStorage {
-  get(key: string): Promise<any>;
-  set(key: string, value: any): Promise<void>;
-  delete(key: string): Promise<void>;
-  flush(): Promise<void>;
-}
+// ===================================================================
+// Database Schema
+// ===================================================================
+
+export const D1_SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS flows (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    config TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  
+  `CREATE INDEX IF NOT EXISTS idx_flows_enabled ON flows(enabled)`,
+  
+  `CREATE TABLE IF NOT EXISTS http_routes (
+    id TEXT PRIMARY KEY,
+    flow_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    method TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE,
+    UNIQUE(path, method)
+  )`,
+  
+  `CREATE INDEX IF NOT EXISTS idx_http_routes_lookup ON http_routes(path, method, enabled)`,
+  
+  `CREATE TABLE IF NOT EXISTS flow_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    flow_id TEXT NOT NULL,
+    node_id TEXT,
+    status TEXT NOT NULL,
+    duration_ms INTEGER,
+    error_message TEXT,
+    executed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE
+  )`,
+  
+  `CREATE INDEX IF NOT EXISTS idx_logs_flow_time ON flow_logs(flow_id, executed_at DESC)`
+];
