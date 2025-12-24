@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -39,7 +40,6 @@
       padding: 1rem;
     }
 
-    /* Header */
     header {
       background: var(--surface);
       box-shadow: var(--shadow);
@@ -81,7 +81,6 @@
       flex-wrap: wrap;
     }
 
-    /* Buttons */
     .btn {
       padding: 0.625rem 1.25rem;
       border: none;
@@ -131,7 +130,6 @@
       font-size: 0.8125rem;
     }
 
-    /* Tabs */
     .tabs {
       display: flex;
       gap: 0.5rem;
@@ -167,7 +165,6 @@
       display: block;
     }
 
-    /* Cards */
     .card {
       background: var(--surface);
       border-radius: 12px;
@@ -202,7 +199,6 @@
       flex-wrap: wrap;
     }
 
-    /* Forms */
     .form-group {
       margin-bottom: 1.25rem;
     }
@@ -240,7 +236,6 @@
       font-family: 'Monaco', 'Menlo', monospace;
     }
 
-    /* Status Badge */
     .badge {
       display: inline-flex;
       align-items: center;
@@ -261,11 +256,6 @@
       color: #c5221f;
     }
 
-    .badge-warning {
-      background: #fef7e0;
-      color: #b95000;
-    }
-
     .badge-dot {
       width: 6px;
       height: 6px;
@@ -273,7 +263,6 @@
       background: currentColor;
     }
 
-    /* Modal */
     .modal {
       display: none;
       position: fixed;
@@ -345,7 +334,6 @@
       flex-wrap: wrap;
     }
 
-    /* Empty State */
     .empty-state {
       text-align: center;
       padding: 3rem 1rem;
@@ -358,7 +346,6 @@
       opacity: 0.5;
     }
 
-    /* Loading */
     .loading {
       display: inline-block;
       width: 20px;
@@ -373,7 +360,6 @@
       to { transform: rotate(360deg); }
     }
 
-    /* Code Block */
     .code-block {
       background: #f8f9fa;
       border: 1px solid var(--border);
@@ -382,10 +368,10 @@
       font-family: 'Monaco', 'Menlo', monospace;
       font-size: 0.8125rem;
       overflow-x: auto;
-      white-space: pre;
+      white-space: pre-wrap;
+      word-break: break-all;
     }
 
-    /* Stats Grid */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -412,32 +398,6 @@
       color: var(--text);
     }
 
-    /* Responsive */
-    @media (max-width: 640px) {
-      .container {
-        padding: 0.75rem;
-      }
-
-      .card {
-        padding: 1rem;
-        border-radius: 8px;
-      }
-
-      .modal-content {
-        margin: 1rem;
-      }
-
-      .btn {
-        padding: 0.5rem 1rem;
-        font-size: 0.8125rem;
-      }
-
-      .stats-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    /* Alert */
     .alert {
       padding: 1rem;
       border-radius: 8px;
@@ -477,17 +437,6 @@
       gap: 0.375rem;
     }
 
-    .json-editor {
-      background: #1e1e1e;
-      color: #d4d4d4;
-      border-radius: 8px;
-      padding: 1rem;
-      font-family: 'Monaco', 'Menlo', monospace;
-      font-size: 0.8125rem;
-      overflow-x: auto;
-      min-height: 400px;
-    }
-
     .endpoint-list {
       list-style: none;
       padding: 0;
@@ -502,6 +451,7 @@
       border-radius: 8px;
       margin-bottom: 0.5rem;
       font-size: 0.875rem;
+      flex-wrap: wrap;
     }
 
     .method-badge {
@@ -522,11 +472,44 @@
       flex: 1;
       font-family: 'Monaco', 'Menlo', monospace;
       word-break: break-all;
+      min-width: 200px;
+    }
+
+    @media (max-width: 640px) {
+      .container {
+        padding: 0.75rem;
+      }
+
+      .card {
+        padding: 1rem;
+        border-radius: 8px;
+      }
+
+      .modal-content {
+        margin: 1rem;
+      }
+
+      .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.8125rem;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .endpoint-item {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .endpoint-path {
+        width: 100%;
+      }
     }
   </style>
 </head>
 <body>
-  <!-- Header -->
   <header>
     <div class="header-content">
       <div class="logo">
@@ -534,15 +517,15 @@
         <span>RedNox</span>
       </div>
       <div class="header-actions">
-        <button class="btn btn-secondary btn-sm" onclick="loadStats()">
+        <button class="btn btn-secondary btn-sm" id="refresh-btn">
           <span>↻</span>
           <span>Refresh</span>
         </button>
-        <button class="btn btn-primary btn-sm" onclick="showCreateFlowModal()">
+        <button class="btn btn-primary btn-sm" id="new-flow-btn">
           <span>+</span>
           <span>New Flow</span>
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="initializeDatabase()">
+        <button class="btn btn-secondary btn-sm" id="init-db-btn">
           <span>⚙</span>
           <span>Init DB</span>
         </button>
@@ -550,9 +533,7 @@
     </div>
   </header>
 
-  <!-- Main Content -->
   <div class="container">
-    <!-- Stats -->
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-label">Total Flows</div>
@@ -568,27 +549,22 @@
       </div>
     </div>
 
-    <!-- Alerts Container -->
     <div id="alerts"></div>
 
-    <!-- Tabs -->
     <div class="tabs">
-      <button class="tab active" onclick="switchTab('flows')">Flows</button>
-      <button class="tab" onclick="switchTab('routes')">Routes</button>
-      <button class="tab" onclick="switchTab('templates')">Templates</button>
+      <button class="tab active" data-tab="flows">Flows</button>
+      <button class="tab" data-tab="routes">Routes</button>
+      <button class="tab" data-tab="templates">Templates</button>
     </div>
 
-    <!-- Flows Tab -->
     <div id="flows-tab" class="tab-content active">
       <div id="flows-list"></div>
     </div>
 
-    <!-- Routes Tab -->
     <div id="routes-tab" class="tab-content">
       <div id="routes-list"></div>
     </div>
 
-    <!-- Templates Tab -->
     <div id="templates-tab" class="tab-content">
       <div class="card">
         <div class="card-header">
@@ -598,21 +574,20 @@
           <div class="empty-icon">📄</div>
           <p>Choose a template to get started quickly</p>
           <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
-            <button class="btn btn-primary" onclick="createFromTemplate('simple-chat')">Simple Chat</button>
-            <button class="btn btn-primary" onclick="createFromTemplate('chat-with-tools')">Chat with Tools</button>
-            <button class="btn btn-primary" onclick="createFromTemplate('webhook')">Webhook Handler</button>
+            <button class="btn btn-primary template-btn" data-template="simple-chat">Simple Chat</button>
+            <button class="btn btn-primary template-btn" data-template="chat-with-tools">Chat with Tools</button>
+            <button class="btn btn-primary template-btn" data-template="webhook">Webhook Handler</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Create/Edit Flow Modal -->
   <div id="flow-modal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
         <h3 class="modal-title" id="modal-title">Create Flow</h3>
-        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <button class="modal-close" id="modal-close-btn">&times;</button>
       </div>
       
       <div class="form-group">
@@ -627,73 +602,120 @@
 
       <div class="form-group">
         <label class="form-label">Flow Configuration (JSON)</label>
-        <textarea id="flow-config" class="form-textarea json-editor" rows="15" placeholder='{"nodes": [...], "id": "my-flow", "name": "My Flow"}'></textarea>
+        <textarea id="flow-config" class="form-textarea" rows="15" placeholder='{"nodes": [], "id": "my-flow"}'></textarea>
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveFlow()">
+        <button class="btn btn-secondary" id="modal-cancel-btn">Cancel</button>
+        <button class="btn btn-primary" id="modal-save-btn">
           <span id="save-btn-text">Create Flow</span>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- View Flow Modal -->
   <div id="view-modal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
         <h3 class="modal-title" id="view-title">Flow Details</h3>
-        <button class="modal-close" onclick="closeViewModal()">&times;</button>
+        <button class="modal-close" id="view-close-btn">&times;</button>
       </div>
       
       <div id="view-content"></div>
 
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeViewModal()">Close</button>
+        <button class="btn btn-secondary" id="view-modal-close-btn">Close</button>
       </div>
     </div>
   </div>
 
   <script>
-    // Configuration
     const API_BASE = window.location.origin;
     let currentFlowId = null;
     let editMode = false;
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
+      setupEventListeners();
       loadStats();
       loadFlows();
     });
 
-    // Tab Switching
+    function setupEventListeners() {
+      // Header buttons
+      document.getElementById('refresh-btn').addEventListener('click', () => {
+        loadStats();
+        loadFlows();
+      });
+      
+      document.getElementById('new-flow-btn').addEventListener('click', showCreateFlowModal);
+      document.getElementById('init-db-btn').addEventListener('click', initializeDatabase);
+
+      // Tabs
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+          const tabName = e.target.dataset.tab;
+          switchTab(tabName);
+        });
+      });
+
+      // Templates
+      document.querySelectorAll('.template-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const template = e.target.dataset.template;
+          createFromTemplate(template);
+        });
+      });
+
+      // Modal buttons
+      document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+      document.getElementById('modal-cancel-btn').addEventListener('click', closeModal);
+      document.getElementById('modal-save-btn').addEventListener('click', saveFlow);
+      document.getElementById('view-close-btn').addEventListener('click', closeViewModal);
+      document.getElementById('view-modal-close-btn').addEventListener('click', closeViewModal);
+
+      // Click outside modal to close
+      document.getElementById('flow-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'flow-modal') closeModal();
+      });
+
+      document.getElementById('view-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'view-modal') closeViewModal();
+      });
+
+      // Keyboard shortcuts
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closeModal();
+          closeViewModal();
+        }
+      });
+    }
+
     function switchTab(tabName) {
       document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
       
-      event.target.classList.add('active');
+      document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
       document.getElementById(`${tabName}-tab`).classList.add('active');
 
       if (tabName === 'flows') loadFlows();
       if (tabName === 'routes') loadRoutes();
     }
 
-    // Alert System
     function showAlert(message, type = 'info') {
       const alertsDiv = document.getElementById('alerts');
       const alert = document.createElement('div');
       alert.className = `alert alert-${type}`;
       alert.innerHTML = `
         <span>${type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️'}</span>
-        <span>${message}</span>
+        <span>${escapeHtml(message)}</span>
       `;
       alertsDiv.appendChild(alert);
       
       setTimeout(() => alert.remove(), 5000);
     }
 
-    // Load Stats
     async function loadStats() {
       try {
         const response = await fetch(`${API_BASE}/admin/stats`);
@@ -707,7 +729,6 @@
       }
     }
 
-    // Initialize Database
     async function initializeDatabase() {
       if (!confirm('Initialize database? This will create tables if they don\'t exist.')) return;
       
@@ -726,7 +747,6 @@
       }
     }
 
-    // Load Flows
     async function loadFlows() {
       const container = document.getElementById('flows-list');
       container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading"></div></div>';
@@ -757,7 +777,7 @@
                 <div class="flow-meta">
                   <span class="flow-meta-item">
                     <span>🆔</span>
-                    <span>${flow.id}</span>
+                    <span>${escapeHtml(flow.id)}</span>
                   </span>
                   <span class="flow-meta-item">
                     <span>📅</span>
@@ -773,17 +793,17 @@
               </div>
             </div>
             <div class="card-actions">
-              <button class="btn btn-secondary btn-sm" onclick="viewFlow('${flow.id}')">
+              <button class="btn btn-secondary btn-sm" onclick="viewFlow('${escapeHtml(flow.id)}')">
                 👁 View
               </button>
-              <button class="btn btn-secondary btn-sm" onclick="editFlow('${flow.id}')">
+              <button class="btn btn-secondary btn-sm" onclick="editFlow('${escapeHtml(flow.id)}')">
                 ✏️ Edit
               </button>
               <button class="btn ${flow.enabled ? 'btn-secondary' : 'btn-success'} btn-sm" 
-                      onclick="toggleFlow('${flow.id}', ${!flow.enabled})">
+                      onclick="toggleFlow('${escapeHtml(flow.id)}', ${!flow.enabled})">
                 ${flow.enabled ? '⏸ Disable' : '▶️ Enable'}
               </button>
-              <button class="btn btn-danger btn-sm" onclick="deleteFlow('${flow.id}')">
+              <button class="btn btn-danger btn-sm" onclick="deleteFlow('${escapeHtml(flow.id)}')">
                 🗑 Delete
               </button>
             </div>
@@ -793,13 +813,12 @@
         container.innerHTML = `
           <div class="alert alert-error">
             <span>❌</span>
-            <span>Failed to load flows: ${err.message}</span>
+            <span>Failed to load flows: ${escapeHtml(err.message)}</span>
           </div>
         `;
       }
     }
 
-    // Load Routes
     async function loadRoutes() {
       const container = document.getElementById('routes-list');
       container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading"></div></div>';
@@ -824,9 +843,9 @@
             <ul class="endpoint-list">
               ${data.routes.map(route => `
                 <li class="endpoint-item">
-                  <span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span>
-                  <span class="endpoint-path">${route.fullUrl || route.path}</span>
-                  <span style="color: var(--text-secondary); font-size: 0.75rem;">${route.flow_name}</span>
+                  <span class="method-badge method-${route.method.toLowerCase()}">${escapeHtml(route.method)}</span>
+                  <span class="endpoint-path">${escapeHtml(route.fullUrl || route.path)}</span>
+                  <span style="color: var(--text-secondary); font-size: 0.75rem;">${escapeHtml(route.flow_name)}</span>
                 </li>
               `).join('')}
             </ul>
@@ -836,13 +855,12 @@
         container.innerHTML = `
           <div class="alert alert-error">
             <span>❌</span>
-            <span>Failed to load routes: ${err.message}</span>
+            <span>Failed to load routes: ${escapeHtml(err.message)}</span>
           </div>
         `;
       }
     }
 
-    // Show Create Modal
     function showCreateFlowModal() {
       editMode = false;
       currentFlowId = null;
@@ -872,7 +890,6 @@
       document.getElementById('flow-modal').classList.add('active');
     }
 
-    // Edit Flow
     async function editFlow(flowId) {
       try {
         const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
@@ -891,7 +908,6 @@
       }
     }
 
-    // View Flow
     async function viewFlow(flowId) {
       try {
         const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
@@ -900,13 +916,8 @@
         document.getElementById('view-title').textContent = flow.name;
         document.getElementById('view-content').innerHTML = `
           <div class="form-group">
-            <label class="form-label">Flow ID</label>
-            <div class="code-block">${flow.id}</div>
-          </div>
-          
-          <div class="form-group">
             <label class="form-label">Description</label>
-            <p>${flow.description || 'No description'}</p>
+            <p>${escapeHtml(flow.description || 'No description')}</p>
           </div>
 
           <div class="form-group">
@@ -923,8 +934,8 @@
               <ul class="endpoint-list">
                 ${flow.routes.map(route => `
                   <li class="endpoint-item">
-                    <span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span>
-                    <span class="endpoint-path">${route.fullUrl}</span>
+                    <span class="method-badge method-${route.method.toLowerCase()}">${escapeHtml(route.method)}</span>
+                    <span class="endpoint-path">${escapeHtml(route.fullUrl)}</span>
                   </li>
                 `).join('')}
               </ul>
@@ -933,4 +944,347 @@
 
           <div class="form-group">
             <label class="form-label">Configuration</label>
-            <pre class="code-block">${JSON.stringify(flow.config, null, 2)}</pre>
+            <pre class="code-block">${escapeHtml(JSON.stringify(flow.config, null, 2))}</pre>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Created</label>
+            <p>${new Date(flow.created_at).toLocaleString()}</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Last Updated</label>
+            <p>${new Date(flow.updated_at).toLocaleString()}</p>
+          </div>
+        `;
+
+        document.getElementById('view-modal').classList.add('active');
+      } catch (err) {
+        showAlert(`Failed to load flow: ${err.message}`, 'error');
+      }
+    }
+
+    async function saveFlow() {
+      const name = document.getElementById('flow-name').value.trim();
+      const description = document.getElementById('flow-description').value.trim();
+      const configText = document.getElementById('flow-config').value.trim();
+
+      if (!name) {
+        showAlert('Flow name is required', 'error');
+        return;
+      }
+
+      if (!configText) {
+        showAlert('Flow configuration is required', 'error');
+        return;
+      }
+
+      let config;
+      try {
+        config = JSON.parse(configText);
+      } catch (err) {
+        showAlert('Invalid JSON configuration: ' + err.message, 'error');
+        return;
+      }
+
+      config.name = name;
+      config.description = description;
+      
+      if (!config.id) {
+        config.id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      }
+
+      try {
+        const url = editMode 
+          ? `${API_BASE}/admin/flows/${currentFlowId}`
+          : `${API_BASE}/admin/flows`;
+        
+        const method = editMode ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+
+        const data = await response.json();
+
+        if (data.success || response.ok) {
+          showAlert(`Flow ${editMode ? 'updated' : 'created'} successfully!`, 'success');
+          closeModal();
+          loadFlows();
+          loadStats();
+
+          if (data.endpoints && data.endpoints.length > 0) {
+            setTimeout(() => {
+              const endpointList = data.endpoints.map(e => 
+                `${e.method} ${e.url}`
+              ).join(', ');
+              showAlert(`Endpoints: ${endpointList}`, 'info');
+            }, 500);
+          }
+        } else {
+          showAlert(data.error || 'Failed to save flow', 'error');
+        }
+      } catch (err) {
+        showAlert(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    async function toggleFlow(flowId, enable) {
+      try {
+        const action = enable ? 'enable' : 'disable';
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}/${action}`, {
+          method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          showAlert(`Flow ${action}d successfully`, 'success');
+          loadFlows();
+          loadStats();
+        } else {
+          showAlert(data.error || 'Failed to toggle flow', 'error');
+        }
+      } catch (err) {
+        showAlert(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    async function deleteFlow(flowId) {
+      if (!confirm('Are you sure you want to delete this flow? This cannot be undone.')) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`, {
+          method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          showAlert('Flow deleted successfully', 'success');
+          loadFlows();
+          loadStats();
+        } else {
+          showAlert(data.error || 'Failed to delete flow', 'error');
+        }
+      } catch (err) {
+        showAlert(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    function createFromTemplate(templateName) {
+      const templates = {
+        'simple-chat': {
+          id: 'simple-chatbot',
+          name: 'Simple Chatbot',
+          description: 'Basic conversational AI with Gemini',
+          nodes: [
+            {
+              id: 'model-config',
+              type: 'gemini-model-config',
+              name: 'Gemini Config',
+              model: 'gemini-2.0-flash-exp',
+              temperature: 0.7,
+              topP: 0.95,
+              topK: 40,
+              maxOutputTokens: 8192,
+              wires: []
+            },
+            {
+              id: 'memory',
+              type: 'gemini-memory-inmem',
+              name: 'Memory',
+              maxItems: 20,
+              includeImages: false,
+              autoCompress: true,
+              wires: []
+            },
+            {
+              id: 'http-in',
+              type: 'http-in',
+              name: 'Chat Endpoint',
+              url: '/chat',
+              method: 'post',
+              wires: [['agent']]
+            },
+            {
+              id: 'agent',
+              type: 'gemini-agent',
+              name: 'AI Agent',
+              modelConfigNode: 'model-config',
+              memoryConfigNode: 'memory',
+              systemInstruction: 'You are a helpful, friendly assistant.',
+              enableFunctionCalling: false,
+              enableVision: false,
+              wires: [['http-response']]
+            },
+            {
+              id: 'http-response',
+              type: 'http-response',
+              name: 'Response',
+              wires: []
+            }
+          ]
+        },
+        'chat-with-tools': {
+          id: 'chat-with-calculator',
+          name: 'Chat with Calculator',
+          description: 'AI assistant with math capabilities',
+          nodes: [
+            {
+              id: 'model-config',
+              type: 'gemini-model-config',
+              model: 'gemini-2.0-flash-exp',
+              temperature: 0.3,
+              maxOutputTokens: 4096,
+              wires: []
+            },
+            {
+              id: 'memory',
+              type: 'gemini-memory-inmem',
+              maxItems: 15,
+              wires: []
+            },
+            {
+              id: 'http-in',
+              type: 'http-in',
+              url: '/chat',
+              method: 'post',
+              wires: [['register-tools']]
+            },
+            {
+              id: 'register-tools',
+              type: 'function',
+              name: 'Register Tools',
+              func: `const tools = [];
+
+tools.push({
+  name: 'calculate',
+  description: 'Evaluate mathematical expressions',
+  parameters: {
+    type: 'object',
+    properties: {
+      expression: {
+        type: 'string',
+        description: 'Mathematical expression to evaluate'
+      }
+    },
+    required: ['expression']
+  },
+  executor: async (args) => {
+    try {
+      const result = eval(args.expression);
+      return { result, expression: args.expression };
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+});
+
+await flow.set('gemini:tools', tools);
+return msg;`,
+              wires: [['agent']]
+            },
+            {
+              id: 'agent',
+              type: 'gemini-agent',
+              modelConfigNode: 'model-config',
+              memoryConfigNode: 'memory',
+              systemInstruction: 'You are a math assistant. Use the calculate tool for accurate results.',
+              enableFunctionCalling: true,
+              wires: [['http-response']]
+            },
+            {
+              id: 'http-response',
+              type: 'http-response',
+              wires: []
+            }
+          ]
+        },
+        'webhook': {
+          id: 'webhook-handler',
+          name: 'Webhook Handler',
+          description: 'Process incoming webhooks',
+          nodes: [
+            {
+              id: 'http-in',
+              type: 'http-in',
+              name: 'Webhook',
+              url: '/webhook',
+              method: 'post',
+              wires: [['process']]
+            },
+            {
+              id: 'process',
+              type: 'function',
+              name: 'Process Data',
+              func: `const data = msg.payload.body || msg.payload;
+
+await flow.set('last-webhook', {
+  timestamp: Date.now(),
+  data: data
+});
+
+msg.payload = {
+  received: true,
+  timestamp: new Date().toISOString(),
+  data: data
+};
+
+return msg;`,
+              wires: [['http-response']]
+            },
+            {
+              id: 'http-response',
+              type: 'http-response',
+              wires: []
+            }
+          ]
+        }
+      };
+
+      const template = templates[templateName];
+      if (!template) {
+        showAlert('Template not found', 'error');
+        return;
+      }
+
+      document.getElementById('flow-name').value = template.name;
+      document.getElementById('flow-description').value = template.description;
+      document.getElementById('flow-config').value = JSON.stringify(template, null, 2);
+      
+      showCreateFlowModal();
+    }
+
+    function closeModal() {
+      document.getElementById('flow-modal').classList.remove('active');
+    }
+
+    function closeViewModal() {
+      document.getElementById('view-modal').classList.remove('active');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Make functions available globally for onclick handlers
+    window.showCreateFlowModal = showCreateFlowModal;
+    window.editFlow = editFlow;
+    window.viewFlow = viewFlow;
+    window.toggleFlow = toggleFlow;
+    window.deleteFlow = deleteFlow;
+  </script>
+</body>
+</html>-label">Flow ID</label>
+            <div class="code-block">${escapeHtml(flow.id)}</div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form
