@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RedNox - Flow Management</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #4285F4;
+      --primary-dark: #1967D2;
+      --secondary: #34A853;
+      --danger: #EA4335;
+      --warning: #FBBC04;
+      --bg: #f8f9fa;
+      --surface: #ffffff;
+      --text: #202124;
+      --text-secondary: #5f6368;
+      --border: #dadce0;
+      --shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+      --shadow-lg: 0 2px 4px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.1);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1rem;
+    }
+
+    /* Header */
+    header {
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      border-radius: 8px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 0.625rem 1.25rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      box-shadow: var(--shadow);
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn-success {
+      background: var(--secondary);
+      color: white;
+    }
+
+    .btn-sm {
+      padding: 0.375rem 0.75rem;
+      font-size: 0.8125rem;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin: 1.5rem 0 1rem;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tab {
+      padding: 0.75rem 1rem;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+      box-shadow: var(--shadow);
+      transition: box-shadow 0.2s;
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow-lg);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .card-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    /* Forms */
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    .form-input,
+    .form-select,
+    .form-textarea {
+      width: 100%;
+      padding: 0.625rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus,
+    .form-select:focus,
+    .form-textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 100px;
+      font-family: 'Monaco', 'Menlo', monospace;
+    }
+
+    /* Status Badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .badge-success {
+      background: #e6f4ea;
+      color: #137333;
+    }
+
+    .badge-danger {
+      background: #fce8e6;
+      color: #c5221f;
+    }
+
+    .badge-warning {
+      background: #fef7e0;
+      color: #b95000;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      padding: 1rem;
+      overflow-y: auto;
+    }
+
+    .modal.active {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 2rem;
+    }
+
+    .modal-content {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1.5rem;
+      max-width: 600px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .modal-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: var(--text-secondary);
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: background 0.2s;
+    }
+
+    .modal-close:hover {
+      background: var(--bg);
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--text-secondary);
+    }
+
+    .empty-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    /* Loading */
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Code Block */
+    .code-block {
+      background: #f8f9fa;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 0.8125rem;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: var(--shadow);
+    }
+
+    .stat-label {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .container {
+        padding: 0.75rem;
+      }
+
+      .card {
+        padding: 1rem;
+        border-radius: 8px;
+      }
+
+      .modal-content {
+        margin: 1rem;
+      }
+
+      .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.8125rem;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Alert */
+    .alert {
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    .alert-success {
+      background: #e6f4ea;
+      color: #137333;
+    }
+
+    .alert-error {
+      background: #fce8e6;
+      color: #c5221f;
+    }
+
+    .alert-info {
+      background: #e8f0fe;
+      color: #1967d2;
+    }
+
+    .flow-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.8125rem;
+      color: var(--text-secondary);
+      margin-top: 0.75rem;
+    }
+
+    .flow-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
+    .json-editor {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 0.8125rem;
+      overflow-x: auto;
+      min-height: 400px;
+    }
+
+    .endpoint-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .endpoint-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background: var(--bg);
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    .method-badge {
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      min-width: 60px;
+      text-align: center;
+    }
+
+    .method-get { background: #e8f0fe; color: #1967d2; }
+    .method-post { background: #e6f4ea; color: #137333; }
+    .method-put { background: #fef7e0; color: #b95000; }
+    .method-delete { background: #fce8e6; color: #c5221f; }
+
+    .endpoint-path {
+      flex: 1;
+      font-family: 'Monaco', 'Menlo', monospace;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="header-content">
+      <div class="logo">
+        <div class="logo-icon"></div>
+        <span>RedNox</span>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-secondary btn-sm" onclick="loadStats()">
+          <span>↻</span>
+          <span>Refresh</span>
+        </button>
+        <button class="btn btn-primary btn-sm" onclick="showCreateFlowModal()">
+          <span>+</span>
+          <span>New Flow</span>
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="initializeDatabase()">
+          <span>⚙</span>
+          <span>Init DB</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Flows</div>
+        <div class="stat-value" id="stat-flows">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active Routes</div>
+        <div class="stat-value" id="stat-routes">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Logs</div>
+        <div class="stat-value" id="stat-logs">-</div>
+      </div>
+    </div>
+
+    <!-- Alerts Container -->
+    <div id="alerts"></div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('flows')">Flows</button>
+      <button class="tab" onclick="switchTab('routes')">Routes</button>
+      <button class="tab" onclick="switchTab('templates')">Templates</button>
+    </div>
+
+    <!-- Flows Tab -->
+    <div id="flows-tab" class="tab-content active">
+      <div id="flows-list"></div>
+    </div>
+
+    <!-- Routes Tab -->
+    <div id="routes-tab" class="tab-content">
+      <div id="routes-list"></div>
+    </div>
+
+    <!-- Templates Tab -->
+    <div id="templates-tab" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Quick Start Templates</h3>
+        </div>
+        <div class="empty-state">
+          <div class="empty-icon">📄</div>
+          <p>Choose a template to get started quickly</p>
+          <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="createFromTemplate('simple-chat')">Simple Chat</button>
+            <button class="btn btn-primary" onclick="createFromTemplate('chat-with-tools')">Chat with Tools</button>
+            <button class="btn btn-primary" onclick="createFromTemplate('webhook')">Webhook Handler</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create/Edit Flow Modal -->
+  <div id="flow-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-title">Create Flow</h3>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      
+      <div class="form-group">
+        <label class="form-label">Flow Name</label>
+        <input type="text" id="flow-name" class="form-input" placeholder="my-chatbot">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <input type="text" id="flow-description" class="form-input" placeholder="AI chatbot with tools">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Flow Configuration (JSON)</label>
+        <textarea id="flow-config" class="form-textarea json-editor" rows="15" placeholder='{"nodes": [...], "id": "my-flow", "name": "My Flow"}'></textarea>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveFlow()">
+          <span id="save-btn-text">Create Flow</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Flow Modal -->
+  <div id="view-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="view-title">Flow Details</h3>
+        <button class="modal-close" onclick="closeViewModal()">&times;</button>
+      </div>
+      
+      <div id="view-content"></div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeViewModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Configuration
+    const API_BASE = window.location.origin;
+    let currentFlowId = null;
+    let editMode = false;
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      loadStats();
+      loadFlows();
+    });
+
+    // Tab Switching
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      
+      event.target.classList.add('active');
+      document.getElementById(`${tabName}-tab`).classList.add('active');
+
+      if (tabName === 'flows') loadFlows();
+      if (tabName === 'routes') loadRoutes();
+    }
+
+    // Alert System
+    function showAlert(message, type = 'info') {
+      const alertsDiv = document.getElementById('alerts');
+      const alert = document.createElement('div');
+      alert.className = `alert alert-${type}`;
+      alert.innerHTML = `
+        <span>${type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️'}</span>
+        <span>${message}</span>
+      `;
+      alertsDiv.appendChild(alert);
+      
+      setTimeout(() => alert.remove(), 5000);
+    }
+
+    // Load Stats
+    async function loadStats() {
+      try {
+        const response = await fetch(`${API_BASE}/admin/stats`);
+        const data = await response.json();
+        
+        document.getElementById('stat-flows').textContent = data.flows || 0;
+        document.getElementById('stat-routes').textContent = data.routes || 0;
+        document.getElementById('stat-logs').textContent = data.logs || 0;
+      } catch (err) {
+        console.error('Failed to load stats:', err);
+      }
+    }
+
+    // Initialize Database
+    async function initializeDatabase() {
+      if (!confirm('Initialize database? This will create tables if they don\'t exist.')) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/admin/init`, { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+          showAlert('Database initialized successfully', 'success');
+          loadStats();
+        } else {
+          showAlert(`Failed to initialize: ${data.error || 'Unknown error'}`, 'error');
+        }
+      } catch (err) {
+        showAlert(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    // Load Flows
+    async function loadFlows() {
+      const container = document.getElementById('flows-list');
+      container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading"></div></div>';
+
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows`);
+        const data = await response.json();
+
+        if (!data.flows || data.flows.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">📦</div>
+              <p>No flows yet. Create your first flow to get started.</p>
+              <button class="btn btn-primary" style="margin-top: 1rem;" onclick="showCreateFlowModal()">
+                Create Flow
+              </button>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = data.flows.map(flow => `
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">${escapeHtml(flow.name)}</h3>
+                ${flow.description ? `<p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.25rem;">${escapeHtml(flow.description)}</p>` : ''}
+                <div class="flow-meta">
+                  <span class="flow-meta-item">
+                    <span>🆔</span>
+                    <span>${flow.id}</span>
+                  </span>
+                  <span class="flow-meta-item">
+                    <span>📅</span>
+                    <span>${new Date(flow.created_at).toLocaleDateString()}</span>
+                  </span>
+                </div>
+              </div>
+              <div class="card-actions">
+                <span class="badge ${flow.enabled ? 'badge-success' : 'badge-danger'}">
+                  <span class="badge-dot"></span>
+                  ${flow.enabled ? 'Active' : 'Disabled'}
+                </span>
+              </div>
+            </div>
+            <div class="card-actions">
+              <button class="btn btn-secondary btn-sm" onclick="viewFlow('${flow.id}')">
+                👁 View
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="editFlow('${flow.id}')">
+                ✏️ Edit
+              </button>
+              <button class="btn ${flow.enabled ? 'btn-secondary' : 'btn-success'} btn-sm" 
+                      onclick="toggleFlow('${flow.id}', ${!flow.enabled})">
+                ${flow.enabled ? '⏸ Disable' : '▶️ Enable'}
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="deleteFlow('${flow.id}')">
+                🗑 Delete
+              </button>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        container.innerHTML = `
+          <div class="alert alert-error">
+            <span>❌</span>
+            <span>Failed to load flows: ${err.message}</span>
+          </div>
+        `;
+      }
+    }
+
+    // Load Routes
+    async function loadRoutes() {
+      const container = document.getElementById('routes-list');
+      container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading"></div></div>';
+
+      try {
+        const response = await fetch(`${API_BASE}/admin/routes`);
+        const data = await response.json();
+
+        if (!data.routes || data.routes.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">🛣️</div>
+              <p>No routes available. Routes are created automatically when you add http-in nodes to flows.</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = `
+          <div class="card">
+            <h3 class="card-title" style="margin-bottom: 1rem;">Active HTTP Routes</h3>
+            <ul class="endpoint-list">
+              ${data.routes.map(route => `
+                <li class="endpoint-item">
+                  <span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span>
+                  <span class="endpoint-path">${route.fullUrl || route.path}</span>
+                  <span style="color: var(--text-secondary); font-size: 0.75rem;">${route.flow_name}</span>
+                </li>
+              `).join('')}
+            </ul>
+          </div>
+        `;
+      } catch (err) {
+        container.innerHTML = `
+          <div class="alert alert-error">
+            <span>❌</span>
+            <span>Failed to load routes: ${err.message}</span>
+          </div>
+        `;
+      }
+    }
+
+    // Show Create Modal
+    function showCreateFlowModal() {
+      editMode = false;
+      currentFlowId = null;
+      document.getElementById('modal-title').textContent = 'Create Flow';
+      document.getElementById('save-btn-text').textContent = 'Create Flow';
+      document.getElementById('flow-name').value = '';
+      document.getElementById('flow-description').value = '';
+      document.getElementById('flow-config').value = JSON.stringify({
+        id: 'my-flow',
+        name: 'My Flow',
+        description: 'Description',
+        nodes: [
+          {
+            id: 'http-in-1',
+            type: 'http-in',
+            url: '/endpoint',
+            method: 'post',
+            wires: [['http-out-1']]
+          },
+          {
+            id: 'http-out-1',
+            type: 'http-response',
+            wires: []
+          }
+        ]
+      }, null, 2);
+      document.getElementById('flow-modal').classList.add('active');
+    }
+
+    // Edit Flow
+    async function editFlow(flowId) {
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        const flow = await response.json();
+
+        editMode = true;
+        currentFlowId = flowId;
+        document.getElementById('modal-title').textContent = 'Edit Flow';
+        document.getElementById('save-btn-text').textContent = 'Update Flow';
+        document.getElementById('flow-name').value = flow.name;
+        document.getElementById('flow-description').value = flow.description || '';
+        document.getElementById('flow-config').value = JSON.stringify(flow.config, null, 2);
+        document.getElementById('flow-modal').classList.add('active');
+      } catch (err) {
+        showAlert(`Failed to load flow: ${err.message}`, 'error');
+      }
+    }
+
+    // View Flow
+    async function viewFlow(flowId) {
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        const flow = await response.json();
+
+        document.getElementById('view-title').textContent = flow.name;
+        document.getElementById('view-content').innerHTML = `
+          <div class="form-group">
+            <label class="form-label">Flow ID</label>
+            <div class="code-block">${flow.id}</div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <p>${flow.description || 'No description'}</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <span class="badge ${flow.enabled ? 'badge-success' : 'badge-danger'}">
+              <span class="badge-dot"></span>
+              ${flow.enabled ? 'Active' : 'Disabled'}
+            </span>
+          </div>
+
+          ${flow.routes && flow.routes.length > 0 ? `
+            <div class="form-group">
+              <label class="form-label">HTTP Endpoints</label>
+              <ul class="endpoint-list">
+                ${flow.routes.map(route => `
+                  <li class="endpoint-item">
+                    <span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span>
+                    <span class="endpoint-path">${route.fullUrl}</span>
+                  </li>
+                `).join('')}
+              </ul>
+            </div>
+          ` : ''}
+
+          <div class="form-group">
+            <label class="form-label">Configuration</label>
+            <pre class="code-block">${JSON.stringify(flow.config, null, 2)}</pre>
