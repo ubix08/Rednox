@@ -1,6 +1,6 @@
 
 // ===================================================================
-// RedNox - Node Instance Implementation
+// RedNox - Node Instance
 // ===================================================================
 
 import {
@@ -11,6 +11,7 @@ import {
   NodeStatus,
   ExecutionContext
 } from '../types/core';
+import { StorageKeys } from '../utils';
 
 export class NodeInstance implements Node {
   id: string;
@@ -33,12 +34,14 @@ export class NodeInstance implements Node {
     this._context = {
       flow: context.flow,
       global: context.global,
-      get: async (key: string) => context.storage.get(`node:${this.id}:${key}`),
+      get: async (key: string) => 
+        context.storage.get(StorageKeys.node(this.id, key)),
       set: async (key: string, value: any) => 
-        await context.storage.put(`node:${this.id}:${key}`, value),
+        await context.storage.put(StorageKeys.node(this.id, key), value),
       keys: async () => {
-        const list = await context.storage.list({ prefix: `node:${this.id}:` });
-        return Array.from(list.keys()).map(k => k.replace(`node:${this.id}:`, ''));
+        const prefix = StorageKeys.node(this.id, '');
+        const list = await context.storage.list({ prefix });
+        return Array.from(list.keys()).map(k => k.replace(prefix, ''));
       }
     };
   }
