@@ -1,3 +1,4 @@
+
 // ===================================================================
 // RedNox - Node Registry
 // ===================================================================
@@ -17,6 +18,14 @@ export class NodeRegistry {
   
   getAll(): RuntimeNodeDefinition[] {
     return Array.from(this.nodes.values());
+  }
+  
+  has(type: string): boolean {
+    return this.nodes.has(type);
+  }
+  
+  list(): string[] {
+    return Array.from(this.nodes.keys());
   }
 }
 
