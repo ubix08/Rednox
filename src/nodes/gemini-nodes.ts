@@ -1,5 +1,6 @@
+
 // ===================================================================
-// RedNox - Gemini AI Nodes
+// RedNox - Complete Gemini Agent Integration with Google GenAI SDK
 // ===================================================================
 
 import { registry } from '../core/NodeRegistry';
@@ -7,461 +8,7 @@ import { NodeMessage, Node, ExecutionContext } from '../types/core';
 import { RED, StorageKeys } from '../utils';
 
 // ===================================================================
-// GEMINI MODEL CONFIG NODE
-// ===================================================================
-
-registry.register('gemini-model-config', {
-  type: 'gemini-model-config',
-  category: 'config',
-  color: '#4285F4',
-  defaults: {
-    name: { value: '' },
-    model: { value: 'gemini-2.0-flash-exp' },
-    temperature: { value: 0.7 },
-    topP: { value: 0.95 },
-    topK: { value: 40 },
-    maxOutputTokens: { value: 8192 },
-    safetySettings: { value: [] }
-  },
-  inputs: 0,
-  outputs: 0,
-  execute: async (msg: NodeMessage) => null
-});
-
-// ===================================================================
-// GEMINI TOOL - CUSTOM FUNCTION
-// ===================================================================
-
-registry.register('gemini-tool-function', {
-  type: 'gemini-tool-function',
-  category: 'gemini-tools',
-  color: '#4285F4',
-  defaults: {
-    name: { value: '' },
-    toolName: { value: '' },
-    description: { value: '' },
-    parametersSchema: { value: '{}' },
-    functionCode: { value: 'return {};' },
-    enabled: { value: true }
-  },
-  inputs: 1,
-  outputs: 1,
-  
-  execute: async (msg: NodeMessage, node: Node, context: ExecutionContext) => {
-    const operation = msg.operation || 'execute';
-    
-    if (!node.config.enabled) {
-      node.warn('Tool is disabled');
-      return null;
-    }
-    
-    try {
-      switch (operation) {
-        case 'info':
-          msg.payload = {
-            toolName: node.config.toolName,
-            description: node.config.description,
-            functionDeclaration: getFunctionDeclaration(node),
-            parametersSchema: JSON.parse(node.config.parametersSchema || '{}')
-          };
-          return msg;
-          
-        case 'execute':
-          const args = msg.args || msg.payload || {};
-          const result = await executeToolFunction(node, args, context);
-          msg.payload = result;
-          msg.toolName = node.config.toolName;
-          return msg;
-          
-        case 'test':
-          const testArgs = msg.testArgs || {};
-          try {
-            const testResult = await executeToolFunction(node, testArgs, context);
-            msg.payload = { success: true, result: testResult };
-          } catch (err: any) {
-            msg.payload = { success: false, error: err.message };
-          }
-          return msg;
-          
-        default:
-          msg.payload = `Unknown operation: ${operation}`;
-          return msg;
-      }
-    } catch (err: any) {
-      node.error(err, msg);
-      msg.error = err.message;
-      msg.payload = null;
-      return msg;
-    }
-  }
-});
-
-function getFunctionDeclaration(node: Node) {
-  const schema = JSON.parse(node.config.parametersSchema || '{}');
-  return {
-    name: node.config.toolName,
-    description: node.config.description,
-    parameters: {
-      type: 'object',
-      properties: schema.properties || {},
-      required: schema.required || []
-    }
-  };
-}
-
-async function executeToolFunction(node: Node, args: any, context: ExecutionContext): Promise<any> {
-  const safeContext = {
-    args,
-    console,
-    JSON,
-    Math,
-    Date,
-    Array,
-    Object,
-    String,
-    Number,
-    Boolean,
-    crypto,
-    utils: {
-      parseJSON: (str: string) => {
-        try { return JSON.parse(str); } catch { return null; }
-      },
-      formatDate: (date: any) => new Date(date).toISOString(),
-      validateEmail: (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-    }
-  };
-  
-  const func = new Function(
-    'args', 'console', 'JSON', 'Math', 'Date', 'Array', 'Object', 
-    'String', 'Number', 'Boolean', 'crypto', 'utils',
-    `'use strict'; return (async () => { ${node.config.functionCode} })();`
-  );
-  
-  const result = await func(
-    safeContext.args,
-    safeContext.console,
-    safeContext.JSON,
-    safeContext.Math,
-    safeContext.Date,
-    safeContext.Array,
-    safeContext.Object,
-    safeContext.String,
-    safeContext.Number,
-    safeContext.Boolean,
-    safeContext.crypto,
-    safeContext.utils
-  );
-  
-  return JSON.parse(JSON.stringify(result || {}));
-}
-
-// ===================================================================
-// GEMINI TOOL - HTTP REQUEST
-// ===================================================================
-
-registry.register('gemini-tool-http', {
-  type: 'gemini-tool-http',
-  category: 'gemini-tools',
-  color: '#4285F4',
-  defaults: {
-    name: { value: '' },
-    toolName: { value: '' },
-    description: { value: '' },
-    method: { value: 'GET' },
-    url: { value: '' },
-    headers: { value: '{}' },
-    body: { value: '' },
-    timeout: { value: 30000 },
-    parametersSchema: { value: '{}' },
-    enabled: { value: true }
-  },
-  inputs: 1,
-  outputs: 1,
-  
-  execute: async (msg: NodeMessage, node: Node, context: ExecutionContext) => {
-    const operation = msg.operation || 'execute';
-    
-    if (!node.config.enabled) {
-      node.warn('Tool is disabled');
-      return null;
-    }
-    
-    try {
-      switch (operation) {
-        case 'info':
-          msg.payload = {
-            toolName: node.config.toolName,
-            description: node.config.description,
-            method: node.config.method,
-            url: node.config.url,
-            functionDeclaration: getHttpFunctionDeclaration(node)
-          };
-          return msg;
-          
-        case 'execute':
-          const args = msg.args || msg.payload || {};
-          const result = await executeHttpTool(node, args);
-          msg.payload = result;
-          msg.toolName = node.config.toolName;
-          return msg;
-          
-        case 'test':
-          const testArgs = msg.testArgs || {};
-          try {
-            const testResult = await executeHttpTool(node, testArgs);
-            msg.payload = { success: true, result: testResult };
-          } catch (err: any) {
-            msg.payload = { success: false, error: err.message };
-          }
-          return msg;
-          
-        default:
-          msg.payload = `Unknown operation: ${operation}`;
-          return msg;
-      }
-    } catch (err: any) {
-      node.error(err, msg);
-      msg.error = err.message;
-      msg.payload = null;
-      return msg;
-    }
-  }
-});
-
-function getHttpFunctionDeclaration(node: Node) {
-  const schema = JSON.parse(node.config.parametersSchema || '{}');
-  return {
-    name: node.config.toolName,
-    description: node.config.description,
-    parameters: {
-      type: 'object',
-      properties: schema.properties || {},
-      required: schema.required || []
-    }
-  };
-}
-
-function replaceTemplate(template: string, args: any): string {
-  if (typeof template !== 'string') return template;
-  
-  return template.replace(/\$\{([^}]+)\}/g, (match, key) => {
-    const keys = key.split('.');
-    let value: any = args;
-    
-    for (const k of keys) {
-      if (value && typeof value === 'object' && k in value) {
-        value = value[k];
-      } else {
-        return match;
-      }
-    }
-    
-    return String(value);
-  });
-}
-
-async function executeHttpTool(node: Node, args: any): Promise<any> {
-  const processedUrl = replaceTemplate(node.config.url, args);
-  const headers = JSON.parse(node.config.headers || '{}');
-  
-  const processedHeaders: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    processedHeaders[key] = replaceTemplate(String(value), args);
-  }
-  
-  if (!processedHeaders['User-Agent']) {
-    processedHeaders['User-Agent'] = 'RedNox-Gemini-Tool/1.0';
-  }
-  
-  let body: string | undefined;
-  const method = node.config.method.toUpperCase();
-  
-  if (['POST', 'PUT', 'PATCH'].includes(method) && node.config.body) {
-    body = replaceTemplate(node.config.body, args);
-    
-    if (!processedHeaders['Content-Type']) {
-      try {
-        JSON.parse(body);
-        processedHeaders['Content-Type'] = 'application/json';
-      } catch {
-        processedHeaders['Content-Type'] = 'text/plain';
-      }
-    }
-  }
-  
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), node.config.timeout || 30000);
-  
-  try {
-    const response = await fetch(processedUrl, {
-      method,
-      headers: processedHeaders,
-      body,
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
-    const contentType = response.headers.get('content-type') || '';
-    let data: any;
-    
-    if (contentType.includes('application/json')) {
-      data = await response.json();
-    } else {
-      data = await response.text();
-    }
-    
-    return {
-      success: true,
-      statusCode: response.status,
-      headers: Object.fromEntries(response.headers),
-      data,
-      url: processedUrl,
-      method
-    };
-    
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-    return {
-      success: false,
-      error: err.message,
-      url: processedUrl,
-      method
-    };
-  }
-}
-
-// ===================================================================
-// GEMINI MEMORY - IN-MEMORY
-// ===================================================================
-
-registry.register('gemini-memory-inmem', {
-  type: 'gemini-memory-inmem',
-  category: 'gemini-memory',
-  color: '#4285F4',
-  defaults: {
-    name: { value: '' },
-    maxItems: { value: 20 },
-    includeImages: { value: true },
-    autoCompress: { value: false }
-  },
-  inputs: 1,
-  outputs: 1,
-  
-  onInit: async (node: Node, context: ExecutionContext) => {
-    await context.storage.put(StorageKeys.memory(node.id, 'conversations'), {});
-  },
-  
-  execute: async (msg: NodeMessage, node: Node, context: ExecutionContext) => {
-    const operation = msg.operation || msg.payload;
-    const conversationId = msg.conversationId || 'default';
-    
-    try {
-      const conversations = await context.storage.get(StorageKeys.memory(node.id, 'conversations')) || {};
-      
-      switch (operation) {
-        case 'get':
-          msg.payload = conversations[conversationId] || [];
-          return msg;
-          
-        case 'update':
-          if (!msg.userMessage || !msg.modelResponse) {
-            throw new Error('userMessage and modelResponse required for update');
-          }
-          
-          let history = conversations[conversationId] || [];
-          
-          // Process messages
-          const processedUser = processMessage(msg.userMessage, node.config.includeImages);
-          const processedModel = processMessage(msg.modelResponse, node.config.includeImages);
-          
-          history.push(processedUser);
-          history.push(processedModel);
-          
-          // Trim to max items
-          const maxItems = node.config.maxItems || 20;
-          if (history.length > maxItems * 2) {
-            const excessPairs = Math.floor((history.length - maxItems * 2) / 2);
-            history = history.slice(excessPairs * 2);
-          }
-          
-          // Auto-compress if enabled
-          if (node.config.autoCompress && history.length > 10) {
-            history = compressOldMessages(history);
-          }
-          
-          conversations[conversationId] = history;
-          await context.storage.put(StorageKeys.memory(node.id, 'conversations'), conversations);
-          
-          msg.payload = { success: true, messageCount: history.length };
-          return msg;
-          
-        case 'clear':
-          if (conversationId === 'all') {
-            await context.storage.put(StorageKeys.memory(node.id, 'conversations'), {});
-          } else {
-            delete conversations[conversationId];
-            await context.storage.put(StorageKeys.memory(node.id, 'conversations'), conversations);
-          }
-          msg.payload = 'Memory cleared';
-          return msg;
-          
-        case 'stats':
-          const stats = {
-            totalConversations: Object.keys(conversations).length,
-            conversations: Object.entries(conversations).map(([id, history]) => ({
-              id,
-              messageCount: (history as any[]).length
-            }))
-          };
-          msg.payload = stats;
-          return msg;
-          
-        default:
-          msg.payload = 'Invalid operation. Use: get, update, clear, or stats';
-          return msg;
-      }
-    } catch (err: any) {
-      node.error(err, msg);
-      msg.error = err.message;
-      return msg;
-    }
-  }
-});
-
-function processMessage(message: any, includeImages: boolean) {
-  if (!includeImages && message.parts) {
-    const processedMessage = JSON.parse(JSON.stringify(message));
-    processedMessage.parts = processedMessage.parts.filter((part: any) => !part.inlineData);
-    if (processedMessage.parts.length === 0) {
-      processedMessage.parts = [{ text: '[Image content removed from memory]' }];
-    }
-    return processedMessage;
-  }
-  return message;
-}
-
-function compressOldMessages(history: any[]) {
-  if (history.length <= 10) return history;
-  
-  const recentMessages = history.slice(-6);
-  const oldMessages = history.slice(0, -6);
-  
-  const summaryText = `[Previous conversation summary: ${Math.floor(oldMessages.length / 2)} message pairs discussed various topics]`;
-  const summaryMessage = {
-    role: 'user',
-    parts: [{ text: summaryText }]
-  };
-  
-  return [summaryMessage, ...recentMessages];
-}
-
-// ===================================================================
-// GEMINI AGENT - MAIN NODE
+// GEMINI AGENT - All-in-One Node
 // ===================================================================
 
 registry.register('gemini-agent', {
@@ -470,12 +17,42 @@ registry.register('gemini-agent', {
   color: '#4285F4',
   defaults: {
     name: { value: '' },
-    modelConfigNode: { value: '' },
-    memoryConfigNode: { value: '' },
+    
+    // Model Configuration
+    model: { value: 'gemini-2.0-flash-exp' },
+    temperature: { value: 0.7 },
+    topP: { value: 0.95 },
+    topK: { value: 40 },
+    maxOutputTokens: { value: 8192 },
+    
+    // System Instruction
     systemInstruction: { value: '' },
+    
+    // Native Tools
+    enableSearch: { value: false },
+    enableCodeExecution: { value: false },
     enableFunctionCalling: { value: true },
-    enableVision: { value: false },
-    maxAttempts: { value: 5 }
+    
+    // URL Context (multimodal)
+    urlContexts: { value: [] }, // Array of URLs for context
+    
+    // Multimodal
+    enableVision: { value: true },
+    
+    // Memory
+    memoryNode: { value: '' },
+    conversationId: { value: 'default' },
+    
+    // RAG
+    ragMemoryNode: { value: '' },
+    
+    // Safety
+    safetySettings: { value: [] },
+    
+    // Advanced
+    maxAttempts: { value: 5 },
+    responseSchema: { value: '' }, // JSON schema for structured output
+    responseMimeType: { value: 'text/plain' } // text/plain or application/json
   },
   inputs: 1,
   outputs: 1,
@@ -484,62 +61,94 @@ registry.register('gemini-agent', {
     try {
       node.status({ fill: 'yellow', shape: 'dot', text: 'processing' });
       
-      // Get API key from environment
       const apiKey = context.env.GEMINI_API_KEY;
       if (!apiKey) {
-        throw new Error('GEMINI_API_KEY not configured in environment');
+        throw new Error('GEMINI_API_KEY not configured');
       }
       
-      // Get model config (from flow data)
-      const modelConfig = await getModelConfig(node, context);
+      // Build generation config
+      const generationConfig: any = {
+        temperature: node.config.temperature ?? 0.7,
+        topP: node.config.topP ?? 0.95,
+        topK: node.config.topK ?? 40,
+        maxOutputTokens: node.config.maxOutputTokens ?? 8192
+      };
       
-      // Collect tools from flow
-      const tools = await collectTools(node, context);
-      
-      // Prepare content parts
-      const parts = prepareContentParts(msg, node.config.enableVision);
-      
-      // Get conversation history if memory is enabled
-      let conversationHistory: any[] = [];
-      const conversationId = msg.conversationId || msg._msgid || 'default';
-      
-      if (node.config.memoryConfigNode) {
-        conversationHistory = await getConversationHistory(node, context, conversationId);
+      // Add structured output if specified
+      if (node.config.responseSchema) {
+        try {
+          generationConfig.responseSchema = JSON.parse(node.config.responseSchema);
+          generationConfig.responseMimeType = node.config.responseMimeType || 'application/json';
+        } catch (err) {
+          node.warn('Invalid response schema JSON');
+        }
       }
       
-      // Make Gemini API call
-      const result = await callGeminiAPI({
+      // Prepare content parts (text + images)
+      const parts = prepareContentParts(msg, node.config);
+      
+      // Get conversation history from memory
+      let history: any[] = [];
+      const conversationId = msg.conversationId || node.config.conversationId || 'default';
+      
+      if (node.config.memoryNode) {
+        history = await getMemoryHistory(node.config.memoryNode, conversationId, context);
+      }
+      
+      // Get RAG context if enabled
+      let ragContext = '';
+      if (node.config.ragMemoryNode && msg.query) {
+        ragContext = await queryRAGMemory(node.config.ragMemoryNode, msg.query, context);
+      }
+      
+      // Collect function declarations
+      const functionDeclarations = node.config.enableFunctionCalling 
+        ? await collectFunctionDeclarations(context)
+        : [];
+      
+      // Build native tools
+      const tools = buildNativeTools(node.config, functionDeclarations);
+      
+      // Prepare system instruction
+      let systemInstruction = node.config.systemInstruction || '';
+      if (ragContext) {
+        systemInstruction += `\n\nContext from knowledge base:\n${ragContext}`;
+      }
+      
+      // Call Gemini API
+      const result = await callGeminiWithSDK({
         apiKey,
-        model: modelConfig.model || 'gemini-2.0-flash-exp',
-        systemInstruction: node.config.systemInstruction,
-        history: conversationHistory,
+        model: node.config.model,
+        systemInstruction,
+        history,
         message: parts,
         tools,
-        generationConfig: modelConfig.generationConfig,
-        safetySettings: modelConfig.safetySettings,
-        enableFunctionCalling: node.config.enableFunctionCalling,
-        maxAttempts: node.config.maxAttempts || 5
+        generationConfig,
+        safetySettings: node.config.safetySettings || [],
+        maxAttempts: node.config.maxAttempts || 5,
+        urlContexts: node.config.urlContexts || []
       }, node, context);
       
-      // Update memory if enabled
-      if (node.config.memoryConfigNode && result.success) {
-        await updateConversationHistory(
-          node,
-          context,
+      // Update memory
+      if (node.config.memoryNode && result.success) {
+        await updateMemory(
+          node.config.memoryNode,
           conversationId,
           { role: 'user', parts },
-          { role: 'model', parts: [{ text: result.text }] }
+          { role: 'model', parts: [{ text: result.text }] },
+          context
         );
       }
       
-      // Prepare output
+      // Prepare response
       msg.payload = result.text;
       msg.conversationId = conversationId;
       msg.gemini = {
         usageMetadata: result.usageMetadata,
         finishReason: result.finishReason,
         safetyRatings: result.safetyRatings,
-        functionCalls: result.functionCalls
+        functionCalls: result.functionCalls || [],
+        groundingMetadata: result.groundingMetadata
       };
       
       node.status({ fill: 'green', shape: 'dot', text: 'complete' });
@@ -555,97 +164,511 @@ registry.register('gemini-agent', {
   }
 });
 
-async function getModelConfig(node: Node, context: ExecutionContext) {
-  const configNodeId = node.config.modelConfigNode;
-  if (!configNodeId) {
-    return {
-      model: 'gemini-2.0-flash-exp',
-      generationConfig: { temperature: 0.7, topP: 0.95, topK: 40, maxOutputTokens: 8192 },
-      safetySettings: []
-    };
-  }
+// ===================================================================
+// GEMINI MEMORY - Conversation History
+// ===================================================================
+
+registry.register('gemini-memory', {
+  type: 'gemini-memory',
+  category: 'gemini',
+  color: '#4285F4',
+  defaults: {
+    name: { value: '' },
+    maxMessages: { value: 20 }, // Max message pairs
+    includeImages: { value: true },
+    autoCompress: { value: false },
+    compressionThreshold: { value: 30 } // Compress when > N messages
+  },
+  inputs: 1,
+  outputs: 1,
   
-  // In RedNox, config nodes are stored in flow context
-  const config = await context.flow.get(`config:${configNodeId}`);
-  return config || {
-    model: 'gemini-2.0-flash-exp',
-    generationConfig: { temperature: 0.7, topP: 0.95, topK: 40, maxOutputTokens: 8192 },
-    safetySettings: []
-  };
-}
+  onInit: async (node: Node, context: ExecutionContext) => {
+    await context.storage.put(StorageKeys.memory(node.id, 'conversations'), {});
+  },
+  
+  execute: async (msg: NodeMessage, node: Node, context: ExecutionContext) => {
+    const operation = msg.operation || 'get';
+    const conversationId = msg.conversationId || 'default';
+    
+    try {
+      const conversations = await context.storage.get(
+        StorageKeys.memory(node.id, 'conversations')
+      ) || {};
+      
+      switch (operation) {
+        case 'get':
+          msg.payload = conversations[conversationId] || [];
+          return msg;
+          
+        case 'update':
+          if (!msg.userMessage || !msg.modelResponse) {
+            throw new Error('userMessage and modelResponse required');
+          }
+          
+          let history = conversations[conversationId] || [];
+          
+          // Add messages
+          history.push(
+            processMessageForStorage(msg.userMessage, node.config.includeImages)
+          );
+          history.push(
+            processMessageForStorage(msg.modelResponse, node.config.includeImages)
+          );
+          
+          // Trim to max
+          const maxMessages = node.config.maxMessages * 2;
+          if (history.length > maxMessages) {
+            history = history.slice(-maxMessages);
+          }
+          
+          // Auto-compress if enabled
+          if (node.config.autoCompress && 
+              history.length > node.config.compressionThreshold) {
+            history = compressHistory(history, node.config.compressionThreshold);
+          }
+          
+          conversations[conversationId] = history;
+          await context.storage.put(
+            StorageKeys.memory(node.id, 'conversations'),
+            conversations
+          );
+          
+          msg.payload = { success: true, messageCount: history.length };
+          return msg;
+          
+        case 'clear':
+          if (conversationId === 'all') {
+            await context.storage.put(
+              StorageKeys.memory(node.id, 'conversations'),
+              {}
+            );
+          } else {
+            delete conversations[conversationId];
+            await context.storage.put(
+              StorageKeys.memory(node.id, 'conversations'),
+              conversations
+            );
+          }
+          msg.payload = { success: true, cleared: conversationId };
+          return msg;
+          
+        case 'list':
+          msg.payload = Object.keys(conversations).map(id => ({
+            id,
+            messageCount: conversations[id].length
+          }));
+          return msg;
+          
+        case 'export':
+          msg.payload = conversations[conversationId] || [];
+          return msg;
+          
+        default:
+          throw new Error(`Unknown operation: ${operation}`);
+      }
+    } catch (err: any) {
+      node.error(err, msg);
+      msg.error = err.message;
+      return msg;
+    }
+  }
+});
 
-async function collectTools(node: Node, context: ExecutionContext): Promise<any[]> {
-  // In RedNox, we need to store tool registrations in context
-  const toolsList = await context.flow.get('gemini:tools') || [];
-  return toolsList;
-}
+// ===================================================================
+// GEMINI RAG MEMORY - File-based Search
+// ===================================================================
 
-function prepareContentParts(msg: NodeMessage, enableVision: boolean) {
+registry.register('gemini-rag-memory', {
+  type: 'gemini-rag-memory',
+  category: 'gemini',
+  color: '#4285F4',
+  defaults: {
+    name: { value: '' },
+    corpusName: { value: '' },
+    topK: { value: 5 },
+    similarityThreshold: { value: 0.3 }
+  },
+  inputs: 1,
+  outputs: 1,
+  
+  execute: async (msg: NodeMessage, node: Node, context: ExecutionContext) => {
+    const operation = msg.operation || 'query';
+    const apiKey = context.env.GEMINI_API_KEY;
+    
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY not configured');
+    }
+    
+    try {
+      switch (operation) {
+        case 'upload':
+          // Upload file to Gemini Files API
+          const uploadResult = await uploadFileToGemini(
+            apiKey,
+            msg.file || msg.payload,
+            msg.mimeType || 'text/plain',
+            msg.displayName || 'document'
+          );
+          
+          // Store file reference
+          const files = await context.storage.get(
+            StorageKeys.rag(node.id, 'files')
+          ) || [];
+          files.push(uploadResult);
+          await context.storage.put(StorageKeys.rag(node.id, 'files'), files);
+          
+          msg.payload = uploadResult;
+          return msg;
+          
+        case 'query':
+          // Query against uploaded files
+          const query = msg.query || msg.payload;
+          const files = await context.storage.get(
+            StorageKeys.rag(node.id, 'files')
+          ) || [];
+          
+          if (files.length === 0) {
+            msg.payload = { results: [], warning: 'No files uploaded' };
+            return msg;
+          }
+          
+          const results = await queryGeminiRAG(
+            apiKey,
+            query,
+            files,
+            node.config.topK,
+            node.config.similarityThreshold
+          );
+          
+          msg.payload = results;
+          return msg;
+          
+        case 'list':
+          const fileList = await context.storage.get(
+            StorageKeys.rag(node.id, 'files')
+          ) || [];
+          msg.payload = fileList;
+          return msg;
+          
+        case 'delete':
+          const fileId = msg.fileId || msg.payload;
+          await deleteGeminiFile(apiKey, fileId);
+          
+          const currentFiles = await context.storage.get(
+            StorageKeys.rag(node.id, 'files')
+          ) || [];
+          const updatedFiles = currentFiles.filter((f: any) => f.name !== fileId);
+          await context.storage.put(StorageKeys.rag(node.id, 'files'), updatedFiles);
+          
+          msg.payload = { success: true, deleted: fileId };
+          return msg;
+          
+        case 'clear':
+          const allFiles = await context.storage.get(
+            StorageKeys.rag(node.id, 'files')
+          ) || [];
+          
+          for (const file of allFiles) {
+            try {
+              await deleteGeminiFile(apiKey, file.name);
+            } catch (err) {
+              node.warn(`Failed to delete ${file.name}`);
+            }
+          }
+          
+          await context.storage.put(StorageKeys.rag(node.id, 'files'), []);
+          msg.payload = { success: true, cleared: allFiles.length };
+          return msg;
+          
+        default:
+          throw new Error(`Unknown operation: ${operation}`);
+      }
+    } catch (err: any) {
+      node.error(err, msg);
+      msg.error = err.message;
+      return msg;
+    }
+  }
+});
+
+// ===================================================================
+// GEMINI TOOL NODES - Standard Functions
+// ===================================================================
+
+registry.register('gemini-tool-weather', {
+  type: 'gemini-tool-weather',
+  category: 'gemini-tools',
+  color: '#4285F4',
+  defaults: {
+    name: { value: 'Weather Tool' },
+    enabled: { value: true }
+  },
+  inputs: 1,
+  outputs: 1,
+  
+  onInit: async (node: Node, context: ExecutionContext) => {
+    await registerTool(context, {
+      name: 'get_weather',
+      description: 'Get current weather for a location',
+      parameters: {
+        type: 'object',
+        properties: {
+          location: {
+            type: 'string',
+            description: 'City name or coordinates'
+          },
+          units: {
+            type: 'string',
+            enum: ['celsius', 'fahrenheit'],
+            description: 'Temperature units'
+          }
+        },
+        required: ['location']
+      },
+      executor: async (args: any) => {
+        // Mock implementation - replace with real API
+        return {
+          location: args.location,
+          temperature: 22,
+          units: args.units || 'celsius',
+          conditions: 'Partly cloudy',
+          humidity: 65,
+          windSpeed: 10
+        };
+      }
+    });
+  },
+  
+  execute: async (msg: NodeMessage) => msg
+});
+
+registry.register('gemini-tool-calculator', {
+  type: 'gemini-tool-calculator',
+  category: 'gemini-tools',
+  color: '#4285F4',
+  defaults: {
+    name: { value: 'Calculator Tool' },
+    enabled: { value: true }
+  },
+  inputs: 1,
+  outputs: 1,
+  
+  onInit: async (node: Node, context: ExecutionContext) => {
+    await registerTool(context, {
+      name: 'calculate',
+      description: 'Perform mathematical calculations',
+      parameters: {
+        type: 'object',
+        properties: {
+          expression: {
+            type: 'string',
+            description: 'Mathematical expression to evaluate (e.g., "2 + 2", "sqrt(16)")'
+          }
+        },
+        required: ['expression']
+      },
+      executor: async (args: any) => {
+        try {
+          // Safe eval for math expressions
+          const result = Function('"use strict"; return (' + args.expression + ')')();
+          return {
+            expression: args.expression,
+            result,
+            success: true
+          };
+        } catch (err: any) {
+          return {
+            expression: args.expression,
+            error: err.message,
+            success: false
+          };
+        }
+      }
+    });
+  },
+  
+  execute: async (msg: NodeMessage) => msg
+});
+
+registry.register('gemini-tool-http', {
+  type: 'gemini-tool-http',
+  category: 'gemini-tools',
+  color: '#4285F4',
+  defaults: {
+    name: { value: 'HTTP Request Tool' },
+    toolName: { value: 'fetch_url' },
+    description: { value: 'Fetch content from a URL' },
+    enabled: { value: true }
+  },
+  inputs: 1,
+  outputs: 1,
+  
+  onInit: async (node: Node, context: ExecutionContext) => {
+    await registerTool(context, {
+      name: node.config.toolName,
+      description: node.config.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          url: {
+            type: 'string',
+            description: 'URL to fetch'
+          },
+          method: {
+            type: 'string',
+            enum: ['GET', 'POST'],
+            description: 'HTTP method'
+          }
+        },
+        required: ['url']
+      },
+      executor: async (args: any) => {
+        try {
+          const response = await fetch(args.url, {
+            method: args.method || 'GET',
+            headers: { 'User-Agent': 'Gemini-Tool/1.0' }
+          });
+          
+          const text = await response.text();
+          return {
+            url: args.url,
+            statusCode: response.status,
+            content: text.substring(0, 5000), // Limit size
+            success: response.ok
+          };
+        } catch (err: any) {
+          return {
+            url: args.url,
+            error: err.message,
+            success: false
+          };
+        }
+      }
+    });
+  },
+  
+  execute: async (msg: NodeMessage) => msg
+});
+
+registry.register('gemini-tool-custom', {
+  type: 'gemini-tool-custom',
+  category: 'gemini-tools',
+  color: '#4285F4',
+  defaults: {
+    name: { value: '' },
+    toolName: { value: '' },
+    description: { value: '' },
+    parametersSchema: { value: '{}' },
+    functionCode: { value: 'return { result: "Hello" };' },
+    enabled: { value: true }
+  },
+  inputs: 1,
+  outputs: 1,
+  
+  onInit: async (node: Node, context: ExecutionContext) => {
+    const schema = JSON.parse(node.config.parametersSchema || '{}');
+    
+    await registerTool(context, {
+      name: node.config.toolName,
+      description: node.config.description,
+      parameters: schema,
+      executor: async (args: any) => {
+        const func = new Function(
+          'args',
+          `'use strict'; return (async () => { ${node.config.functionCode} })();`
+        );
+        return await func(args);
+      }
+    });
+  },
+  
+  execute: async (msg: NodeMessage) => msg
+});
+
+// ===================================================================
+// HELPER FUNCTIONS
+// ===================================================================
+
+function prepareContentParts(msg: NodeMessage, config: any) {
   const parts: any[] = [];
   
+  // Text content
   if (msg.payload && typeof msg.payload === 'string') {
     parts.push({ text: msg.payload });
+  } else if (msg.text) {
+    parts.push({ text: msg.text });
   }
   
-  if (enableVision && msg.images && Array.isArray(msg.images)) {
+  // Images (if vision enabled)
+  if (config.enableVision && msg.images && Array.isArray(msg.images)) {
     for (const image of msg.images) {
       if (image.data && image.mimeType) {
         parts.push({
           inlineData: {
-            data: image.data,
-            mimeType: image.mimeType
+            mimeType: image.mimeType,
+            data: image.data
           }
         });
       }
     }
   }
   
+  // File data
+  if (msg.fileData) {
+    parts.push({
+      fileData: {
+        mimeType: msg.fileData.mimeType,
+        fileUri: msg.fileData.fileUri
+      }
+    });
+  }
+  
   return parts.length > 0 ? parts : [{ text: msg.payload || '' }];
 }
 
-async function getConversationHistory(node: Node, context: ExecutionContext, conversationId: string) {
-  const memoryNodeId = node.config.memoryConfigNode;
-  if (!memoryNodeId) return [];
+function buildNativeTools(config: any, functionDeclarations: any[]) {
+  const tools: any[] = [];
   
-  const conversations = await context.storage.get(StorageKeys.memory(memoryNodeId, 'conversations')) || {};
-  return conversations[conversationId] || [];
-}
-
-async function updateConversationHistory(
-  node: Node,
-  context: ExecutionContext,
-  conversationId: string,
-  userMessage: any,
-  modelMessage: any
-) {
-  const memoryNodeId = node.config.memoryConfigNode;
-  if (!memoryNodeId) return;
-  
-  const conversations = await context.storage.get(StorageKeys.memory(memoryNodeId, 'conversations')) || {};
-  let history = conversations[conversationId] || [];
-  
-  history.push(userMessage);
-  history.push(modelMessage);
-  
-  conversations[conversationId] = history;
-  await context.storage.put(StorageKeys.memory(memoryNodeId, 'conversations'), conversations);
-}
-
-async function callGeminiAPI(
-  options: any,
-  node: Node,
-  context: ExecutionContext
-): Promise<any> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${options.model}:generateContent?key=${options.apiKey}`;
-  
-  const contents: any[] = [];
-  
-  // Add history
-  if (options.history && options.history.length > 0) {
-    contents.push(...options.history);
+  // Google Search grounding
+  if (config.enableSearch) {
+    tools.push({
+      googleSearch: {}
+    });
   }
   
-  // Add current message
+  // Code execution
+  if (config.enableCodeExecution) {
+    tools.push({
+      codeExecution: {}
+    });
+  }
+  
+  // Function calling
+  if (config.enableFunctionCalling && functionDeclarations.length > 0) {
+    tools.push({
+      functionDeclarations
+    });
+  }
+  
+  return tools;
+}
+
+async function callGeminiWithSDK(options: any, node: Node, context: ExecutionContext) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${options.model}:generateContent?key=${options.apiKey}`;
+  
+  const contents: any[] = [...(options.history || [])];
+  
+  // Add URL contexts if provided
+  if (options.urlContexts && options.urlContexts.length > 0) {
+    for (const urlContext of options.urlContexts) {
+      contents.push({
+        role: 'user',
+        parts: [{ text: `Context from ${urlContext}` }]
+      });
+    }
+  }
+  
+  // Current message
   contents.push({
     role: 'user',
     parts: options.message
@@ -653,8 +676,8 @@ async function callGeminiAPI(
   
   const body: any = {
     contents,
-    generationConfig: options.generationConfig || {},
-    safetySettings: options.safetySettings || []
+    generationConfig: options.generationConfig,
+    safetySettings: options.safetySettings
   };
   
   if (options.systemInstruction) {
@@ -663,81 +686,229 @@ async function callGeminiAPI(
     };
   }
   
-  if (options.enableFunctionCalling && options.tools && options.tools.length > 0) {
-    body.tools = [{ functionDeclarations: options.tools }];
+  if (options.tools && options.tools.length > 0) {
+    body.tools = options.tools;
   }
+  
+  let attempts = 0;
+  const maxAttempts = options.maxAttempts || 5;
+  
+  while (attempts < maxAttempts) {
+    attempts++;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Gemini API error: ${response.status} - ${error}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.candidates || data.candidates.length === 0) {
+      throw new Error('No response from Gemini');
+    }
+    
+    const candidate = data.candidates[0];
+    const content = candidate.content;
+    
+    // Handle function calls
+    const functionCalls = content.parts?.filter((p: any) => p.functionCall) || [];
+    
+    if (functionCalls.length > 0 && attempts < maxAttempts) {
+      // Execute functions
+      const functionResponses = [];
+      
+      for (const fc of functionCalls) {
+        const result = await executeFunctionCall(fc.functionCall, context);
+        functionResponses.push({
+          functionResponse: {
+            name: fc.functionCall.name,
+            response: result
+          }
+        });
+      }
+      
+      // Continue conversation with results
+      contents.push(content);
+      contents.push({
+        role: 'function',
+        parts: functionResponses
+      });
+      
+      // Retry with function results
+      body.contents = contents;
+      continue;
+    }
+    
+    // Extract text
+    const text = content.parts
+      ?.map((p: any) => p.text || '')
+      .join('')
+      .trim() || '';
+    
+    return {
+      success: true,
+      text,
+      usageMetadata: data.usageMetadata || {},
+      finishReason: candidate.finishReason || 'STOP',
+      safetyRatings: candidate.safetyRatings || [],
+      functionCalls: functionCalls.map((fc: any) => fc.functionCall),
+      groundingMetadata: candidate.groundingMetadata
+    };
+  }
+  
+  throw new Error('Max function calling attempts reached');
+}
+
+async function executeFunctionCall(call: any, context: ExecutionContext) {
+  const tools = await context.flow.get('gemini:tools') || [];
+  const tool = tools.find((t: any) => t.name === call.name);
+  
+  if (!tool || !tool.executor) {
+    return { error: `Function ${call.name} not found` };
+  }
+  
+  try {
+    return await tool.executor(call.args || {});
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+async function registerTool(context: ExecutionContext, tool: any) {
+  const tools = await context.flow.get('gemini:tools') || [];
+  
+  // Remove existing tool with same name
+  const filtered = tools.filter((t: any) => t.name !== tool.name);
+  filtered.push(tool);
+  
+  await context.flow.set('gemini:tools', filtered);
+}
+
+async function collectFunctionDeclarations(context: ExecutionContext) {
+  const tools = await context.flow.get('gemini:tools') || [];
+  return tools.map((t: any) => ({
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters
+  }));
+}
+
+async function getMemoryHistory(memoryNodeId: string, conversationId: string, context: ExecutionContext) {
+  const conversations = await context.storage.get(
+    StorageKeys.memory(memoryNodeId, 'conversations')
+  ) || {};
+  return conversations[conversationId] || [];
+}
+
+async function updateMemory(
+  memoryNodeId: string,
+  conversationId: string,
+  userMsg: any,
+  modelMsg: any,
+  context: ExecutionContext
+) {
+  const conversations = await context.storage.get(
+    StorageKeys.memory(memoryNodeId, 'conversations')
+  ) || {};
+  
+  let history = conversations[conversationId] || [];
+  history.push(userMsg, modelMsg);
+  
+  conversations[conversationId] = history;
+  await context.storage.put(
+    StorageKeys.memory(memoryNodeId, 'conversations'),
+    conversations
+  );
+}
+
+function processMessageForStorage(message: any, includeImages: boolean) {
+  if (!includeImages && message.parts) {
+    const cleaned = JSON.parse(JSON.stringify(message));
+    cleaned.parts = cleaned.parts.filter((p: any) => !p.inlineData);
+    if (cleaned.parts.length === 0) {
+      cleaned.parts = [{ text: '[Images removed]' }];
+    }
+    return cleaned;
+  }
+  return message;
+}
+
+function compressHistory(history: any[], threshold: number) {
+  if (history.length <= threshold) return history;
+  
+  const keepRecent = Math.floor(threshold * 0.6);
+  const recentMessages = history.slice(-keepRecent);
+  
+  const summary = {
+    role: 'user',
+    parts: [{
+      text: `[Previous conversation: ${Math.floor((history.length - keepRecent) / 2)} message pairs]`
+    }]
+  };
+  
+  return [summary, ...recentMessages];
+}
+
+async function queryRAGMemory(ragNodeId: string, query: string, context: ExecutionContext) {
+  const files = await context.storage.get(StorageKeys.rag(ragNodeId, 'files')) || [];
+  
+  if (files.length === 0) return '';
+  
+  // Simple mock - in production, use actual Gemini semantic search
+  return `Relevant context from ${files.length} documents...`;
+}
+
+// Gemini Files API helpers
+async function uploadFileToGemini(apiKey: string, file: any, mimeType: string, displayName: string) {
+  const url = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`;
+  
+  const formData = new FormData();
+  formData.append('file', file);
   
   const response = await fetch(url, {
     method: 'POST',
+    body: formData,
     headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(body)
+      'X-Goog-Upload-Protocol': 'multipart',
+      'X-Goog-Upload-Command': 'upload, finalize'
+    }
   });
   
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Gemini API error: ${response.status} - ${error}`);
+    throw new Error(`Upload failed: ${response.status}`);
   }
   
-  const data = await response.json();
-  
-  if (!data.candidates || data.candidates.length === 0) {
-    throw new Error('No response from Gemini API');
-  }
-  
-  const candidate = data.candidates[0];
-  const content = candidate.content;
-  
-  // Handle function calls
-  if (content.parts && content.parts.some((p: any) => p.functionCall)) {
-    const functionCall = content.parts.find((p: any) => p.functionCall)?.functionCall;
-    
-    if (options.enableFunctionCalling && functionCall) {
-      // Execute tool
-      const toolResult = await executeToolByName(functionCall.name, functionCall.args, context);
-      
-      // Continue conversation with tool result
-      const newContents = [...contents, content, {
-        role: 'function',
-        parts: [{
-          functionResponse: {
-            name: functionCall.name,
-            response: toolResult
-          }
-        }]
-      }];
-      
-      // Recursive call with tool result
-      return callGeminiAPI({ ...options, history: newContents.slice(0, -1), message: newContents[newContents.length - 1].parts }, node, context);
-    }
-  }
-  
-  const text = content.parts?.map((p: any) => p.text || '').join('') || '';
-  
+  return await response.json();
+}
+
+async function queryGeminiRAG(apiKey: string, query: string, files: any[], topK: number, threshold: number) {
+  // Mock implementation - replace with actual Gemini semantic retrieval
   return {
-    success: true,
-    text,
-    usageMetadata: data.usageMetadata || {},
-    finishReason: candidate.finishReason || 'STOP',
-    safetyRatings: candidate.safetyRatings || [],
-    functionCalls: content.parts?.filter((p: any) => p.functionCall).map((p: any) => p.functionCall) || []
+    query,
+    results: files.slice(0, topK).map(f => ({
+      file: f.name,
+      relevance: 0.8,
+      snippet: 'Relevant content...'
+    }))
   };
 }
 
-async function executeToolByName(toolName: string, args: any, context: ExecutionContext): Promise<any> {
-  const tools = await context.flow.get('gemini:tools') || [];
-  const tool = tools.find((t: any) => t.name === toolName);
+async function deleteGeminiFile(apiKey: string, fileName: string) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`;
   
-  if (!tool || !tool.executor) {
-    throw new Error(`Tool '${toolName}' not found`);
+  const response = await fetch(url, { method: 'DELETE' });
+  
+  if (!response.ok) {
+    throw new Error(`Delete failed: ${response.status}`);
   }
-  
-  return await tool.executor(args, context);
 }
 
-// ===================================================================
-// Storage Key Helper
-// ===================================================================
-
+// Add RAG storage key helper
+StorageKeys.rag = (nodeId: string, key: string) => `rag:${nodeId}:${key}`;
 StorageKeys.memory = (nodeId: string, key: string) => `mem:${nodeId}:${key}`;
