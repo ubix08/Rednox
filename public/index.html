@@ -642,21 +642,23 @@
         
         paletteNodes.forEach(node => {
           node.addEventListener('dragstart', (e) => {
-            e.dataTransfer.setData('nodeType', node.dataset.type);
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('text/plain', node.dataset.type);
           });
         });
 
         this.canvasContainer.addEventListener('dragover', (e) => {
           e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
         });
 
         this.canvasContainer.addEventListener('drop', (e) => {
           e.preventDefault();
-          const nodeType = e.dataTransfer.getData('nodeType');
+          const nodeType = e.dataTransfer.getData('text/plain');
           if (nodeType) {
             const rect = this.canvasContainer.getBoundingClientRect();
-            const x = e.clientX - rect.left - this.canvasOffset.x;
-            const y = e.clientY - rect.top - this.canvasOffset.y;
+            const x = (e.clientX - rect.left - this.canvasOffset.x) / this.scale;
+            const y = (e.clientY - rect.top - this.canvasOffset.y) / this.scale;
             this.addNode(nodeType, x, y);
           }
         });
@@ -665,7 +667,8 @@
       setupCanvasEvents() {
         // Panning
         this.canvasContainer.addEventListener('mousedown', (e) => {
-          if (e.target === this.canvasContainer || e.target === this.canvas) {
+          if (e.target === this.canvasContainer || e.target === this.connectionsSvg) {
+            e.preventDefault();
             this.isPanning = true;
             this.panStart = { x: e.clientX - this.canvasOffset.x, y: e.clientY - this.canvasOffset.y };
             this.canvas.classList.add('panning');
@@ -673,14 +676,15 @@
         });
 
         document.addEventListener('mousemove', (e) => {
-          if (this.isPanning) {
+          if (this.isPanning && !this.isDraggingNode) {
             this.canvasOffset.x = e.clientX - this.panStart.x;
             this.canvasOffset.y = e.clientY - this.panStart.y;
-            this.canvas.style.transform = `translate(${this.canvasOffset.x}px, ${this.canvasOffset.y}px)`;
+            this.canvas.style.transform = `translate(${this.canvasOffset.x}px, ${this.canvasOffset.y}px) scale(${this.scale})`;
+            this.connectionsSvg.style.transform = `translate(${this.canvasOffset.x}px, ${this.canvasOffset.y}px)`;
             this.updateConnections();
           }
 
-          if (this.tempConnection) {
+          if (this.tempConnection && !this.isPanning) {
             this.updateTempConnection(e);
           }
         });
@@ -706,8 +710,10 @@
           }
         });
 
-        document.addEventListener('click', () => {
-          this.hideContextMenu();
+        document.addEventListener('click', (e) => {
+          if (!e.target.closest('.context-menu')) {
+            this.hideContextMenu();
+          }
         });
       },
 
@@ -768,7 +774,11 @@
         `;
 
         el.addEventListener('mousedown', (e) => {
-          if (e.target.classList.contains('port')) return;
+          if (e.target.classList.contains('port')) {
+            e.stopPropagation();
+            return;
+          }
+          e.preventDefault();
           this.selectNode(node.id);
           this.startDragNode(e, node);
         });
@@ -795,21 +805,33 @@
       },
 
       startDragNode(e, node) {
+        if (e.target.classList.contains('port')) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
         this.isDraggingNode = true;
         const startX = e.clientX;
         const startY = e.clientY;
         const startNodeX = node.x;
         const startNodeY = node.y;
 
-        const onMove = (e) => {
-          if (this.isDraggingNode) {
-            node.x = startNodeX + (e.clientX - startX);
-            node.y = startNodeY + (e.clientY - startY);
-            const el = this.canvas.querySelector(`[data-id="${node.id}"]`);
+        const onMove = (moveEvent) => {
+          if (!this.isDraggingNode) return;
+          
+          const dx = (moveEvent.clientX - startX) / this.scale;
+          const dy = (moveEvent.clientY - startY) / this.scale;
+          
+          node.x = startNodeX + dx;
+          node.y = startNodeY + dy;
+          
+          const el = this.canvas.querySelector(`[data-id="${node.id}"]`);
+          if (el) {
             el.style.left = node.x + 'px';
             el.style.top = node.y + 'px';
-            this.updateConnections();
           }
+          
+          this.updateConnections();
         };
 
         const onUp = () => {
