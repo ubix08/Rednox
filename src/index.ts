@@ -8,7 +8,7 @@ import { handleAdmin } from './handlers/adminHandler';
 
 // Import all nodes
 import './nodes/nodes';
-//import './nodes/gemini-nodes';
+import './nodes/gemini-nodes';
 
 // Export the DO
 export { FlowExecutorDO } from './durable-objects/FlowExecutorDO';
