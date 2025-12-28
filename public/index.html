@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RedNox - Flow Management</title>
+  <title>RedNox Visual Flow Editor</title>
   <style>
     * {
       margin: 0;
@@ -18,81 +18,63 @@
       --secondary: #34A853;
       --danger: #EA4335;
       --warning: #FBBC04;
-      --bg: #f8f9fa;
-      --surface: #ffffff;
-      --text: #202124;
-      --text-secondary: #5f6368;
-      --border: #dadce0;
-      --shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
-      --shadow-lg: 0 2px 4px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.1);
+      --bg: #1e1e1e;
+      --surface: #2d2d2d;
+      --surface-light: #3d3d3d;
+      --text: #e0e0e0;
+      --text-secondary: #a0a0a0;
+      --border: #404040;
+      --node-http: #e7e7ae;
+      --node-function: #fdd0a2;
+      --node-parser: #c7e9c0;
+      --node-storage: #7CB9E8;
     }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       background: var(--bg);
       color: var(--text);
-      line-height: 1.6;
+      overflow: hidden;
+      height: 100vh;
     }
 
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 1rem;
+    .app-container {
+      display: flex;
+      height: 100vh;
+      flex-direction: column;
     }
 
     /* Header */
-    header {
+    .header {
       background: var(--surface);
-      box-shadow: var(--shadow);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-
-    .header-content {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 1rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 1rem;
-      flex-wrap: wrap;
+      flex-shrink: 0;
     }
 
     .logo {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      font-size: 1.5rem;
+      gap: 0.5rem;
+      font-size: 1.25rem;
       font-weight: 700;
       color: var(--primary);
-    }
-
-    .logo-icon {
-      width: 36px;
-      height: 36px;
-      background: linear-gradient(135deg, var(--primary), var(--secondary));
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-weight: bold;
     }
 
     .header-actions {
       display: flex;
       gap: 0.5rem;
-      flex-wrap: wrap;
       align-items: center;
     }
 
-    /* Buttons */
     .btn {
-      padding: 0.625rem 1.25rem;
+      padding: 0.5rem 1rem;
       border: none;
-      border-radius: 8px;
+      border-radius: 6px;
       font-size: 0.875rem;
       font-weight: 500;
       cursor: pointer;
@@ -100,12 +82,13 @@
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      white-space: nowrap;
+      background: var(--surface-light);
+      color: var(--text);
     }
 
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+    .btn:hover {
+      background: var(--primary);
+      color: white;
     }
 
     .btn-primary {
@@ -113,37 +96,8 @@
       color: white;
     }
 
-    .btn-primary:hover:not(:disabled) {
+    .btn-primary:hover {
       background: var(--primary-dark);
-      box-shadow: var(--shadow);
-    }
-
-    .btn-secondary {
-      background: var(--surface);
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-      background: var(--bg);
-    }
-
-    .btn-danger {
-      background: var(--danger);
-      color: white;
-    }
-
-    .btn-danger:hover:not(:disabled) {
-      background: #c5221f;
-    }
-
-    .btn-success {
-      background: var(--secondary);
-      color: white;
-    }
-
-    .btn-success:hover:not(:disabled) {
-      background: #0f9d58;
     }
 
     .btn-sm {
@@ -151,96 +105,205 @@
       font-size: 0.8125rem;
     }
 
-    .btn-icon {
-      padding: 0.5rem;
-      width: 36px;
-      height: 36px;
+    /* Main Layout */
+    .main-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 250px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .sidebar-section {
+      padding: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+
+    .node-palette {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .palette-node {
+      padding: 0.625rem;
+      background: var(--surface-light);
+      border-radius: 6px;
+      cursor: grab;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      border: 2px solid transparent;
+    }
+
+    .palette-node:hover {
+      border-color: var(--primary);
+      transform: translateX(4px);
+    }
+
+    .palette-node:active {
+      cursor: grabbing;
+    }
+
+    .node-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
       display: flex;
       align-items: center;
       justify-content: center;
+      font-size: 0.75rem;
+      flex-shrink: 0;
     }
 
-    /* Tabs */
-    .tabs {
+    /* Canvas */
+    .canvas-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: 
+        linear-gradient(90deg, var(--border) 1px, transparent 1px),
+        linear-gradient(var(--border) 1px, transparent 1px);
+      background-size: 20px 20px;
+      background-position: -1px -1px;
+    }
+
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      cursor: grab;
+    }
+
+    #canvas.panning {
+      cursor: grabbing;
+    }
+
+    /* Flow Nodes */
+    .flow-node {
+      position: absolute;
+      min-width: 150px;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      cursor: move;
+      transition: box-shadow 0.2s;
+      user-select: none;
+    }
+
+    .flow-node.selected {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.2);
+    }
+
+    .flow-node:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .node-header {
       display: flex;
+      align-items: center;
       gap: 0.5rem;
-      margin: 1.5rem 0 1rem;
-      border-bottom: 1px solid var(--border);
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .tab {
-      padding: 0.75rem 1rem;
-      background: none;
-      border: none;
-      border-bottom: 2px solid transparent;
-      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+      font-weight: 600;
       font-size: 0.875rem;
-      font-weight: 500;
-      cursor: pointer;
-      white-space: nowrap;
+    }
+
+    .node-type {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.25rem;
+    }
+
+    .node-ports {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+    }
+
+    .port {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--border);
+      border: 2px solid var(--surface);
+      cursor: crosshair;
       transition: all 0.2s;
+      position: relative;
+      z-index: 10;
     }
 
-    .tab:hover {
-      color: var(--primary);
+    .port:hover {
+      background: var(--primary);
+      transform: scale(1.3);
     }
 
-    .tab.active {
-      color: var(--primary);
-      border-bottom-color: var(--primary);
+    .port.input {
+      margin-left: -1rem;
     }
 
-    .tab-content {
+    .port.output {
+      margin-right: -1rem;
+    }
+
+    /* Connection Lines */
+    .connection {
+      position: absolute;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .connection path {
+      fill: none;
+      stroke: var(--primary);
+      stroke-width: 2;
+      opacity: 0.6;
+    }
+
+    .connection.active path {
+      stroke: var(--secondary);
+      opacity: 1;
+      stroke-width: 3;
+    }
+
+    /* Properties Panel */
+    .properties-panel {
+      width: 300px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 1rem;
+      flex-shrink: 0;
+    }
+
+    .properties-panel.hidden {
       display: none;
     }
 
-    .tab-content.active {
-      display: block;
+    .prop-group {
+      margin-bottom: 1.5rem;
     }
 
-    /* Cards */
-    .card {
-      background: var(--surface);
-      border-radius: 12px;
-      padding: 1.25rem;
-      margin-bottom: 1rem;
-      box-shadow: var(--shadow);
-      transition: box-shadow 0.2s;
-    }
-
-    .card:hover {
-      box-shadow: var(--shadow-lg);
-    }
-
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 1rem;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-    }
-
-    .card-title {
-      font-size: 1.125rem;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .card-actions {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    /* Forms */
-    .form-group {
-      margin-bottom: 1.25rem;
-    }
-
-    .form-label {
+    .prop-label {
       display: block;
       font-size: 0.875rem;
       font-weight: 500;
@@ -248,137 +311,93 @@
       color: var(--text);
     }
 
-    .form-help {
-      display: block;
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      margin-top: 0.25rem;
-    }
-
-    .form-input,
-    .form-select,
-    .form-textarea {
+    .prop-input,
+    .prop-select,
+    .prop-textarea {
       width: 100%;
-      padding: 0.625rem;
+      padding: 0.5rem;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
       font-size: 0.875rem;
       font-family: inherit;
-      transition: border-color 0.2s;
     }
 
-    .form-input:focus,
-    .form-select:focus,
-    .form-textarea:focus {
-      outline: none;
-      border-color: var(--primary);
-    }
-
-    .form-input.error,
-    .form-textarea.error {
-      border-color: var(--danger);
-    }
-
-    .form-textarea {
+    .prop-textarea {
       resize: vertical;
       min-height: 100px;
       font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
       font-size: 0.8125rem;
     }
 
-    .form-error {
-      color: var(--danger);
-      font-size: 0.75rem;
-      margin-top: 0.25rem;
+    .prop-input:focus,
+    .prop-select:focus,
+    .prop-textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    /* Context Menu */
+    .context-menu {
+      position: fixed;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      display: none;
+      min-width: 150px;
+    }
+
+    .context-menu.active {
       display: block;
     }
 
-    /* Status Badge */
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.375rem;
-      padding: 0.25rem 0.75rem;
-      border-radius: 12px;
-      font-size: 0.75rem;
-      font-weight: 500;
+    .context-menu-item {
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: background 0.2s;
     }
 
-    .badge-success {
-      background: #e6f4ea;
-      color: #137333;
+    .context-menu-item:hover {
+      background: var(--surface-light);
     }
 
-    .badge-danger {
-      background: #fce8e6;
-      color: #c5221f;
-    }
-
-    .badge-warning {
-      background: #fef7e0;
-      color: #b95000;
-    }
-
-    .badge-info {
-      background: #e8f0fe;
-      color: #1967d2;
-    }
-
-    .badge-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: currentColor;
+    .context-menu-item.danger:hover {
+      background: var(--danger);
+      color: white;
     }
 
     /* Modal */
     .modal {
-      display: none;
       position: fixed;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 1000;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
       padding: 1rem;
-      overflow-y: auto;
-      animation: fadeIn 0.2s;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
     }
 
     .modal.active {
       display: flex;
-      align-items: flex-start;
-      justify-content: center;
-      padding-top: 2rem;
     }
 
     .modal-content {
       background: var(--surface);
       border-radius: 12px;
       padding: 1.5rem;
-      max-width: 800px;
+      max-width: 600px;
       width: 100%;
-      max-height: 90vh;
+      max-height: 80vh;
       overflow-y: auto;
-      box-shadow: var(--shadow-lg);
-      animation: slideUp 0.3s;
-    }
-
-    @keyframes slideUp {
-      from { 
-        opacity: 0;
-        transform: translateY(20px); 
-      }
-      to { 
-        opacity: 1;
-        transform: translateY(0); 
-      }
     }
 
     .modal-header {
@@ -402,15 +421,10 @@
       padding: 0;
       width: 32px;
       height: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 50%;
-      transition: background 0.2s;
     }
 
     .modal-close:hover {
-      background: var(--bg);
+      color: var(--text);
     }
 
     .modal-footer {
@@ -418,1299 +432,922 @@
       gap: 0.75rem;
       justify-content: flex-end;
       margin-top: 1.5rem;
-      flex-wrap: wrap;
     }
 
-    /* Empty State */
-    .empty-state {
-      text-align: center;
-      padding: 3rem 1rem;
-      color: var(--text-secondary);
-    }
-
-    .empty-icon {
-      font-size: 3rem;
-      margin-bottom: 1rem;
-      opacity: 0.5;
-    }
-
-    /* Loading */
-    .loading {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 3px solid var(--border);
-      border-top-color: var(--primary);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    .loading-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(255, 255, 255, 0.9);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 2000;
-    }
-
-    .loading-overlay.active {
-      display: flex;
-    }
-
-    /* Stats Grid */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .stat-card {
-      background: var(--surface);
-      border-radius: 12px;
-      padding: 1.25rem;
-      box-shadow: var(--shadow);
-    }
-
-    .stat-label {
-      font-size: 0.875rem;
-      color: var(--text-secondary);
-      margin-bottom: 0.5rem;
-    }
-
-    .stat-value {
-      font-size: 2rem;
-      font-weight: 700;
-      color: var(--text);
-    }
-
-    /* Alert */
     .alert {
-      padding: 1rem;
-      border-radius: 8px;
+      padding: 0.75rem;
+      border-radius: 6px;
       margin-bottom: 1rem;
-      display: flex;
-      align-items: flex-start;
-      gap: 0.75rem;
-      animation: slideDown 0.3s;
-    }
-
-    @keyframes slideDown {
-      from {
-        opacity: 0;
-        transform: translateY(-10px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+      font-size: 0.875rem;
     }
 
     .alert-success {
-      background: #e6f4ea;
-      color: #137333;
-      border-left: 4px solid #34A853;
+      background: rgba(52, 168, 83, 0.2);
+      border: 1px solid var(--secondary);
+      color: var(--secondary);
     }
 
     .alert-error {
-      background: #fce8e6;
-      color: #c5221f;
-      border-left: 4px solid #EA4335;
+      background: rgba(234, 67, 53, 0.2);
+      border: 1px solid var(--danger);
+      color: var(--danger);
     }
 
-    .alert-info {
-      background: #e8f0fe;
-      color: #1967d2;
-      border-left: 4px solid #4285F4;
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
     }
 
-    .alert-warning {
-      background: #fef7e0;
-      color: #b95000;
-      border-left: 4px solid #FBBC04;
-    }
-
-    .flow-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-      font-size: 0.8125rem;
-      color: var(--text-secondary);
-      margin-top: 0.75rem;
-    }
-
-    .flow-meta-item {
-      display: flex;
-      align-items: center;
-      gap: 0.375rem;
-    }
-
-    .code-editor {
-      background: #1e1e1e;
-      color: #d4d4d4;
-      border-radius: 8px;
-      padding: 1rem;
-      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
-      font-size: 0.8125rem;
-      overflow-x: auto;
-      min-height: 400px;
-      line-height: 1.5;
-      white-space: pre;
-    }
-
-    .endpoint-list {
-      list-style: none;
-      padding: 0;
-    }
-
-    .endpoint-item {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 0.75rem;
+    ::-webkit-scrollbar-track {
       background: var(--bg);
-      border-radius: 8px;
-      margin-bottom: 0.5rem;
-      font-size: 0.875rem;
     }
 
-    .method-badge {
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      min-width: 60px;
-      text-align: center;
-    }
-
-    .method-get { background: #e8f0fe; color: #1967d2; }
-    .method-post { background: #e6f4ea; color: #137333; }
-    .method-put { background: #fef7e0; color: #b95000; }
-    .method-delete { background: #fce8e6; color: #c5221f; }
-
-    .endpoint-path {
-      flex: 1;
-      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
-      word-break: break-all;
-      font-size: 0.8125rem;
-    }
-
-    /* Search & Filter */
-    .toolbar {
-      display: flex;
-      gap: 1rem;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-
-    .search-box {
-      flex: 1;
-      min-width: 200px;
-      position: relative;
-    }
-
-    .search-box input {
-      width: 100%;
-      padding: 0.625rem 0.625rem 0.625rem 2.5rem;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-size: 0.875rem;
-    }
-
-    .search-icon {
-      position: absolute;
-      left: 0.75rem;
-      top: 50%;
-      transform: translateY(-50%);
-      color: var(--text-secondary);
-    }
-
-    /* Template Cards */
-    .template-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 1rem;
-      margin-top: 1rem;
-    }
-
-    .template-card {
-      background: var(--surface);
-      border: 2px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .template-card:hover {
-      border-color: var(--primary);
-      box-shadow: var(--shadow-lg);
-      transform: translateY(-2px);
-    }
-
-    .template-icon {
-      font-size: 2rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .template-title {
-      font-size: 1rem;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-    }
-
-    .template-description {
-      font-size: 0.8125rem;
-      color: var(--text-secondary);
-      line-height: 1.4;
-    }
-
-    /* JSON Validator */
-    .json-validator {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.75rem;
-      margin-top: 0.5rem;
-      font-size: 0.8125rem;
-    }
-
-    .json-validator.valid {
-      border-color: var(--secondary);
-      background: #e6f4ea;
-      color: #137333;
-    }
-
-    .json-validator.invalid {
-      border-color: var(--danger);
-      background: #fce8e6;
-      color: #c5221f;
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .container {
-        padding: 0.75rem;
-      }
-
-      .card {
-        padding: 1rem;
-        border-radius: 8px;
-      }
-
-      .modal-content {
-        margin: 1rem;
-        padding: 1rem;
-      }
-
-      .btn {
-        padding: 0.5rem 1rem;
-        font-size: 0.8125rem;
-      }
-
-      .stats-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .template-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .code-editor {
-        font-size: 0.75rem;
-      }
-    }
-
-    .copy-btn {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 0.25rem 0.5rem;
-      font-size: 0.75rem;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .copy-btn:hover {
+    ::-webkit-scrollbar-thumb {
       background: var(--border);
+      border-radius: 4px;
     }
 
-    .copy-btn.copied {
-      background: var(--secondary);
-      color: white;
-      border-color: var(--secondary);
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--surface-light);
     }
   </style>
 </head>
 <body>
-  <!-- Loading Overlay -->
-  <div id="loading-overlay" class="loading-overlay">
-    <div style="text-align: center;">
-      <div class="loading" style="width: 40px; height: 40px; border-width: 4px;"></div>
-      <p style="margin-top: 1rem; color: var(--text-secondary);">Loading...</p>
-    </div>
-  </div>
-
-  <!-- Header -->
-  <header>
-    <div class="header-content">
+  <div class="app-container">
+    <!-- Header -->
+    <div class="header">
       <div class="logo">
-        <div class="logo-icon">R</div>
-        <span>RedNox</span>
-        <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 400;">Flow Management</span>
+        <span>🔴</span>
+        <span>RedNox Flow Editor</span>
       </div>
       <div class="header-actions">
-        <button class="btn btn-secondary btn-sm" onclick="loadStats()" title="Refresh">
-          <span>↻</span>
-          <span>Refresh</span>
-        </button>
-        <button class="btn btn-primary btn-sm" onclick="showCreateFlowModal()">
-          <span>+</span>
-          <span>New Flow</span>
-        </button>
-        <button class="btn btn-secondary btn-sm" onclick="importFlow()" title="Import JSON">
-          <span>📥</span>
-          <span>Import</span>
-        </button>
-        <button class="btn btn-secondary btn-sm" onclick="initializeDatabase()">
-          <span>⚙</span>
-          <span>Init DB</span>
-        </button>
+        <input type="text" id="flow-name" placeholder="Flow Name" class="prop-input" style="width: 200px;" value="my-flow">
+        <button class="btn btn-sm" onclick="app.newFlow()">📄 New</button>
+        <button class="btn btn-sm" onclick="app.exportFlow()">💾 Export</button>
+        <button class="btn btn-sm" onclick="app.importFlow()">📥 Import</button>
+        <button class="btn btn-primary btn-sm" onclick="app.deployFlow()">🚀 Deploy</button>
       </div>
     </div>
-  </header>
 
-  <!-- Main Content -->
-  <div class="container">
-    <!-- Stats -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">Total Flows</div>
-        <div class="stat-value" id="stat-flows">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Active Routes</div>
-        <div class="stat-value" id="stat-routes">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Total Logs</div>
-        <div class="stat-value" id="stat-logs">-</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">System Status</div>
-        <div class="stat-value" style="font-size: 1.5rem;">
-          <span class="badge badge-success">
-            <span class="badge-dot"></span>
-            <span>Online</span>
-          </span>
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-title">Input Nodes</div>
+          <div class="node-palette">
+            <div class="palette-node" draggable="true" data-type="http-in">
+              <div class="node-icon" style="background: var(--node-http);">🌐</div>
+              <span>HTTP In</span>
+            </div>
+            <div class="palette-node" draggable="true" data-type="inject">
+              <div class="node-icon" style="background: var(--node-http);">⏰</div>
+              <span>Inject</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-title">Function Nodes</div>
+          <div class="node-palette">
+            <div class="palette-node" draggable="true" data-type="function">
+              <div class="node-icon" style="background: var(--node-function);">ƒ</div>
+              <span>Function</span>
+            </div>
+            <div class="palette-node" draggable="true" data-type="switch">
+              <div class="node-icon" style="background: var(--node-function);">⚡</div>
+              <span>Switch</span>
+            </div>
+            <div class="palette-node" draggable="true" data-type="change">
+              <div class="node-icon" style="background: var(--node-function);">✏️</div>
+              <span>Change</span>
+            </div>
+            <div class="palette-node" draggable="true" data-type="template">
+              <div class="node-icon" style="background: var(--node-function);">📝</div>
+              <span>Template</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-title">Parser Nodes</div>
+          <div class="node-palette">
+            <div class="palette-node" draggable="true" data-type="json">
+              <div class="node-icon" style="background: var(--node-parser);">{}</div>
+              <span>JSON</span>
+            </div>
+            <div class="palette-node" draggable="true" data-type="csv">
+              <div class="node-icon" style="background: var(--node-parser);">📊</div>
+              <span>CSV</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-title">Storage Nodes</div>
+          <div class="node-palette">
+            <div class="palette-node" draggable="true" data-type="context">
+              <div class="node-icon" style="background: var(--node-storage);">💾</div>
+              <span>Context</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-title">Output Nodes</div>
+          <div class="node-palette">
+            <div class="palette-node" draggable="true" data-type="http-response">
+              <div class="node-icon" style="background: var(--node-http);">📤</div>
+              <span>HTTP Response</span>
+            </div>
+            <div class="palette-node" draggable="true" data-type="debug">
+              <div class="node-icon" style="background: #87a980;">🐛</div>
+              <span>Debug</span>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Alerts Container -->
-    <div id="alerts"></div>
-
-    <!-- Tabs -->
-    <div class="tabs">
-      <button class="tab active" onclick="switchTab('flows')">Flows</button>
-      <button class="tab" onclick="switchTab('routes')">Routes</button>
-      <button class="tab" onclick="switchTab('docs')">Documentation</button>
-    </div>
-
-    <!-- Flows Tab -->
-    <div id="flows-tab" class="tab-content active">
-      <div class="toolbar">
-        <div class="search-box">
-          <span class="search-icon">🔍</span>
-          <input type="text" id="flow-search" placeholder="Search flows..." oninput="filterFlows()">
-        </div>
-        <select class="form-select" id="flow-filter" style="width: auto;" onchange="filterFlows()">
-          <option value="all">All Flows</option>
-          <option value="enabled">Enabled Only</option>
-          <option value="disabled">Disabled Only</option>
-        </select>
+      <!-- Canvas -->
+      <div class="canvas-container" id="canvas-container">
+        <svg id="connections-svg" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;"></svg>
+        <div id="canvas"></div>
       </div>
-      <div id="flows-list"></div>
-    </div>
 
-    <!-- Routes Tab -->
-    <div id="routes-tab" class="tab-content">
-      <div id="routes-list"></div>
-    </div>
-
-    <!-- Documentation Tab -->
-    <div id="docs-tab" class="tab-content">
-      <div class="card">
-        <h3 class="card-title">Getting Started</h3>
-        <div style="margin-top: 1rem; line-height: 1.8;">
-          <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">1. Initialize Database</h4>
-          <p style="color: var(--text-secondary);">
-            Click "Init DB" to create the necessary database tables.
-          </p>
-
-          <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">2. Create Your First Flow</h4>
-          <p style="color: var(--text-secondary);">
-            Click "New Flow" and provide the flow configuration as JSON.
-          </p>
-
-          <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">3. Test Your Flow</h4>
-          <p style="color: var(--text-secondary);">
-            Each flow gets endpoints based on http-in nodes. Test them using curl or Postman.
-          </p>
-
-          <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Example Flow Structure</h4>
-          <pre class="code-editor" style="margin-top: 0.75rem;">{
-  "id": "my-chatbot",
-  "name": "My Chatbot",
-  "description": "A simple chatbot",
-  "nodes": [
-    {
-      "id": "http-in-1",
-      "type": "http-in",
-      "url": "/chat",
-      "method": "post",
-      "wires": [["function-1"]]
-    },
-    {
-      "id": "function-1",
-      "type": "function",
-      "func": "msg.payload = { response: 'Hello!' }; return msg;",
-      "wires": [["http-out-1"]]
-    },
-    {
-      "id": "http-out-1",
-      "type": "http-response",
-      "wires": []
-    }
-  ]
-}</pre>
-        </div>
+      <!-- Properties Panel -->
+      <div class="properties-panel" id="properties-panel">
+        <h3 style="margin-bottom: 1rem;">Node Properties</h3>
+        <p style="color: var(--text-secondary); font-size: 0.875rem;">Select a node to edit its properties</p>
       </div>
     </div>
   </div>
 
-  <!-- Create/Edit Flow Modal -->
-  <div id="flow-modal" class="modal">
+  <!-- Context Menu -->
+  <div class="context-menu" id="context-menu">
+    <div class="context-menu-item" onclick="app.deleteSelectedNode()">🗑️ Delete</div>
+    <div class="context-menu-item" onclick="app.duplicateSelectedNode()">📋 Duplicate</div>
+  </div>
+
+  <!-- Deploy Modal -->
+  <div class="modal" id="deploy-modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 class="modal-title" id="modal-title">Create Flow</h3>
-        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <h3 class="modal-title">Deploy Flow</h3>
+        <button class="modal-close" onclick="app.closeModal()">&times;</button>
       </div>
-      
-      <div class="form-group">
-        <label class="form-label">Flow Configuration (JSON) *</label>
-        <textarea 
-          id="flow-config" 
-          class="form-textarea code-editor" 
-          rows="20" 
-          placeholder='{"id": "my-flow", "name": "My Flow", "description": "Description", "nodes": [...]}'
-          oninput="validateJSON()"
-          style="min-height: 400px;"></textarea>
-        <div id="json-validation" class="json-validator"></div>
-        <span id="config-error" class="form-error"></span>
-        <span class="form-help">
-          The JSON must include: id, name, description (optional), and nodes array.
-          The id and name will be extracted from the JSON.
-        </span>
+      <div id="deploy-content">
+        <div class="prop-group">
+          <label class="prop-label">API Endpoint</label>
+          <input type="text" id="api-endpoint" class="prop-input" placeholder="https://your-worker.workers.dev">
+        </div>
+        <div id="deploy-result"></div>
       </div>
-
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-secondary" onclick="formatJSON()">Format JSON</button>
-        <button class="btn btn-primary" id="save-flow-btn" onclick="saveFlow()" disabled>
-          <span id="save-btn-text">Create Flow</span>
-        </button>
+        <button class="btn" onclick="app.closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="app.submitDeploy()">Deploy</button>
       </div>
     </div>
   </div>
-
-  <!-- View Flow Modal -->
-  <div id="view-modal" class="modal">
-    <div class="modal-content" style="max-width: 900px;">
-      <div class="modal-header">
-        <h3 class="modal-title" id="view-title">Flow Details</h3>
-        <button class="modal-close" onclick="closeViewModal()">&times;</button>
-      </div>
-      
-      <div id="view-content"></div>
-
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="exportFlow()">Export JSON</button>
-        <button class="btn btn-secondary" onclick="closeViewModal()">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Hidden file input for import -->
-  <input type="file" id="import-file" accept=".json" style="display: none;" onchange="handleImport(event)">
 
   <script>
-    // Configuration
-    const API_BASE = window.location.origin;
-    let currentFlowId = null;
-    let editMode = false;
-    let allFlows = [];
-    let currentViewFlow = null;
+    const app = {
+      nodes: [],
+      connections: [],
+      selectedNode: null,
+      canvas: null,
+      canvasContainer: null,
+      connectionsSvg: null,
+      isDraggingNode: false,
+      isPanning: false,
+      panStart: { x: 0, y: 0 },
+      canvasOffset: { x: 0, y: 0 },
+      scale: 1,
+      connectingFrom: null,
+      tempConnection: null,
 
-    // Initialize
-    document.addEventListener('DOMContentLoaded', () => {
-      loadStats();
-      loadFlows();
-    });
-
-    // Tab Switching
-    function switchTab(tabName) {
-      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-      
-      event.target.classList.add('active');
-      document.getElementById(`${tabName}-tab`).classList.add('active');
-
-      if (tabName === 'flows') loadFlows();
-      if (tabName === 'routes') loadRoutes();
-    }
-
-    // Alert System
-    function showAlert(message, type = 'info', duration = 5000) {
-      const alertsDiv = document.getElementById('alerts');
-      const alert = document.createElement('div');
-      const icons = {
-        error: '❌',
-        success: '✅',
-        info: 'ℹ️',
-        warning: '⚠️'
-      };
-      
-      alert.className = `alert alert-${type}`;
-      alert.innerHTML = `
-        <span style="font-size: 1.25rem;">${icons[type] || icons.info}</span>
-        <div style="flex: 1;">
-          <strong>${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
-          <div style="margin-top: 0.25rem;">${escapeHtml(message)}</div>
-        </div>
-        <button onclick="this.parentElement.remove()" style="background: none; border: none; cursor: pointer; opacity: 0.6; font-size: 1.25rem;">&times;</button>
-      `;
-      alertsDiv.appendChild(alert);
-      
-      if (duration > 0) {
-        setTimeout(() => alert.remove(), duration);
-      }
-    }
-
-    // Loading Overlay
-    function showLoading() {
-      document.getElementById('loading-overlay').classList.add('active');
-    }
-
-    function hideLoading() {
-      document.getElementById('loading-overlay').classList.remove('active');
-    }
-
-    // Load Stats
-    async function loadStats() {
-      try {
-        const response = await fetch(`${API_BASE}/admin/stats`);
-        const data = await response.json();
+      init() {
+        this.canvas = document.getElementById('canvas');
+        this.canvasContainer = document.getElementById('canvas-container');
+        this.connectionsSvg = document.getElementById('connections-svg');
         
-        document.getElementById('stat-flows').textContent = data.flows || 0;
-        document.getElementById('stat-routes').textContent = data.routes || 0;
-        document.getElementById('stat-logs').textContent = data.logs || 0;
-      } catch (err) {
-        console.error('Failed to load stats:', err);
-      }
-    }
+        this.setupDragAndDrop();
+        this.setupCanvasEvents();
+        this.setupKeyboardShortcuts();
+        this.loadSampleFlow();
+      },
 
-    // Initialize Database
-    async function initializeDatabase() {
-      if (!confirm('Initialize database? This will create tables if they don\'t exist.')) return;
-      
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/admin/init`, { method: 'POST' });
-        const data = await response.json();
+      setupDragAndDrop() {
+        const paletteNodes = document.querySelectorAll('.palette-node');
         
-        hideLoading();
-        if (data.success) {
-          showAlert('Database initialized successfully', 'success');
-          loadStats();
-        } else {
-          showAlert(`Failed to initialize: ${data.error || 'Unknown error'}`, 'error');
-        }
-      } catch (err) {
-        hideLoading();
-        showAlert(`Error: ${err.message}`, 'error');
-      }
-    }
-
-    // Load Flows
-    async function loadFlows() {
-      const container = document.getElementById('flows-list');
-      container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading"></div></div>';
-
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows`);
-        const data = await response.json();
-
-        allFlows = data.flows || [];
-
-        if (allFlows.length === 0) {
-          container.innerHTML = `
-            <div class="empty-state">
-              <div class="empty-icon">📦</div>
-              <h3 style="margin-bottom: 0.5rem;">No flows yet</h3>
-              <p>Create your first flow to get started with RedNox.</p>
-              <div style="margin-top: 1.5rem;">
-                <button class="btn btn-primary" onclick="showCreateFlowModal()">
-                  Create Flow
-                </button>
-              </div>
-            </div>
-          `;
-          return;
-        }
-
-        filterFlows();
-      } catch (err) {
-        container.innerHTML = `
-          <div class="alert alert-error">
-            <span>❌</span>
-            <div>
-              <strong>Failed to load flows</strong>
-              <div style="margin-top: 0.25rem;">${escapeHtml(err.message)}</div>
-              <div style="margin-top: 0.5rem;">
-                <button class="btn btn-sm btn-secondary" onclick="loadFlows()">Retry</button>
-              </div>
-            </div>
-          </div>
-        `;
-      }
-    }
-
-    // Filter Flows
-    function filterFlows() {
-      const searchTerm = document.getElementById('flow-search').value.toLowerCase();
-      const filter = document.getElementById('flow-filter').value;
-      
-      let filtered = allFlows.filter(flow => {
-        const matchesSearch = !searchTerm || 
-          flow.name.toLowerCase().includes(searchTerm) ||
-          (flow.description && flow.description.toLowerCase().includes(searchTerm)) ||
-          flow.id.toLowerCase().includes(searchTerm);
-        
-        const matchesFilter = filter === 'all' ||
-          (filter === 'enabled' && flow.enabled) ||
-          (filter === 'disabled' && !flow.enabled);
-        
-        return matchesSearch && matchesFilter;
-      });
-
-      const container = document.getElementById('flows-list');
-      
-      if (filtered.length === 0) {
-        container.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-icon">🔍</div>
-            <p>No flows match your search criteria</p>
-          </div>
-        `;
-        return;
-      }
-
-      container.innerHTML = filtered.map(flow => `
-        <div class="card">
-          <div class="card-header">
-            <div style="flex: 1;">
-              <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
-                <h3 class="card-title">${escapeHtml(flow.name)}</h3>
-                <span class="badge ${flow.enabled ? 'badge-success' : 'badge-danger'}">
-                  <span class="badge-dot"></span>
-                  ${flow.enabled ? 'Active' : 'Disabled'}
-                </span>
-              </div>
-              ${flow.description ? `<p style="color: var(--text-secondary); font-size: 0.875rem;">${escapeHtml(flow.description)}</p>` : ''}
-              <div class="flow-meta">
-                <span class="flow-meta-item">
-                  <span>🆔</span>
-                  <code style="background: var(--bg); padding: 0.125rem 0.375rem; border-radius: 4px; font-size: 0.75rem;">${flow.id}</code>
-                </span>
-                <span class="flow-meta-item">
-                  <span>📅</span>
-                  <span>Created ${formatDate(flow.created_at)}</span>
-                </span>
-                ${flow.updated_at !== flow.created_at ? `
-                  <span class="flow-meta-item">
-                    <span>🔄</span>
-                    <span>Updated ${formatDate(flow.updated_at)}</span>
-                  </span>
-                ` : ''}
-              </div>
-            </div>
-          </div>
-          <div class="card-actions">
-            <button class="btn btn-secondary btn-sm" onclick="viewFlow('${flow.id}')" title="View details">
-              👁 View
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="editFlow('${flow.id}')" title="Edit flow">
-              ✏️ Edit
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="duplicateFlow('${flow.id}')" title="Duplicate flow">
-              📋 Duplicate
-            </button>
-            <button class="btn ${flow.enabled ? 'btn-warning' : 'btn-success'} btn-sm" 
-                    onclick="toggleFlow('${flow.id}', ${!flow.enabled})"
-                    title="${flow.enabled ? 'Disable' : 'Enable'} flow">
-              ${flow.enabled ? '⏸ Disable' : '▶️ Enable'}
-            </button>
-            <button class="btn btn-danger btn-sm" onclick="deleteFlow('${flow.id}')" title="Delete flow">
-              🗑 Delete
-            </button>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    // Load Routes
-    async function loadRoutes() {
-      const container = document.getElementById('routes-list');
-      container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading"></div></div>';
-
-      try {
-        const response = await fetch(`${API_BASE}/admin/routes`);
-        const data = await response.json();
-
-        if (!data.routes || data.routes.length === 0) {
-          container.innerHTML = `
-            <div class="empty-state">
-              <div class="empty-icon">🛣️</div>
-              <h3 style="margin-bottom: 0.5rem;">No routes available</h3>
-              <p>Routes are created automatically when you add http-in nodes to flows.</p>
-            </div>
-          `;
-          return;
-        }
-
-        container.innerHTML = `
-          <div class="card">
-            <div class="card-header">
-              <h3 class="card-title">Active HTTP Routes (${data.routes.length})</h3>
-              <div class="badge badge-info">
-                ${data.routes.length} endpoint${data.routes.length !== 1 ? 's' : ''}
-              </div>
-            </div>
-            <ul class="endpoint-list">
-              ${data.routes.map(route => `
-                <li class="endpoint-item">
-                  <span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span>
-                  <code class="endpoint-path">${route.fullUrl || route.path}</code>
-                  <span style="color: var(--text-secondary); font-size: 0.75rem; white-space: nowrap;">${escapeHtml(route.flow_name)}</span>
-                  <button class="copy-btn" onclick="copyToClipboard('${route.fullUrl || route.path}')" title="Copy URL">
-                    📋
-                  </button>
-                </li>
-              `).join('')}
-            </ul>
-          </div>
-        `;
-      } catch (err) {
-        container.innerHTML = `
-          <div class="alert alert-error">
-            <span>❌</span>
-            <div>
-              <strong>Failed to load routes</strong>
-              <div style="margin-top: 0.25rem;">${escapeHtml(err.message)}</div>
-            </div>
-          </div>
-        `;
-      }
-    }
-
-    // Show Create Modal
-    function showCreateFlowModal() {
-      editMode = false;
-      currentFlowId = null;
-      document.getElementById('modal-title').textContent = 'Create Flow';
-      document.getElementById('save-btn-text').textContent = 'Create Flow';
-      document.getElementById('flow-config').value = JSON.stringify({
-        id: 'my-flow',
-        name: 'My Flow',
-        description: 'Description',
-        nodes: [
-          {
-            id: 'http-in-1',
-            type: 'http-in',
-            url: '/endpoint',
-            method: 'post',
-            wires: [['http-out-1']]
-          },
-          {
-            id: 'http-out-1',
-            type: 'http-response',
-            wires: []
-          }
-        ]
-      }, null, 2);
-      
-      validateJSON();
-      document.getElementById('flow-modal').classList.add('active');
-    }
-
-    // Edit Flow
-    async function editFlow(flowId) {
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
-        const flow = await response.json();
-
-        editMode = true;
-        currentFlowId = flowId;
-        document.getElementById('modal-title').textContent = 'Edit Flow';
-        document.getElementById('save-btn-text').textContent = 'Update Flow';
-        document.getElementById('flow-config').value = JSON.stringify(flow.config, null, 2);
-        
-        hideLoading();
-        validateJSON();
-        document.getElementById('flow-modal').classList.add('active');
-      } catch (err) {
-        hideLoading();
-        showAlert(`Failed to load flow: ${err.message}`, 'error');
-      }
-    }
-
-    // Duplicate Flow
-    async function duplicateFlow(flowId) {
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
-        const flow = await response.json();
-
-        const newName = `${flow.name} (Copy)`;
-        const newId = `${flow.id}-copy-${Date.now()}`;
-
-        editMode = false;
-        currentFlowId = null;
-        document.getElementById('modal-title').textContent = 'Duplicate Flow';
-        document.getElementById('save-btn-text').textContent = 'Create Flow';
-        
-        const config = flow.config;
-        config.id = newId;
-        config.name = newName;
-        
-        document.getElementById('flow-config').value = JSON.stringify(config, null, 2);
-        
-        hideLoading();
-        validateJSON();
-        document.getElementById('flow-modal').classList.add('active');
-      } catch (err) {
-        hideLoading();
-        showAlert(`Failed to duplicate flow: ${err.message}`, 'error');
-      }
-    }
-
-    // View Flow
-    async function viewFlow(flowId) {
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
-        const flow = await response.json();
-        currentViewFlow = flow;
-
-        document.getElementById('view-title').textContent = flow.name;
-        document.getElementById('view-content').innerHTML = `
-          <div class="form-group">
-            <label class="form-label">Flow ID</label>
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <code style="flex: 1; background: var(--bg); padding: 0.5rem; border-radius: 4px; font-size: 0.875rem;">${flow.id}</code>
-              <button class="copy-btn" onclick="copyToClipboard('${flow.id}')">📋 Copy</button>
-            </div>
-          </div>
-          
-          <div class="form-group">
-            <label class="form-label">Description</label>
-            <p>${flow.description || 'No description'}</p>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Status</label>
-            <span class="badge ${flow.enabled ? 'badge-success' : 'badge-danger'}">
-              <span class="badge-dot"></span>
-              ${flow.enabled ? 'Active' : 'Disabled'}
-            </span>
-          </div>
-
-          ${flow.routes && flow.routes.length > 0 ? `
-            <div class="form-group">
-              <label class="form-label">HTTP Endpoints (${flow.routes.length})</label>
-              <ul class="endpoint-list">
-                ${flow.routes.map(route => `
-                  <li class="endpoint-item">
-                    <span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span>
-                    <code class="endpoint-path">${route.fullUrl}</code>
-                    <button class="copy-btn" onclick="copyToClipboard('${route.fullUrl}')">📋</button>
-                  </li>
-                `).join('')}
-              </ul>
-            </div>
-          ` : '<div class="alert alert-info"><span>ℹ️</span><span>No HTTP endpoints configured</span></div>'}
-
-          <div class="form-group">
-            <label class="form-label">Node Count</label>
-            <p>${flow.config.nodes.length} nodes</p>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Configuration</label>
-            <pre class="code-editor">${JSON.stringify(flow.config, null, 2)}</pre>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
-            <div>
-              <label class="form-label">Created</label>
-              <p>${new Date(flow.created_at).toLocaleString()}</p>
-            </div>
-            <div>
-              <label class="form-label">Last Updated</label>
-              <p>${new Date(flow.updated_at).toLocaleString()}</p>
-            </div>
-          </div>
-        `;
-
-        hideLoading();
-        document.getElementById('view-modal').classList.add('active');
-      } catch (err) {
-        hideLoading();
-        showAlert(`Failed to load flow: ${err.message}`, 'error');
-      }
-    }
-
-    // Validate JSON
-    function validateJSON() {
-      const textarea = document.getElementById('flow-config');
-      const validator = document.getElementById('json-validation');
-      const errorSpan = document.getElementById('config-error');
-      const saveBtn = document.getElementById('save-flow-btn');
-      
-      try {
-        const config = JSON.parse(textarea.value);
-        
-        // Validation
-        const errors = [];
-        
-        if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
-          errors.push('Missing or invalid "id" field');
-        }
-        
-        if (!config.name || typeof config.name !== 'string' || config.name.trim() === '') {
-          errors.push('Missing or invalid "name" field');
-        }
-        
-        if (!config.nodes || !Array.isArray(config.nodes)) {
-          errors.push('Missing or invalid "nodes" array');
-        } else if (config.nodes.length === 0) {
-          errors.push('At least one node is required');
-        }
-        
-        // Check node structure
-        if (config.nodes && Array.isArray(config.nodes)) {
-          config.nodes.forEach((node, idx) => {
-            if (!node.id) errors.push(`Node ${idx + 1}: missing "id"`);
-            if (!node.type) errors.push(`Node ${idx + 1}: missing "type"`);
-            if (!Array.isArray(node.wires)) errors.push(`Node ${idx + 1}: missing or invalid "wires"`);
+        paletteNodes.forEach(node => {
+          node.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('nodeType', node.dataset.type);
           });
-        }
-        
-        if (errors.length > 0) {
-          validator.className = 'json-validator invalid';
-          validator.textContent = '⚠️ ' + errors.join(', ');
-          textarea.classList.add('error');
-          errorSpan.textContent = errors[0];
-          saveBtn.disabled = true;
-          return false;
-        }
-        
-        validator.className = 'json-validator valid';
-        validator.textContent = `✓ Valid flow config: "${config.name}" with ${config.nodes.length} node(s)`;
-        textarea.classList.remove('error');
-        errorSpan.textContent = '';
-        saveBtn.disabled = false;
-        return true;
-      } catch (err) {
-        validator.className = 'json-validator invalid';
-        validator.textContent = '❌ Invalid JSON: ' + err.message;
-        textarea.classList.add('error');
-        errorSpan.textContent = 'Invalid JSON syntax';
-        saveBtn.disabled = true;
-        return false;
-      }
-    }
-
-    // Format JSON
-    function formatJSON() {
-      const textarea = document.getElementById('flow-config');
-      try {
-        const parsed = JSON.parse(textarea.value);
-        textarea.value = JSON.stringify(parsed, null, 2);
-        validateJSON();
-      } catch (err) {
-        showAlert('Cannot format invalid JSON', 'error');
-      }
-    }
-
-    // Save Flow
-    async function saveFlow() {
-      const configText = document.getElementById('flow-config').value.trim();
-
-      if (!validateJSON()) {
-        showAlert('Please fix validation errors before saving', 'error');
-        return;
-      }
-
-      let config;
-      try {
-        config = JSON.parse(configText);
-      } catch (err) {
-        showAlert('Invalid JSON configuration: ' + err.message, 'error');
-        return;
-      }
-
-      showLoading();
-      try {
-        const url = editMode 
-          ? `${API_BASE}/admin/flows/${currentFlowId}`
-          : `${API_BASE}/admin/flows`;
-        
-        const method = editMode ? 'PUT' : 'POST';
-
-        const response = await fetch(url, {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(config)
         });
 
-        const data = await response.json();
-
-        hideLoading();
-
-        if (data.success || response.ok) {
-          showAlert(`Flow ${editMode ? 'updated' : 'created'} successfully!`, 'success');
-          closeModal();
-          loadFlows();
-          loadStats();
-
-          if (data.endpoints && data.endpoints.length > 0) {
-            setTimeout(() => {
-              const endpointList = data.endpoints.map(e => 
-                `<li style="margin: 0.5rem 0;"><code>${e.method} ${e.url}</code></li>`
-              ).join('');
-              showAlert(
-                `<div><strong>Endpoints created:</strong><ul style="margin-top: 0.5rem;">${endpointList}</ul></div>`,
-                'info',
-                10000
-              );
-            }, 500);
-          }
-        } else {
-          const errorMsg = data.error || 'Failed to save flow';
-          const details = data.errors ? '\n' + data.errors.join('\n') : '';
-          showAlert(errorMsg + details, 'error', 10000);
-        }
-      } catch (err) {
-        hideLoading();
-        showAlert(`Error: ${err.message}`, 'error');
-      }
-    }
-
-    // Toggle Flow
-    async function toggleFlow(flowId, enable) {
-      showLoading();
-      try {
-        const action = enable ? 'enable' : 'disable';
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}/${action}`, {
-          method: 'POST'
-        });
-
-        const data = await response.json();
-
-        hideLoading();
-        if (data.success) {
-          showAlert(`Flow ${action}d successfully`, 'success');
-          loadFlows();
-          loadStats();
-        } else {
-          showAlert(data.error || 'Failed to toggle flow', 'error');
-        }
-      } catch (err) {
-        hideLoading();
-        showAlert(`Error: ${err.message}`, 'error');
-      }
-    }
-
-    // Delete Flow
-    async function deleteFlow(flowId) {
-      const flow = allFlows.find(f => f.id === flowId);
-      const flowName = flow ? flow.name : flowId;
-      
-      if (!confirm(`Are you sure you want to delete "${flowName}"?\n\nThis action cannot be undone.`)) {
-        return;
-      }
-
-      showLoading();
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`, {
-          method: 'DELETE'
-        });
-
-        const data = await response.json();
-
-        hideLoading();
-        if (data.success) {
-          showAlert('Flow deleted successfully', 'success');
-          loadFlows();
-          loadStats();
-        } else {
-          showAlert(data.error || 'Failed to delete flow', 'error');
-        }
-      } catch (err) {
-        hideLoading();
-        showAlert(`Error: ${err.message}`, 'error');
-      }
-    }
-
-    // Import Flow
-    function importFlow() {
-      document.getElementById('import-file').click();
-    }
-
-    function handleImport(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const config = JSON.parse(e.target.result);
-          
-          editMode = false;
-          currentFlowId = null;
-          document.getElementById('modal-title').textContent = 'Import Flow';
-          document.getElementById('save-btn-text').textContent = 'Create Flow';
-          document.getElementById('flow-config').value = JSON.stringify(config, null, 2);
-          
-          validateJSON();
-          document.getElementById('flow-modal').classList.add('active');
-          
-          showAlert('Flow imported. Review and save.', 'info');
-        } catch (err) {
-          showAlert(`Failed to import: ${err.message}`, 'error');
-        }
-      };
-      reader.readAsText(file);
-      
-      event.target.value = '';
-    }
-
-    // Export Flow
-    function exportFlow() {
-      if (!currentViewFlow) return;
-      
-      const dataStr = JSON.stringify(currentViewFlow.config, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(dataBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${currentViewFlow.id}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-      
-      showAlert('Flow exported successfully', 'success');
-    }
-
-    // Close Modals
-    function closeModal() {
-      document.getElementById('flow-modal').classList.remove('active');
-    }
-
-    function closeViewModal() {
-      document.getElementById('view-modal').classList.remove('active');
-      currentViewFlow = null;
-    }
-
-    // Copy to Clipboard
-    async function copyToClipboard(text) {
-      try {
-        await navigator.clipboard.writeText(text);
-        
-        event.target.textContent = '✓';
-        event.target.classList.add('copied');
-        setTimeout(() => {
-          event.target.textContent = '📋';
-          event.target.classList.remove('copied');
-        }, 2000);
-        
-        showAlert('Copied to clipboard', 'success', 2000);
-      } catch (err) {
-        showAlert('Failed to copy', 'error');
-      }
-    }
-
-    // Utility Functions
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    function formatDate(dateStr) {
-      const date = new Date(dateStr);
-      const now = new Date();
-      const diffMs = now - date;
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMs / 3600000);
-      const diffDays = Math.floor(diffMs / 86400000);
-
-      if (diffMins < 1) return 'just now';
-      if (diffMins < 60) return `${diffMins}m ago`;
-      if (diffHours < 24) return `${diffHours}h ago`;
-      if (diffDays < 7) return `${diffDays}d ago`;
-      
-      return date.toLocaleDateString();
-    }
-
-    // Close modal on background click
-    document.getElementById('flow-modal').addEventListener('click', (e) => {
-      if (e.target.id === 'flow-modal') closeModal();
-    });
-
-    document.getElementById('view-modal').addEventListener('click', (e) => {
-      if (e.target.id === 'view-modal') closeViewModal();
-    });
-
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        closeModal();
-        closeViewModal();
-      }
-      
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        const modalActive = document.getElementById('flow-modal').classList.contains('active');
-        if (modalActive) {
+        this.canvasContainer.addEventListener('dragover', (e) => {
           e.preventDefault();
-          const saveBtn = document.getElementById('save-flow-btn');
-          if (!saveBtn.disabled) {
-            saveFlow();
+        });
+
+        this.canvasContainer.addEventListener('drop', (e) => {
+          e.preventDefault();
+          const nodeType = e.dataTransfer.getData('nodeType');
+          if (nodeType) {
+            const rect = this.canvasContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left - this.canvasOffset.x;
+            const y = e.clientY - rect.top - this.canvasOffset.y;
+            this.addNode(nodeType, x, y);
           }
+        });
+      },
+
+      setupCanvasEvents() {
+        // Panning
+        this.canvasContainer.addEventListener('mousedown', (e) => {
+          if (e.target === this.canvasContainer || e.target === this.canvas) {
+            this.isPanning = true;
+            this.panStart = { x: e.clientX - this.canvasOffset.x, y: e.clientY - this.canvasOffset.y };
+            this.canvas.classList.add('panning');
+          }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+          if (this.isPanning) {
+            this.canvasOffset.x = e.clientX - this.panStart.x;
+            this.canvasOffset.y = e.clientY - this.panStart.y;
+            this.canvas.style.transform = `translate(${this.canvasOffset.x}px, ${this.canvasOffset.y}px)`;
+            this.updateConnections();
+          }
+
+          if (this.tempConnection) {
+            this.updateTempConnection(e);
+          }
+        });
+
+        document.addEventListener('mouseup', () => {
+          this.isPanning = false;
+          this.canvas.classList.remove('panning');
+          
+          if (this.tempConnection) {
+            this.connectionsSvg.removeChild(this.tempConnection);
+            this.tempConnection = null;
+            this.connectingFrom = null;
+          }
+        });
+
+        // Context menu
+        this.canvas.addEventListener('contextmenu', (e) => {
+          if (e.target.closest('.flow-node')) {
+            e.preventDefault();
+            const node = e.target.closest('.flow-node');
+            this.selectNode(node.dataset.id);
+            this.showContextMenu(e.clientX, e.clientY);
+          }
+        });
+
+        document.addEventListener('click', () => {
+          this.hideContextMenu();
+        });
+      },
+
+      setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Delete' && this.selectedNode) {
+            this.deleteSelectedNode();
+          }
+          if (e.key === 'Escape') {
+            this.deselectAll();
+          }
+          if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            this.exportFlow();
+          }
+        });
+      },
+
+      addNode(type, x, y) {
+        const id = 'node-' + Date.now();
+        const node = {
+          id,
+          type,
+          name: type,
+          x,
+          y,
+          wires: [[]],
+          // Default configs
+          ...(type === 'http-in' && { url: '/endpoint', method: 'post' }),
+          ...(type === 'function' && { func: 'return msg;' }),
+          ...(type === 'inject' && { payload: '', payloadType: 'date' }),
+          ...(type === 'context' && { operation: 'get', scope: 'flow', key: '' }),
+        };
+
+        this.nodes.push(node);
+        this.renderNode(node);
+      },
+
+      renderNode(node) {
+        const el = document.createElement('div');
+        el.className = 'flow-node';
+        el.dataset.id = node.id;
+        el.style.left = node.x + 'px';
+        el.style.top = node.y + 'px';
+
+        const hasInputs = !['http-in', 'inject'].includes(node.type);
+        const hasOutputs = !['http-response', 'debug'].includes(node.type);
+
+        el.innerHTML = `
+          <div class="node-type">${node.type}</div>
+          <div class="node-header">
+            <span>${node.name || node.type}</span>
+          </div>
+          <div class="node-ports">
+            ${hasInputs ? '<div class="port input" data-port-type="input"></div>' : '<div></div>'}
+            ${hasOutputs ? '<div class="port output" data-port-type="output"></div>' : '<div></div>'}
+          </div>
+        `;
+
+        el.addEventListener('mousedown', (e) => {
+          if (e.target.classList.contains('port')) return;
+          this.selectNode(node.id);
+          this.startDragNode(e, node);
+        });
+
+        // Port connections
+        const ports = el.querySelectorAll('.port');
+        ports.forEach(port => {
+          port.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            if (port.dataset.portType === 'output') {
+              this.startConnection(node.id, e);
+            }
+          });
+
+          port.addEventListener('mouseup', (e) => {
+            e.stopPropagation();
+            if (port.dataset.portType === 'input' && this.connectingFrom) {
+              this.completeConnection(node.id);
+            }
+          });
+        });
+
+        this.canvas.appendChild(el);
+      },
+
+      startDragNode(e, node) {
+        this.isDraggingNode = true;
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startNodeX = node.x;
+        const startNodeY = node.y;
+
+        const onMove = (e) => {
+          if (this.isDraggingNode) {
+            node.x = startNodeX + (e.clientX - startX);
+            node.y = startNodeY + (e.clientY - startY);
+            const el = this.canvas.querySelector(`[data-id="${node.id}"]`);
+            el.style.left = node.x + 'px';
+            el.style.top = node.y + 'px';
+            this.updateConnections();
+          }
+        };
+
+        const onUp = () => {
+          this.isDraggingNode = false;
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+        };
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      },
+
+      startConnection(fromNodeId, e) {
+        e.stopPropagation();
+        this.connectingFrom = fromNodeId;
+        
+        this.tempConnection = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        this.tempConnection.setAttribute('stroke', '#4285F4');
+        this.tempConnection.setAttribute('stroke-width', '2');
+        this.tempConnection.setAttribute('fill', 'none');
+        this.tempConnection.setAttribute('opacity', '0.6');
+        this.connectionsSvg.appendChild(this.tempConnection);
+      },
+
+      updateTempConnection(e) {
+        if (!this.tempConnection || !this.connectingFrom) return;
+
+        const fromNode = this.nodes.find(n => n.id === this.connectingFrom);
+        const fromEl = this.canvas.querySelector(`[data-id="${fromNode.id}"]`);
+        const fromPort = fromEl.querySelector('.port.output');
+        const fromRect = fromPort.getBoundingClientRect();
+        const containerRect = this.canvasContainer.getBoundingClientRect();
+
+        const x1 = fromRect.left + fromRect.width / 2 - containerRect.left;
+        const y1 = fromRect.top + fromRect.height / 2 - containerRect.top;
+        const x2 = e.clientX - containerRect.left;
+        const y2 = e.clientY - containerRect.top;
+
+        const path = this.createBezierPath(x1, y1, x2, y2);
+        this.tempConnection.setAttribute('d', path);
+      },
+
+      completeConnection(toNodeId) {
+        if (!this.connectingFrom || this.connectingFrom === toNodeId) return;
+
+        const fromNode = this.nodes.find(n => n.id === this.connectingFrom);
+        if (!fromNode.wires[0].includes(toNodeId)) {
+          fromNode.wires[0].push(toNodeId);
+          this.connections.push({ from: this.connectingFrom, to: toNodeId });
+          this.updateConnections();
         }
+      },
+
+      createBezierPath(x1, y1, x2, y2) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const controlPointOffset = Math.abs(dx) / 2;
+        
+        return `M ${x1} ${y1} C ${x1 + controlPointOffset} ${y1}, ${x2 - controlPointOffset} ${y2}, ${x2} ${y2}`;
+      },
+
+      updateConnections() {
+        this.connectionsSvg.innerHTML = '';
+        
+        this.connections.forEach(conn => {
+          const fromNode = this.nodes.find(n => n.id === conn.from);
+          const toNode = this.nodes.find(n => n.id === conn.to);
+          
+          if (!fromNode || !toNode) return;
+
+          const fromEl = this.canvas.querySelector(`[data-id="${fromNode.id}"]`);
+          const toEl = this.canvas.querySelector(`[data-id="${toNode.id}"]`);
+          
+          if (!fromEl || !toEl) return;
+
+          const fromPort = fromEl.querySelector('.port.output');
+          const toPort = toEl.querySelector('.port.input');
+          
+          if (!fromPort || !toPort) return;
+
+          const fromRect = fromPort.getBoundingClientRect();
+          const toRect = toPort.getBoundingClientRect();
+          const containerRect = this.canvasContainer.getBoundingClientRect();
+
+          const x1 = fromRect.left + fromRect.width / 2 - containerRect.left;
+          const y1 = fromRect.top + fromRect.height / 2 - containerRect.top;
+          const x2 = toRect.left + toRect.width / 2 - containerRect.left;
+          const y2 = toRect.top + toRect.height / 2 - containerRect.top;
+
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', this.createBezierPath(x1, y1, x2, y2));
+          path.setAttribute('stroke', '#4285F4');
+          path.setAttribute('stroke-width', '2');
+          path.setAttribute('fill', 'none');
+          path.setAttribute('opacity', '0.6');
+          path.style.pointerEvents = 'none';
+          
+          this.connectionsSvg.appendChild(path);
+        });
+      },
+
+      selectNode(nodeId) {
+        this.deselectAll();
+        this.selectedNode = nodeId;
+        
+        const el = this.canvas.querySelector(`[data-id="${nodeId}"]`);
+        if (el) el.classList.add('selected');
+        
+        this.showNodeProperties(nodeId);
+      },
+
+      deselectAll() {
+        this.selectedNode = null;
+        document.querySelectorAll('.flow-node.selected').forEach(el => {
+          el.classList.remove('selected');
+        });
+      },
+
+      showNodeProperties(nodeId) {
+        const node = this.nodes.find(n => n.id === nodeId);
+        if (!node) return;
+
+        const panel = document.getElementById('properties-panel');
+        let html = `<h3 style="margin-bottom: 1rem;">${node.type}</h3>`;
+
+        html += `
+          <div class="prop-group">
+            <label class="prop-label">Name</label>
+            <input type="text" class="prop-input" value="${node.name || ''}" 
+                   onchange="app.updateNodeProperty('${nodeId}', 'name', this.value)">
+          </div>
+        `;
+
+        // Type-specific properties
+        if (node.type === 'http-in') {
+          html += `
+            <div class="prop-group">
+              <label class="prop-label">URL Path</label>
+              <input type="text" class="prop-input" value="${node.url || '/'}" 
+                     onchange="app.updateNodeProperty('${nodeId}', 'url', this.value)">
+            </div>
+            <div class="prop-group">
+              <label class="prop-label">Method</label>
+              <select class="prop-select" onchange="app.updateNodeProperty('${nodeId}', 'method', this.value)">
+                <option value="get" ${node.method === 'get' ? 'selected' : ''}>GET</option>
+                <option value="post" ${node.method === 'post' ? 'selected' : ''}>POST</option>
+                <option value="put" ${node.method === 'put' ? 'selected' : ''}>PUT</option>
+                <option value="delete" ${node.method === 'delete' ? 'selected' : ''}>DELETE</option>
+              </select>
+            </div>
+          `;
+        } else if (node.type === 'function') {
+          html += `
+            <div class="prop-group">
+              <label class="prop-label">Function Code</label>
+              <textarea class="prop-textarea" rows="12" 
+                        onchange="app.updateNodeProperty('${nodeId}', 'func', this.value)">${node.func || 'return msg;'}</textarea>
+            </div>
+          `;
+        } else if (node.type === 'inject') {
+          html += `
+            <div class="prop-group">
+              <label class="prop-label">Payload Type</label>
+              <select class="prop-select" onchange="app.updateNodeProperty('${nodeId}', 'payloadType', this.value)">
+                <option value="date" ${node.payloadType === 'date' ? 'selected' : ''}>Timestamp</option>
+                <option value="str" ${node.payloadType === 'str' ? 'selected' : ''}>String</option>
+                <option value="num" ${node.payloadType === 'num' ? 'selected' : ''}>Number</option>
+                <option value="bool" ${node.payloadType === 'bool' ? 'selected' : ''}>Boolean</option>
+                <option value="json" ${node.payloadType === 'json' ? 'selected' : ''}>JSON</option>
+              </select>
+            </div>
+            <div class="prop-group">
+              <label class="prop-label">Payload</label>
+              <input type="text" class="prop-input" value="${node.payload || ''}" 
+                     onchange="app.updateNodeProperty('${nodeId}', 'payload', this.value)">
+            </div>
+          `;
+        } else if (node.type === 'context') {
+          html += `
+            <div class="prop-group">
+              <label class="prop-label">Operation</label>
+              <select class="prop-select" onchange="app.updateNodeProperty('${nodeId}', 'operation', this.value)">
+                <option value="get" ${node.operation === 'get' ? 'selected' : ''}>Get</option>
+                <option value="set" ${node.operation === 'set' ? 'selected' : ''}>Set</option>
+                <option value="keys" ${node.operation === 'keys' ? 'selected' : ''}>List Keys</option>
+                <option value="delete" ${node.operation === 'delete' ? 'selected' : ''}>Delete</option>
+              </select>
+            </div>
+            <div class="prop-group">
+              <label class="prop-label">Scope</label>
+              <select class="prop-select" onchange="app.updateNodeProperty('${nodeId}', 'scope', this.value)">
+                <option value="flow" ${node.scope === 'flow' ? 'selected' : ''}>Flow</option>
+                <option value="global" ${node.scope === 'global' ? 'selected' : ''}>Global</option>
+              </select>
+            </div>
+            <div class="prop-group">
+              <label class="prop-label">Key</label>
+              <input type="text" class="prop-input" value="${node.key || ''}" 
+                     onchange="app.updateNodeProperty('${nodeId}', 'key', this.value)">
+            </div>
+          `;
+        } else if (node.type === 'switch') {
+          html += `
+            <div class="prop-group">
+              <label class="prop-label">Property</label>
+              <input type="text" class="prop-input" value="${node.property || 'payload'}" 
+                     onchange="app.updateNodeProperty('${nodeId}', 'property', this.value)">
+            </div>
+            <div class="prop-group">
+              <label class="prop-label">Rules (JSON)</label>
+              <textarea class="prop-textarea" rows="8" 
+                        onchange="app.updateNodeProperty('${nodeId}', 'rules', JSON.parse(this.value))">${JSON.stringify(node.rules || [{t: 'eq', v: '', vt: 'str'}], null, 2)}</textarea>
+            </div>
+          `;
+        } else if (node.type === 'change') {
+          html += `
+            <div class="prop-group">
+              <label class="prop-label">Rules (JSON)</label>
+              <textarea class="prop-textarea" rows="8" 
+                        onchange="app.updateNodeProperty('${nodeId}', 'rules', JSON.parse(this.value))">${JSON.stringify(node.rules || [{t: 'set', p: 'payload', to: '', tot: 'str'}], null, 2)}</textarea>
+            </div>
+          `;
+        } else if (node.type === 'template') {
+          html += `
+            <div class="prop-group">
+              <label class="prop-label">Template</label>
+              <textarea class="prop-textarea" rows="10" 
+                        onchange="app.updateNodeProperty('${nodeId}', 'template', this.value)">${node.template || ''}</textarea>
+            </div>
+            <div class="prop-group">
+              <label class="prop-label">Field</label>
+              <input type="text" class="prop-input" value="${node.field || 'payload'}" 
+                     onchange="app.updateNodeProperty('${nodeId}', 'field', this.value)">
+            </div>
+          `;
+        } else if (node.type === 'debug') {
+          html += `
+            <div class="prop-group">
+              <label class="prop-label">Output</label>
+              <select class="prop-select" onchange="app.updateNodeProperty('${nodeId}', 'complete', this.value)">
+                <option value="payload" ${node.complete === 'payload' ? 'selected' : ''}>msg.payload</option>
+                <option value="true" ${node.complete === 'true' ? 'selected' : ''}>Complete msg</option>
+              </select>
+            </div>
+          `;
+        }
+
+        panel.innerHTML = html;
+      },
+
+      updateNodeProperty(nodeId, key, value) {
+        const node = this.nodes.find(n => n.id === nodeId);
+        if (node) {
+          node[key] = value;
+        }
+      },
+
+      showContextMenu(x, y) {
+        const menu = document.getElementById('context-menu');
+        menu.style.left = x + 'px';
+        menu.style.top = y + 'px';
+        menu.classList.add('active');
+      },
+
+      hideContextMenu() {
+        document.getElementById('context-menu').classList.remove('active');
+      },
+
+      deleteSelectedNode() {
+        if (!this.selectedNode) return;
+        
+        // Remove connections
+        this.connections = this.connections.filter(c => 
+          c.from !== this.selectedNode && c.to !== this.selectedNode
+        );
+        
+        // Remove from node wires
+        this.nodes.forEach(node => {
+          node.wires = node.wires.map(wireGroup => 
+            wireGroup.filter(id => id !== this.selectedNode)
+          );
+        });
+        
+        // Remove node
+        this.nodes = this.nodes.filter(n => n.id !== this.selectedNode);
+        
+        // Remove DOM element
+        const el = this.canvas.querySelector(`[data-id="${this.selectedNode}"]`);
+        if (el) el.remove();
+        
+        this.selectedNode = null;
+        this.updateConnections();
+        this.hideContextMenu();
+        
+        document.getElementById('properties-panel').innerHTML = `
+          <h3 style="margin-bottom: 1rem;">Node Properties</h3>
+          <p style="color: var(--text-secondary); font-size: 0.875rem;">Select a node to edit its properties</p>
+        `;
+      },
+
+      duplicateSelectedNode() {
+        if (!this.selectedNode) return;
+        
+        const node = this.nodes.find(n => n.id === this.selectedNode);
+        if (!node) return;
+        
+        const newNode = JSON.parse(JSON.stringify(node));
+        newNode.id = 'node-' + Date.now();
+        newNode.x += 50;
+        newNode.y += 50;
+        newNode.wires = [[]];
+        
+        this.nodes.push(newNode);
+        this.renderNode(newNode);
+        this.hideContextMenu();
+      },
+
+      exportFlow() {
+        const flowName = document.getElementById('flow-name').value || 'my-flow';
+        const flowConfig = {
+          id: flowName.toLowerCase().replace(/\s+/g, '-'),
+          name: flowName,
+          description: 'Flow created with RedNox Visual Editor',
+          version: '1.0',
+          nodes: this.nodes.map(node => ({
+            id: node.id,
+            type: node.type,
+            name: node.name,
+            wires: node.wires,
+            ...Object.keys(node).reduce((acc, key) => {
+              if (!['id', 'type', 'name', 'wires', 'x', 'y'].includes(key)) {
+                acc[key] = node[key];
+              }
+              return acc;
+            }, {})
+          }))
+        };
+
+        const blob = new Blob([JSON.stringify(flowConfig, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${flowConfig.id}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+
+      importFlow() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const flowConfig = JSON.parse(e.target.result);
+              this.loadFlowConfig(flowConfig);
+            } catch (err) {
+              alert('Failed to import flow: ' + err.message);
+            }
+          };
+          reader.readAsText(file);
+        };
+        input.click();
+      },
+
+      loadFlowConfig(flowConfig) {
+        // Clear current flow
+        this.nodes = [];
+        this.connections = [];
+        this.canvas.innerHTML = '';
+        
+        document.getElementById('flow-name').value = flowConfig.name || flowConfig.id;
+        
+        // Add nodes with positions
+        flowConfig.nodes.forEach((nodeConfig, index) => {
+          const node = {
+            ...nodeConfig,
+            x: nodeConfig.x || (100 + (index % 5) * 200),
+            y: nodeConfig.y || (100 + Math.floor(index / 5) * 150)
+          };
+          this.nodes.push(node);
+          this.renderNode(node);
+        });
+        
+        // Build connections from wires
+        this.nodes.forEach(node => {
+          if (node.wires && node.wires.length > 0) {
+            node.wires[0].forEach(targetId => {
+              this.connections.push({ from: node.id, to: targetId });
+            });
+          }
+        });
+        
+        this.updateConnections();
+      },
+
+      newFlow() {
+        if (this.nodes.length > 0 && !confirm('Clear current flow?')) return;
+        
+        this.nodes = [];
+        this.connections = [];
+        this.canvas.innerHTML = '';
+        this.selectedNode = null;
+        document.getElementById('flow-name').value = 'my-flow';
+        document.getElementById('properties-panel').innerHTML = `
+          <h3 style="margin-bottom: 1rem;">Node Properties</h3>
+          <p style="color: var(--text-secondary); font-size: 0.875rem;">Select a node to edit its properties</p>
+        `;
+        this.updateConnections();
+      },
+
+      deployFlow() {
+        document.getElementById('deploy-modal').classList.add('active');
+      },
+
+      closeModal() {
+        document.getElementById('deploy-modal').classList.remove('active');
+      },
+
+      async submitDeploy() {
+        const endpoint = document.getElementById('api-endpoint').value;
+        if (!endpoint) {
+          alert('Please enter API endpoint');
+          return;
+        }
+
+        const flowName = document.getElementById('flow-name').value || 'my-flow';
+        const flowConfig = {
+          id: flowName.toLowerCase().replace(/\s+/g, '-'),
+          name: flowName,
+          description: 'Flow created with RedNox Visual Editor',
+          nodes: this.nodes.map(node => ({
+            id: node.id,
+            type: node.type,
+            name: node.name,
+            wires: node.wires,
+            ...Object.keys(node).reduce((acc, key) => {
+              if (!['id', 'type', 'name', 'wires', 'x', 'y'].includes(key)) {
+                acc[key] = node[key];
+              }
+              return acc;
+            }, {})
+          }))
+        };
+
+        const resultDiv = document.getElementById('deploy-result');
+        resultDiv.innerHTML = '<p style="color: var(--text-secondary);">Deploying...</p>';
+
+        try {
+          const response = await fetch(`${endpoint}/admin/flows`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(flowConfig)
+          });
+
+          const data = await response.json();
+
+          if (data.success || response.ok) {
+            resultDiv.innerHTML = `
+              <div class="alert alert-success">
+                ✅ Flow deployed successfully!
+              </div>
+              ${data.endpoints ? `
+                <div style="margin-top: 1rem;">
+                  <strong>Endpoints:</strong>
+                  <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+                    ${data.endpoints.map(e => `
+                      <li style="margin: 0.25rem 0; font-family: monospace; font-size: 0.8125rem;">
+                        ${e.method} ${e.url}
+                      </li>
+                    `).join('')}
+                  </ul>
+                </div>
+              ` : ''}
+            `;
+          } else {
+            resultDiv.innerHTML = `
+              <div class="alert alert-error">
+                ❌ Deployment failed: ${data.error || 'Unknown error'}
+              </div>
+            `;
+          }
+        } catch (err) {
+          resultDiv.innerHTML = `
+            <div class="alert alert-error">
+              ❌ Network error: ${err.message}
+            </div>
+          `;
+        }
+      },
+
+      loadSampleFlow() {
+        // Load a simple sample flow
+        const sample = {
+          id: 'sample-chatbot',
+          name: 'Sample Chatbot',
+          nodes: [
+            {
+              id: 'http-in-1',
+              type: 'http-in',
+              name: 'Chat Endpoint',
+              url: '/chat',
+              method: 'post',
+              x: 100,
+              y: 150,
+              wires: [['function-1']]
+            },
+            {
+              id: 'function-1',
+              type: 'function',
+              name: 'Process Message',
+              func: 'msg.payload = {\n  response: "Hello! You said: " + msg.payload.message\n};\nreturn msg;',
+              x: 350,
+              y: 150,
+              wires: [['http-out-1']]
+            },
+            {
+              id: 'http-out-1',
+              type: 'http-response',
+              name: 'Send Response',
+              x: 600,
+              y: 150,
+              wires: []
+            }
+          ]
+        };
+        
+        this.loadFlowConfig(sample);
       }
+    };
+
+    // Initialize on load
+    window.addEventListener('DOMContentLoaded', () => {
+      app.init();
     });
   </script>
 </body>
