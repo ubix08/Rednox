@@ -991,4 +991,727 @@
         warning: '⚠️'
       };
       
-      alert.className = `alert alert-
+      alert.className = `alert alert-${type}`;
+      alert.innerHTML = `
+        <span style="font-size: 1.25rem;">${icons[type] || icons.info}</span>
+        <div style="flex: 1;">
+          <strong>${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
+          <div style="margin-top: 0.25rem;">${escapeHtml(message)}</div>
+        </div>
+        <button onclick="this.parentElement.remove()" style="background: none; border: none; cursor: pointer; opacity: 0.6; font-size: 1.25rem;">&times;</button>
+      `;
+      alertsDiv.appendChild(alert);
+      
+      if (duration > 0) {
+        setTimeout(() => alert.remove(), duration);
+      }
+    }
+
+    // Loading Overlay
+    function showLoading() {
+      document.getElementById('loading-overlay').classList.add('active');
+    }
+
+    function hideLoading() {
+      document.getElementById('loading-overlay').classList.remove('active');
+    }
+
+    // Load Stats
+    async function loadStats() {
+      try {
+        const response = await fetch(`${API_BASE}/admin/stats`);
+        const data = await response.json();
+        
+        document.getElementById('stat-flows').textContent = data.flows || 0;
+        document.getElementById('stat-routes').textContent = data.routes || 0;
+        document.getElementById('stat-logs').textContent = data.logs || 0;
+      } catch (err) {
+        console.error('Failed to load stats:', err);
+      }
+    }
+
+    // Initialize Database
+    async function initializeDatabase() {
+      if (!confirm('Initialize database? This will create tables if they don\'t exist.')) return;
+      
+      showLoading();
+      try {
+        const response = await fetch(`${API_BASE}/admin/init`, { method: 'POST' });
+        const data = await response.json();
+        
+        hideLoading();
+        if (data.success) {
+          showAlert('Database initialized successfully', 'success');
+          loadStats();
+        } else {
+          showAlert(`Failed to initialize: ${data.error || 'Unknown error'}`, 'error');
+        }
+      } catch (err) {
+        hideLoading();
+        showAlert(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    // Load Flows
+    async function loadFlows() {
+      const container = document.getElementById('flows-list');
+      container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading"></div></div>';
+
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows`);
+        const data = await response.json();
+
+        allFlows = data.flows || [];
+
+        if (allFlows.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">📦</div>
+              <h3 style="margin-bottom: 0.5rem;">No flows yet</h3>
+              <p>Create your first flow to get started with RedNox.</p>
+              <div style="margin-top: 1.5rem;">
+                <button class="btn btn-primary" onclick="showCreateFlowModal()">
+                  Create Flow
+                </button>
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        filterFlows();
+      } catch (err) {
+        container.innerHTML = `
+          <div class="alert alert-error">
+            <span>❌</span>
+            <div>
+              <strong>Failed to load flows</strong>
+              <div style="margin-top: 0.25rem;">${escapeHtml(err.message)}</div>
+              <div style="margin-top: 0.5rem;">
+                <button class="btn btn-sm btn-secondary" onclick="loadFlows()">Retry</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // Filter Flows
+    function filterFlows() {
+      const searchTerm = document.getElementById('flow-search').value.toLowerCase();
+      const filter = document.getElementById('flow-filter').value;
+      
+      let filtered = allFlows.filter(flow => {
+        const matchesSearch = !searchTerm || 
+          flow.name.toLowerCase().includes(searchTerm) ||
+          (flow.description && flow.description.toLowerCase().includes(searchTerm)) ||
+          flow.id.toLowerCase().includes(searchTerm);
+        
+        const matchesFilter = filter === 'all' ||
+          (filter === 'enabled' && flow.enabled) ||
+          (filter === 'disabled' && !flow.enabled);
+        
+        return matchesSearch && matchesFilter;
+      });
+
+      const container = document.getElementById('flows-list');
+      
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <p>No flows match your search criteria</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(flow => `
+        <div class="card">
+          <div class="card-header">
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                <h3 class="card-title">${escapeHtml(flow.name)}</h3>
+                <span class="badge ${flow.enabled ? 'badge-success' : 'badge-danger'}">
+                  <span class="badge-dot"></span>
+                  ${flow.enabled ? 'Active' : 'Disabled'}
+                </span>
+              </div>
+              ${flow.description ? `<p style="color: var(--text-secondary); font-size: 0.875rem;">${escapeHtml(flow.description)}</p>` : ''}
+              <div class="flow-meta">
+                <span class="flow-meta-item">
+                  <span>🆔</span>
+                  <code style="background: var(--bg); padding: 0.125rem 0.375rem; border-radius: 4px; font-size: 0.75rem;">${flow.id}</code>
+                </span>
+                <span class="flow-meta-item">
+                  <span>📅</span>
+                  <span>Created ${formatDate(flow.created_at)}</span>
+                </span>
+                ${flow.updated_at !== flow.created_at ? `
+                  <span class="flow-meta-item">
+                    <span>🔄</span>
+                    <span>Updated ${formatDate(flow.updated_at)}</span>
+                  </span>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-secondary btn-sm" onclick="viewFlow('${flow.id}')" title="View details">
+              👁 View
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="editFlow('${flow.id}')" title="Edit flow">
+              ✏️ Edit
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="duplicateFlow('${flow.id}')" title="Duplicate flow">
+              📋 Duplicate
+            </button>
+            <button class="btn ${flow.enabled ? 'btn-warning' : 'btn-success'} btn-sm" 
+                    onclick="toggleFlow('${flow.id}', ${!flow.enabled})"
+                    title="${flow.enabled ? 'Disable' : 'Enable'} flow">
+              ${flow.enabled ? '⏸ Disable' : '▶️ Enable'}
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="deleteFlow('${flow.id}')" title="Delete flow">
+              🗑 Delete
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Load Routes
+    async function loadRoutes() {
+      const container = document.getElementById('routes-list');
+      container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading"></div></div>';
+
+      try {
+        const response = await fetch(`${API_BASE}/admin/routes`);
+        const data = await response.json();
+
+        if (!data.routes || data.routes.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">🛣️</div>
+              <h3 style="margin-bottom: 0.5rem;">No routes available</h3>
+              <p>Routes are created automatically when you add http-in nodes to flows.</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = `
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Active HTTP Routes (${data.routes.length})</h3>
+              <div class="badge badge-info">
+                ${data.routes.length} endpoint${data.routes.length !== 1 ? 's' : ''}
+              </div>
+            </div>
+            <ul class="endpoint-list">
+              ${data.routes.map(route => `
+                <li class="endpoint-item">
+                  <span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span>
+                  <code class="endpoint-path">${route.fullUrl || route.path}</code>
+                  <span style="color: var(--text-secondary); font-size: 0.75rem; white-space: nowrap;">${escapeHtml(route.flow_name)}</span>
+                  <button class="copy-btn" onclick="copyToClipboard('${route.fullUrl || route.path}')" title="Copy URL">
+                    📋
+                  </button>
+                </li>
+              `).join('')}
+            </ul>
+          </div>
+        `;
+      } catch (err) {
+        container.innerHTML = `
+          <div class="alert alert-error">
+            <span>❌</span>
+            <div>
+              <strong>Failed to load routes</strong>
+              <div style="margin-top: 0.25rem;">${escapeHtml(err.message)}</div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // Show Create Modal
+    function showCreateFlowModal() {
+      editMode = false;
+      currentFlowId = null;
+      document.getElementById('modal-title').textContent = 'Create Flow';
+      document.getElementById('save-btn-text').textContent = 'Create Flow';
+      document.getElementById('flow-config').value = JSON.stringify({
+        id: 'my-flow',
+        name: 'My Flow',
+        description: 'Description',
+        nodes: [
+          {
+            id: 'http-in-1',
+            type: 'http-in',
+            url: '/endpoint',
+            method: 'post',
+            wires: [['http-out-1']]
+          },
+          {
+            id: 'http-out-1',
+            type: 'http-response',
+            wires: []
+          }
+        ]
+      }, null, 2);
+      
+      validateJSON();
+      document.getElementById('flow-modal').classList.add('active');
+    }
+
+    // Edit Flow
+    async function editFlow(flowId) {
+      showLoading();
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        const flow = await response.json();
+
+        editMode = true;
+        currentFlowId = flowId;
+        document.getElementById('modal-title').textContent = 'Edit Flow';
+        document.getElementById('save-btn-text').textContent = 'Update Flow';
+        document.getElementById('flow-config').value = JSON.stringify(flow.config, null, 2);
+        
+        hideLoading();
+        validateJSON();
+        document.getElementById('flow-modal').classList.add('active');
+      } catch (err) {
+        hideLoading();
+        showAlert(`Failed to load flow: ${err.message}`, 'error');
+      }
+    }
+
+    // Duplicate Flow
+    async function duplicateFlow(flowId) {
+      showLoading();
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        const flow = await response.json();
+
+        const newName = `${flow.name} (Copy)`;
+        const newId = `${flow.id}-copy-${Date.now()}`;
+
+        editMode = false;
+        currentFlowId = null;
+        document.getElementById('modal-title').textContent = 'Duplicate Flow';
+        document.getElementById('save-btn-text').textContent = 'Create Flow';
+        
+        const config = flow.config;
+        config.id = newId;
+        config.name = newName;
+        
+        document.getElementById('flow-config').value = JSON.stringify(config, null, 2);
+        
+        hideLoading();
+        validateJSON();
+        document.getElementById('flow-modal').classList.add('active');
+      } catch (err) {
+        hideLoading();
+        showAlert(`Failed to duplicate flow: ${err.message}`, 'error');
+      }
+    }
+
+    // View Flow
+    async function viewFlow(flowId) {
+      showLoading();
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        const flow = await response.json();
+        currentViewFlow = flow;
+
+        document.getElementById('view-title').textContent = flow.name;
+        document.getElementById('view-content').innerHTML = `
+          <div class="form-group">
+            <label class="form-label">Flow ID</label>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <code style="flex: 1; background: var(--bg); padding: 0.5rem; border-radius: 4px; font-size: 0.875rem;">${flow.id}</code>
+              <button class="copy-btn" onclick="copyToClipboard('${flow.id}')">📋 Copy</button>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <p>${flow.description || 'No description'}</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <span class="badge ${flow.enabled ? 'badge-success' : 'badge-danger'}">
+              <span class="badge-dot"></span>
+              ${flow.enabled ? 'Active' : 'Disabled'}
+            </span>
+          </div>
+
+          ${flow.routes && flow.routes.length > 0 ? `
+            <div class="form-group">
+              <label class="form-label">HTTP Endpoints (${flow.routes.length})</label>
+              <ul class="endpoint-list">
+                ${flow.routes.map(route => `
+                  <li class="endpoint-item">
+                    <span class="method-badge method-${route.method.toLowerCase()}">${route.method}</span>
+                    <code class="endpoint-path">${route.fullUrl}</code>
+                    <button class="copy-btn" onclick="copyToClipboard('${route.fullUrl}')">📋</button>
+                  </li>
+                `).join('')}
+              </ul>
+            </div>
+          ` : '<div class="alert alert-info"><span>ℹ️</span><span>No HTTP endpoints configured</span></div>'}
+
+          <div class="form-group">
+            <label class="form-label">Node Count</label>
+            <p>${flow.config.nodes.length} nodes</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Configuration</label>
+            <pre class="code-editor">${JSON.stringify(flow.config, null, 2)}</pre>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+            <div>
+              <label class="form-label">Created</label>
+              <p>${new Date(flow.created_at).toLocaleString()}</p>
+            </div>
+            <div>
+              <label class="form-label">Last Updated</label>
+              <p>${new Date(flow.updated_at).toLocaleString()}</p>
+            </div>
+          </div>
+        `;
+
+        hideLoading();
+        document.getElementById('view-modal').classList.add('active');
+      } catch (err) {
+        hideLoading();
+        showAlert(`Failed to load flow: ${err.message}`, 'error');
+      }
+    }
+
+    // Validate JSON
+    function validateJSON() {
+      const textarea = document.getElementById('flow-config');
+      const validator = document.getElementById('json-validation');
+      const errorSpan = document.getElementById('config-error');
+      const saveBtn = document.getElementById('save-flow-btn');
+      
+      try {
+        const config = JSON.parse(textarea.value);
+        
+        // Validation
+        const errors = [];
+        
+        if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
+          errors.push('Missing or invalid "id" field');
+        }
+        
+        if (!config.name || typeof config.name !== 'string' || config.name.trim() === '') {
+          errors.push('Missing or invalid "name" field');
+        }
+        
+        if (!config.nodes || !Array.isArray(config.nodes)) {
+          errors.push('Missing or invalid "nodes" array');
+        } else if (config.nodes.length === 0) {
+          errors.push('At least one node is required');
+        }
+        
+        // Check node structure
+        if (config.nodes && Array.isArray(config.nodes)) {
+          config.nodes.forEach((node, idx) => {
+            if (!node.id) errors.push(`Node ${idx + 1}: missing "id"`);
+            if (!node.type) errors.push(`Node ${idx + 1}: missing "type"`);
+            if (!Array.isArray(node.wires)) errors.push(`Node ${idx + 1}: missing or invalid "wires"`);
+          });
+        }
+        
+        if (errors.length > 0) {
+          validator.className = 'json-validator invalid';
+          validator.textContent = '⚠️ ' + errors.join(', ');
+          textarea.classList.add('error');
+          errorSpan.textContent = errors[0];
+          saveBtn.disabled = true;
+          return false;
+        }
+        
+        validator.className = 'json-validator valid';
+        validator.textContent = `✓ Valid flow config: "${config.name}" with ${config.nodes.length} node(s)`;
+        textarea.classList.remove('error');
+        errorSpan.textContent = '';
+        saveBtn.disabled = false;
+        return true;
+      } catch (err) {
+        validator.className = 'json-validator invalid';
+        validator.textContent = '❌ Invalid JSON: ' + err.message;
+        textarea.classList.add('error');
+        errorSpan.textContent = 'Invalid JSON syntax';
+        saveBtn.disabled = true;
+        return false;
+      }
+    }
+
+    // Format JSON
+    function formatJSON() {
+      const textarea = document.getElementById('flow-config');
+      try {
+        const parsed = JSON.parse(textarea.value);
+        textarea.value = JSON.stringify(parsed, null, 2);
+        validateJSON();
+      } catch (err) {
+        showAlert('Cannot format invalid JSON', 'error');
+      }
+    }
+
+    // Save Flow
+    async function saveFlow() {
+      const configText = document.getElementById('flow-config').value.trim();
+
+      if (!validateJSON()) {
+        showAlert('Please fix validation errors before saving', 'error');
+        return;
+      }
+
+      let config;
+      try {
+        config = JSON.parse(configText);
+      } catch (err) {
+        showAlert('Invalid JSON configuration: ' + err.message, 'error');
+        return;
+      }
+
+      showLoading();
+      try {
+        const url = editMode 
+          ? `${API_BASE}/admin/flows/${currentFlowId}`
+          : `${API_BASE}/admin/flows`;
+        
+        const method = editMode ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+
+        const data = await response.json();
+
+        hideLoading();
+
+        if (data.success || response.ok) {
+          showAlert(`Flow ${editMode ? 'updated' : 'created'} successfully!`, 'success');
+          closeModal();
+          loadFlows();
+          loadStats();
+
+          if (data.endpoints && data.endpoints.length > 0) {
+            setTimeout(() => {
+              const endpointList = data.endpoints.map(e => 
+                `<li style="margin: 0.5rem 0;"><code>${e.method} ${e.url}</code></li>`
+              ).join('');
+              showAlert(
+                `<div><strong>Endpoints created:</strong><ul style="margin-top: 0.5rem;">${endpointList}</ul></div>`,
+                'info',
+                10000
+              );
+            }, 500);
+          }
+        } else {
+          const errorMsg = data.error || 'Failed to save flow';
+          const details = data.errors ? '\n' + data.errors.join('\n') : '';
+          showAlert(errorMsg + details, 'error', 10000);
+        }
+      } catch (err) {
+        hideLoading();
+        showAlert(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    // Toggle Flow
+    async function toggleFlow(flowId, enable) {
+      showLoading();
+      try {
+        const action = enable ? 'enable' : 'disable';
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}/${action}`, {
+          method: 'POST'
+        });
+
+        const data = await response.json();
+
+        hideLoading();
+        if (data.success) {
+          showAlert(`Flow ${action}d successfully`, 'success');
+          loadFlows();
+          loadStats();
+        } else {
+          showAlert(data.error || 'Failed to toggle flow', 'error');
+        }
+      } catch (err) {
+        hideLoading();
+        showAlert(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    // Delete Flow
+    async function deleteFlow(flowId) {
+      const flow = allFlows.find(f => f.id === flowId);
+      const flowName = flow ? flow.name : flowId;
+      
+      if (!confirm(`Are you sure you want to delete "${flowName}"?\n\nThis action cannot be undone.`)) {
+        return;
+      }
+
+      showLoading();
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`, {
+          method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        hideLoading();
+        if (data.success) {
+          showAlert('Flow deleted successfully', 'success');
+          loadFlows();
+          loadStats();
+        } else {
+          showAlert(data.error || 'Failed to delete flow', 'error');
+        }
+      } catch (err) {
+        hideLoading();
+        showAlert(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    // Import Flow
+    function importFlow() {
+      document.getElementById('import-file').click();
+    }
+
+    function handleImport(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const config = JSON.parse(e.target.result);
+          
+          editMode = false;
+          currentFlowId = null;
+          document.getElementById('modal-title').textContent = 'Import Flow';
+          document.getElementById('save-btn-text').textContent = 'Create Flow';
+          document.getElementById('flow-config').value = JSON.stringify(config, null, 2);
+          
+          validateJSON();
+          document.getElementById('flow-modal').classList.add('active');
+          
+          showAlert('Flow imported. Review and save.', 'info');
+        } catch (err) {
+          showAlert(`Failed to import: ${err.message}`, 'error');
+        }
+      };
+      reader.readAsText(file);
+      
+      event.target.value = '';
+    }
+
+    // Export Flow
+    function exportFlow() {
+      if (!currentViewFlow) return;
+      
+      const dataStr = JSON.stringify(currentViewFlow.config, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${currentViewFlow.id}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      showAlert('Flow exported successfully', 'success');
+    }
+
+    // Close Modals
+    function closeModal() {
+      document.getElementById('flow-modal').classList.remove('active');
+    }
+
+    function closeViewModal() {
+      document.getElementById('view-modal').classList.remove('active');
+      currentViewFlow = null;
+    }
+
+    // Copy to Clipboard
+    async function copyToClipboard(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        
+        event.target.textContent = '✓';
+        event.target.classList.add('copied');
+        setTimeout(() => {
+          event.target.textContent = '📋';
+          event.target.classList.remove('copied');
+        }, 2000);
+        
+        showAlert('Copied to clipboard', 'success', 2000);
+      } catch (err) {
+        showAlert('Failed to copy', 'error');
+      }
+    }
+
+    // Utility Functions
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function formatDate(dateStr) {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 1) return 'just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 7) return `${diffDays}d ago`;
+      
+      return date.toLocaleDateString();
+    }
+
+    // Close modal on background click
+    document.getElementById('flow-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'flow-modal') closeModal();
+    });
+
+    document.getElementById('view-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'view-modal') closeViewModal();
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeModal();
+        closeViewModal();
+      }
+      
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        const modalActive = document.getElementById('flow-modal').classList.contains('active');
+        if (modalActive) {
+          e.preventDefault();
+          const saveBtn = document.getElementById('save-flow-btn');
+          if (!saveBtn.disabled) {
+            saveFlow();
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
