@@ -930,20 +930,27 @@
         
         if (!this.connectingFrom || this.connectingFrom === toNodeId) {
           console.log('Invalid connection - same node or no source');
-          return;
+        } else {
+          const fromNode = this.nodes.find(n => n.id === this.connectingFrom);
+          
+          // Check if connection already exists
+          if (!fromNode.wires[0].includes(toNodeId)) {
+            fromNode.wires[0].push(toNodeId);
+            this.connections.push({ from: this.connectingFrom, to: toNodeId });
+            console.log('Connection created!', this.connectingFrom, '->', toNodeId);
+            this.updateConnections();
+          } else {
+            console.log('Connection already exists');
+          }
         }
 
-        const fromNode = this.nodes.find(n => n.id === this.connectingFrom);
-        
-        // Check if connection already exists
-        if (!fromNode.wires[0].includes(toNodeId)) {
-          fromNode.wires[0].push(toNodeId);
-          this.connections.push({ from: this.connectingFrom, to: toNodeId });
-          console.log('Connection created!', this.connectingFrom, '->', toNodeId);
-          this.updateConnections();
-        } else {
-          console.log('Connection already exists');
+        // Always clean up temp connection elements
+        if (this.tempLine) {
+          this.tempLine.remove();
+          this.tempLine = null;
         }
+        this.connectingFrom = null;
+        document.querySelectorAll('.port.connecting').forEach(p => p.classList.remove('connecting'));
       },
 
       createBezierPath(x1, y1, x2, y2) {
@@ -1068,7 +1075,7 @@
             <div class="prop-group">
               <label class="prop-label">Function Code</label>
               <textarea class="prop-textarea" rows="12" 
-                        onchange="app.updateNodeProperty('${nodeId}', 'func', this.value)">${node.func || 'return msg;'}</textarea>
+                        onchange="app.updateNodeProperty('\( {nodeId}', 'func', this.value)"> \){node.func || 'return msg;'}</textarea>
             </div>
           `;
         } else if (node.type === 'inject') {
@@ -1123,7 +1130,7 @@
             <div class="prop-group">
               <label class="prop-label">Rules (JSON)</label>
               <textarea class="prop-textarea" rows="8" 
-                        onchange="app.updateNodeProperty('${nodeId}', 'rules', JSON.parse(this.value))">${JSON.stringify(node.rules || [{t: 'eq', v: '', vt: 'str'}], null, 2)}</textarea>
+                        onchange="app.updateNodeProperty('\( {nodeId}', 'rules', JSON.parse(this.value))"> \){JSON.stringify(node.rules || [{t: 'eq', v: '', vt: 'str'}], null, 2)}</textarea>
             </div>
           `;
         } else if (node.type === 'change') {
@@ -1131,7 +1138,7 @@
             <div class="prop-group">
               <label class="prop-label">Rules (JSON)</label>
               <textarea class="prop-textarea" rows="8" 
-                        onchange="app.updateNodeProperty('${nodeId}', 'rules', JSON.parse(this.value))">${JSON.stringify(node.rules || [{t: 'set', p: 'payload', to: '', tot: 'str'}], null, 2)}</textarea>
+                        onchange="app.updateNodeProperty('\( {nodeId}', 'rules', JSON.parse(this.value))"> \){JSON.stringify(node.rules || [{t: 'set', p: 'payload', to: '', tot: 'str'}], null, 2)}</textarea>
             </div>
           `;
         } else if (node.type === 'template') {
@@ -1139,7 +1146,7 @@
             <div class="prop-group">
               <label class="prop-label">Template</label>
               <textarea class="prop-textarea" rows="10" 
-                        onchange="app.updateNodeProperty('${nodeId}', 'template', this.value)">${node.template || ''}</textarea>
+                        onchange="app.updateNodeProperty('\( {nodeId}', 'template', this.value)"> \){node.template || ''}</textarea>
             </div>
             <div class="prop-group">
               <label class="prop-label">Field</label>
@@ -1249,7 +1256,7 @@
             name: node.name,
             wires: node.wires,
             ...Object.keys(node).reduce((acc, key) => {
-              if (!['id', 'type', 'name', 'wires', 'x', 'y'].includes(key)) {
+              if (!['id', 'type', 'name', 'wires'].includes(key)) {
                 acc[key] = node[key];
               }
               return acc;
@@ -1360,7 +1367,7 @@
             name: node.name,
             wires: node.wires,
             ...Object.keys(node).reduce((acc, key) => {
-              if (!['id', 'type', 'name', 'wires', 'x', 'y'].includes(key)) {
+              if (!['id', 'type', 'name', 'wires'].includes(key)) {
                 acc[key] = node[key];
               }
               return acc;
