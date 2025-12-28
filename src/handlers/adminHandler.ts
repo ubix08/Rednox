@@ -1,6 +1,6 @@
 
 // ===================================================================
-// adminHandler.ts - Flow Management (No Templates)
+// adminHandler.ts - Flow Management (FIXED)
 // ===================================================================
 
 import { Env, FlowConfig, D1_SCHEMA_STATEMENTS } from '../types/core';
@@ -204,11 +204,20 @@ async function getFlow(env: Env, flowId: string, origin: string): Promise<Respon
 
 async function createFlow(env: Env, request: Request, origin: string): Promise<Response> {
   try {
-    const flowData = await request.json() as FlowConfig;
-    const flowId = flowData.id || crypto.randomUUID();
+    const requestData = await request.json();
     
-    // Validate flow
-    const validation = validateFlow(flowData);
+    // The frontend sends the full flow config in the request body
+    // Extract metadata and ensure proper structure
+    const flowConfig: FlowConfig = {
+      id: requestData.id || crypto.randomUUID(),
+      name: requestData.name || 'Unnamed Flow',
+      description: requestData.description,
+      version: requestData.version,
+      nodes: requestData.nodes || []
+    };
+    
+    // Validate flow structure
+    const validation = validateFlow(flowConfig);
     if (!validation.valid) {
       return jsonResponse({
         error: 'Flow validation failed',
@@ -218,18 +227,18 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
     }
     
     // Extract HTTP triggers
-    const httpTriggers = extractHttpTriggers(flowData, flowId);
+    const httpTriggers = extractHttpTriggers(flowConfig, flowConfig.id);
     
-    // Use batch transaction
+    // Store in database
     const statements = [
       env.DB.prepare(`
         INSERT INTO flows (id, name, description, config, enabled)
         VALUES (?, ?, ?, ?, 1)
       `).bind(
-        flowId,
-        flowData.name,
-        flowData.description || '',
-        JSON.stringify({ ...flowData, id: flowId })
+        flowConfig.id,
+        flowConfig.name,
+        flowConfig.description || '',
+        JSON.stringify(flowConfig)  // Store the complete config
       ),
       ...httpTriggers.map(trigger => 
         env.DB.prepare(`
@@ -237,7 +246,7 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
           VALUES (?, ?, ?, ?, ?, 1)
         `).bind(
           crypto.randomUUID(),
-          flowId,
+          flowConfig.id,
           trigger.nodeId,
           trigger.path,
           trigger.method
@@ -249,7 +258,7 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
     
     return jsonResponse({ 
       success: true, 
-      flowId,
+      flowId: flowConfig.id,
       httpTriggers: httpTriggers.length,
       endpoints: httpTriggers.map(t => ({
         method: t.method,
@@ -264,17 +273,27 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
     console.error('Error creating flow:', err);
     return jsonResponse({ 
       error: 'Failed to create flow',
-      details: err.message
+      details: err.message,
+      stack: err.stack
     }, corsHeaders, 500);
   }
 }
 
 async function updateFlow(env: Env, request: Request, flowId: string, origin: string): Promise<Response> {
   try {
-    const flowData = await request.json() as FlowConfig;
+    const requestData = await request.json();
+    
+    // Build flow config from request data
+    const flowConfig: FlowConfig = {
+      id: flowId,  // Use the flowId from the URL
+      name: requestData.name || 'Unnamed Flow',
+      description: requestData.description,
+      version: requestData.version,
+      nodes: requestData.nodes || []
+    };
     
     // Validate flow
-    const validation = validateFlow(flowData);
+    const validation = validateFlow(flowConfig);
     if (!validation.valid) {
       return jsonResponse({
         error: 'Flow validation failed',
@@ -284,7 +303,7 @@ async function updateFlow(env: Env, request: Request, flowId: string, origin: st
     }
     
     // Extract HTTP triggers
-    const httpTriggers = extractHttpTriggers(flowData, flowId);
+    const httpTriggers = extractHttpTriggers(flowConfig, flowId);
     
     // Use batch transaction
     const statements = [
@@ -293,9 +312,9 @@ async function updateFlow(env: Env, request: Request, flowId: string, origin: st
         SET name = ?, description = ?, config = ?, updated_at = datetime('now')
         WHERE id = ?
       `).bind(
-        flowData.name,
-        flowData.description || '',
-        JSON.stringify({ ...flowData, id: flowId }),
+        flowConfig.name,
+        flowConfig.description || '',
+        JSON.stringify(flowConfig),
         flowId
       ),
       env.DB.prepare('DELETE FROM http_routes WHERE flow_id = ?').bind(flowId),
@@ -334,7 +353,8 @@ async function updateFlow(env: Env, request: Request, flowId: string, origin: st
     console.error('Error updating flow:', err);
     return jsonResponse({ 
       error: 'Failed to update flow',
-      details: err.message
+      details: err.message,
+      stack: err.stack
     }, corsHeaders, 500);
   }
 }
