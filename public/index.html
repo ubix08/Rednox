@@ -152,6 +152,7 @@
       gap: 0.5rem;
       font-size: 0.875rem;
       border: 2px solid transparent;
+      user-select: none;
     }
 
     .palette-node:hover {
@@ -190,11 +191,18 @@
       position: absolute;
       top: 0;
       left: 0;
-      cursor: grab;
+      width: 5000px;
+      height: 5000px;
     }
 
-    #canvas.panning {
-      cursor: grabbing;
+    #connections-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
     }
 
     /* Flow Nodes */
@@ -208,6 +216,7 @@
       cursor: move;
       transition: box-shadow 0.2s;
       user-select: none;
+      z-index: 10;
     }
 
     .flow-node.selected {
@@ -219,6 +228,11 @@
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
 
+    .flow-node.dragging {
+      opacity: 0.7;
+      cursor: grabbing;
+    }
+
     .node-header {
       display: flex;
       align-items: center;
@@ -226,63 +240,81 @@
       margin-bottom: 0.5rem;
       font-weight: 600;
       font-size: 0.875rem;
+      pointer-events: none;
     }
 
     .node-type {
       font-size: 0.75rem;
       color: var(--text-secondary);
       margin-bottom: 0.25rem;
+      pointer-events: none;
     }
 
     .node-ports {
       display: flex;
       justify-content: space-between;
       margin-top: 0.5rem;
+      pointer-events: none;
     }
 
     .port {
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
-      background: var(--border);
+      background: var(--primary);
       border: 2px solid var(--surface);
       cursor: crosshair;
       transition: all 0.2s;
       position: relative;
-      z-index: 10;
+      z-index: 100;
+      pointer-events: auto;
     }
 
     .port:hover {
-      background: var(--primary);
-      transform: scale(1.3);
+      background: var(--secondary);
+      transform: scale(1.4);
+      box-shadow: 0 0 8px var(--secondary);
     }
 
     .port.input {
-      margin-left: -1rem;
+      margin-left: -1.2rem;
     }
 
     .port.output {
-      margin-right: -1rem;
+      margin-right: -1.2rem;
+    }
+
+    .port.connecting {
+      background: var(--warning);
+      animation: pulse 0.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.3); }
     }
 
     /* Connection Lines */
-    .connection {
-      position: absolute;
-      pointer-events: none;
-      z-index: 1;
-    }
-
-    .connection path {
+    .connection-line {
       fill: none;
       stroke: var(--primary);
       stroke-width: 2;
-      opacity: 0.6;
+      opacity: 0.7;
+      pointer-events: stroke;
+      cursor: pointer;
     }
 
-    .connection.active path {
+    .connection-line:hover {
       stroke: var(--secondary);
-      opacity: 1;
       stroke-width: 3;
+      opacity: 1;
+    }
+
+    .connection-temp {
+      stroke: var(--warning);
+      stroke-width: 2;
+      opacity: 0.8;
+      stroke-dasharray: 5, 5;
     }
 
     /* Properties Panel */
@@ -571,7 +603,7 @@
 
       <!-- Canvas -->
       <div class="canvas-container" id="canvas-container">
-        <svg id="connections-svg" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;"></svg>
+        <svg id="connections-svg"></svg>
         <div id="canvas"></div>
       </div>
 
@@ -618,13 +650,14 @@
       canvas: null,
       canvasContainer: null,
       connectionsSvg: null,
-      isDraggingNode: false,
-      isPanning: false,
-      panStart: { x: 0, y: 0 },
-      canvasOffset: { x: 0, y: 0 },
-      scale: 1,
+      
+      // Drag states
+      draggingNode: null,
+      dragOffset: { x: 0, y: 0 },
+      
+      // Connection states
       connectingFrom: null,
-      tempConnection: null,
+      tempLine: null,
 
       init() {
         this.canvas = document.getElementById('canvas');
@@ -657,55 +690,45 @@
           const nodeType = e.dataTransfer.getData('text/plain');
           if (nodeType) {
             const rect = this.canvasContainer.getBoundingClientRect();
-            const x = (e.clientX - rect.left - this.canvasOffset.x) / this.scale;
-            const y = (e.clientY - rect.top - this.canvasOffset.y) / this.scale;
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
             this.addNode(nodeType, x, y);
           }
         });
       },
 
       setupCanvasEvents() {
-        // Panning
-        this.canvasContainer.addEventListener('mousedown', (e) => {
-          if (e.target === this.canvasContainer || e.target === this.connectionsSvg) {
-            e.preventDefault();
-            this.isPanning = true;
-            this.panStart = { x: e.clientX - this.canvasOffset.x, y: e.clientY - this.canvasOffset.y };
-            this.canvas.classList.add('panning');
-          }
-        });
-
+        // Global mouse move
         document.addEventListener('mousemove', (e) => {
-          if (this.isPanning && !this.isDraggingNode) {
-            this.canvasOffset.x = e.clientX - this.panStart.x;
-            this.canvasOffset.y = e.clientY - this.panStart.y;
-            this.canvas.style.transform = `translate(${this.canvasOffset.x}px, ${this.canvasOffset.y}px) scale(${this.scale})`;
-            this.connectionsSvg.style.transform = `translate(${this.canvasOffset.x}px, ${this.canvasOffset.y}px)`;
-            this.updateConnections();
+          if (this.draggingNode) {
+            this.handleNodeDrag(e);
           }
-
-          if (this.tempConnection && !this.isPanning) {
-            this.updateTempConnection(e);
+          if (this.tempLine) {
+            this.updateTempLine(e);
           }
         });
 
+        // Global mouse up
         document.addEventListener('mouseup', () => {
-          this.isPanning = false;
-          this.canvas.classList.remove('panning');
-          
-          if (this.tempConnection) {
-            this.connectionsSvg.removeChild(this.tempConnection);
-            this.tempConnection = null;
+          if (this.draggingNode) {
+            this.draggingNode.classList.remove('dragging');
+            this.draggingNode = null;
+          }
+          if (this.tempLine) {
+            this.tempLine.remove();
+            this.tempLine = null;
             this.connectingFrom = null;
+            // Remove connecting class from all ports
+            document.querySelectorAll('.port.connecting').forEach(p => p.classList.remove('connecting'));
           }
         });
 
         // Context menu
         this.canvas.addEventListener('contextmenu', (e) => {
-          if (e.target.closest('.flow-node')) {
+          const nodeEl = e.target.closest('.flow-node');
+          if (nodeEl) {
             e.preventDefault();
-            const node = e.target.closest('.flow-node');
-            this.selectNode(node.dataset.id);
+            this.selectNode(nodeEl.dataset.id);
             this.showContextMenu(e.clientX, e.clientY);
           }
         });
@@ -713,6 +736,10 @@
         document.addEventListener('click', (e) => {
           if (!e.target.closest('.context-menu')) {
             this.hideContextMenu();
+          }
+          // Deselect when clicking canvas
+          if (e.target === this.canvasContainer || e.target === this.canvas) {
+            this.deselectAll();
           }
         });
       },
@@ -750,6 +777,7 @@
 
         this.nodes.push(node);
         this.renderNode(node);
+        this.selectNode(id);
       },
 
       renderNode(node) {
@@ -768,35 +796,54 @@
             <span>${node.name || node.type}</span>
           </div>
           <div class="node-ports">
-            ${hasInputs ? '<div class="port input" data-port-type="input"></div>' : '<div></div>'}
-            ${hasOutputs ? '<div class="port output" data-port-type="output"></div>' : '<div></div>'}
+            ${hasInputs ? '<div class="port input" data-port-type="input" data-node-id="' + node.id + '"></div>' : '<div></div>'}
+            ${hasOutputs ? '<div class="port output" data-port-type="output" data-node-id="' + node.id + '"></div>' : '<div></div>'}
           </div>
         `;
 
+        // Node dragging
         el.addEventListener('mousedown', (e) => {
+          // Don't drag if clicking on port
           if (e.target.classList.contains('port')) {
-            e.stopPropagation();
             return;
           }
+          
           e.preventDefault();
           this.selectNode(node.id);
-          this.startDragNode(e, node);
+          this.startNodeDrag(e, el, node);
         });
 
-        // Port connections
+        // Setup port events
         const ports = el.querySelectorAll('.port');
         ports.forEach(port => {
           port.addEventListener('mousedown', (e) => {
             e.stopPropagation();
+            e.preventDefault();
+            
             if (port.dataset.portType === 'output') {
-              this.startConnection(node.id, e);
+              this.startConnection(node.id, port);
             }
           });
 
           port.addEventListener('mouseup', (e) => {
             e.stopPropagation();
+            
             if (port.dataset.portType === 'input' && this.connectingFrom) {
               this.completeConnection(node.id);
+            }
+          });
+
+          port.addEventListener('mouseenter', (e) => {
+            if (this.connectingFrom && port.dataset.portType === 'input') {
+              port.style.background = 'var(--secondary)';
+              port.style.transform = 'scale(1.4)';
+            }
+          });
+
+          port.addEventListener('mouseleave', (e) => {
+            if (!port.classList.contains('connecting')) {
+              port.style.background = '';
+              port.style.transform = '';
             }
           });
         });
@@ -804,64 +851,53 @@
         this.canvas.appendChild(el);
       },
 
-      startDragNode(e, node) {
-        if (e.target.classList.contains('port')) return;
+      startNodeDrag(e, el, node) {
+        this.draggingNode = el;
+        el.classList.add('dragging');
         
-        e.preventDefault();
-        e.stopPropagation();
-        
-        this.isDraggingNode = true;
-        const startX = e.clientX;
-        const startY = e.clientY;
-        const startNodeX = node.x;
-        const startNodeY = node.y;
-
-        const onMove = (moveEvent) => {
-          if (!this.isDraggingNode) return;
-          
-          const dx = (moveEvent.clientX - startX) / this.scale;
-          const dy = (moveEvent.clientY - startY) / this.scale;
-          
-          node.x = startNodeX + dx;
-          node.y = startNodeY + dy;
-          
-          const el = this.canvas.querySelector(`[data-id="${node.id}"]`);
-          if (el) {
-            el.style.left = node.x + 'px';
-            el.style.top = node.y + 'px';
-          }
-          
-          this.updateConnections();
-        };
-
-        const onUp = () => {
-          this.isDraggingNode = false;
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
-        };
-
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
+        const rect = el.getBoundingClientRect();
+        this.dragOffset.x = e.clientX - rect.left;
+        this.dragOffset.y = e.clientY - rect.top;
       },
 
-      startConnection(fromNodeId, e) {
-        e.stopPropagation();
+      handleNodeDrag(e) {
+        if (!this.draggingNode) return;
+        
+        const containerRect = this.canvasContainer.getBoundingClientRect();
+        const x = e.clientX - containerRect.left - this.dragOffset.x;
+        const y = e.clientY - containerRect.top - this.dragOffset.y;
+        
+        this.draggingNode.style.left = x + 'px';
+        this.draggingNode.style.top = y + 'px';
+        
+        // Update node data
+        const nodeId = this.draggingNode.dataset.id;
+        const node = this.nodes.find(n => n.id === nodeId);
+        if (node) {
+          node.x = x;
+          node.y = y;
+        }
+        
+        this.updateConnections();
+      },
+
+      startConnection(fromNodeId, fromPort) {
         this.connectingFrom = fromNodeId;
+        fromPort.classList.add('connecting');
         
-        this.tempConnection = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        this.tempConnection.setAttribute('stroke', '#4285F4');
-        this.tempConnection.setAttribute('stroke-width', '2');
-        this.tempConnection.setAttribute('fill', 'none');
-        this.tempConnection.setAttribute('opacity', '0.6');
-        this.connectionsSvg.appendChild(this.tempConnection);
+        // Create temporary line
+        this.tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        this.tempLine.classList.add('connection-temp');
+        this.connectionsSvg.appendChild(this.tempLine);
       },
 
-      updateTempConnection(e) {
-        if (!this.tempConnection || !this.connectingFrom) return;
+      updateTempLine(e) {
+        if (!this.tempLine || !this.connectingFrom) return;
 
         const fromNode = this.nodes.find(n => n.id === this.connectingFrom);
         const fromEl = this.canvas.querySelector(`[data-id="${fromNode.id}"]`);
         const fromPort = fromEl.querySelector('.port.output');
+        
         const fromRect = fromPort.getBoundingClientRect();
         const containerRect = this.canvasContainer.getBoundingClientRect();
 
@@ -870,14 +906,17 @@
         const x2 = e.clientX - containerRect.left;
         const y2 = e.clientY - containerRect.top;
 
-        const path = this.createBezierPath(x1, y1, x2, y2);
-        this.tempConnection.setAttribute('d', path);
+        this.tempLine.setAttribute('d', this.createBezierPath(x1, y1, x2, y2));
       },
 
       completeConnection(toNodeId) {
-        if (!this.connectingFrom || this.connectingFrom === toNodeId) return;
+        if (!this.connectingFrom || this.connectingFrom === toNodeId) {
+          return;
+        }
 
         const fromNode = this.nodes.find(n => n.id === this.connectingFrom);
+        
+        // Check if connection already exists
         if (!fromNode.wires[0].includes(toNodeId)) {
           fromNode.wires[0].push(toNodeId);
           this.connections.push({ from: this.connectingFrom, to: toNodeId });
@@ -887,490 +926,6 @@
 
       createBezierPath(x1, y1, x2, y2) {
         const dx = x2 - x1;
-        const dy = y2 - y1;
         const controlPointOffset = Math.abs(dx) / 2;
         
-        return `M ${x1} ${y1} C ${x1 + controlPointOffset} ${y1}, ${x2 - controlPointOffset} ${y2}, ${x2} ${y2}`;
-      },
-
-      updateConnections() {
-        this.connectionsSvg.innerHTML = '';
-        
-        this.connections.forEach(conn => {
-          const fromNode = this.nodes.find(n => n.id === conn.from);
-          const toNode = this.nodes.find(n => n.id === conn.to);
-          
-          if (!fromNode || !toNode) return;
-
-          const fromEl = this.canvas.querySelector(`[data-id="${fromNode.id}"]`);
-          const toEl = this.canvas.querySelector(`[data-id="${toNode.id}"]`);
-          
-          if (!fromEl || !toEl) return;
-
-          const fromPort = fromEl.querySelector('.port.output');
-          const toPort = toEl.querySelector('.port.input');
-          
-          if (!fromPort || !toPort) return;
-
-          const fromRect = fromPort.getBoundingClientRect();
-          const toRect = toPort.getBoundingClientRect();
-          const containerRect = this.canvasContainer.getBoundingClientRect();
-
-          const x1 = fromRect.left + fromRect.width / 2 - containerRect.left;
-          const y1 = fromRect.top + fromRect.height / 2 - containerRect.top;
-          const x2 = toRect.left + toRect.width / 2 - containerRect.left;
-          const y2 = toRect.top + toRect.height / 2 - containerRect.top;
-
-          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          path.setAttribute('d', this.createBezierPath(x1, y1, x2, y2));
-          path.setAttribute('stroke', '#4285F4');
-          path.setAttribute('stroke-width', '2');
-          path.setAttribute('fill', 'none');
-          path.setAttribute('opacity', '0.6');
-          path.style.pointerEvents = 'none';
-          
-          this.connectionsSvg.appendChild(path);
-        });
-      },
-
-      selectNode(nodeId) {
-        this.deselectAll();
-        this.selectedNode = nodeId;
-        
-        const el = this.canvas.querySelector(`[data-id="${nodeId}"]`);
-        if (el) el.classList.add('selected');
-        
-        this.showNodeProperties(nodeId);
-      },
-
-      deselectAll() {
-        this.selectedNode = null;
-        document.querySelectorAll('.flow-node.selected').forEach(el => {
-          el.classList.remove('selected');
-        });
-      },
-
-      showNodeProperties(nodeId) {
-        const node = this.nodes.find(n => n.id === nodeId);
-        if (!node) return;
-
-        const panel = document.getElementById('properties-panel');
-        let html = `<h3 style="margin-bottom: 1rem;">${node.type}</h3>`;
-
-        html += `
-          <div class="prop-group">
-            <label class="prop-label">Name</label>
-            <input type="text" class="prop-input" value="${node.name || ''}" 
-                   onchange="app.updateNodeProperty('${nodeId}', 'name', this.value)">
-          </div>
-        `;
-
-        // Type-specific properties
-        if (node.type === 'http-in') {
-          html += `
-            <div class="prop-group">
-              <label class="prop-label">URL Path</label>
-              <input type="text" class="prop-input" value="${node.url || '/'}" 
-                     onchange="app.updateNodeProperty('${nodeId}', 'url', this.value)">
-            </div>
-            <div class="prop-group">
-              <label class="prop-label">Method</label>
-              <select class="prop-select" onchange="app.updateNodeProperty('${nodeId}', 'method', this.value)">
-                <option value="get" ${node.method === 'get' ? 'selected' : ''}>GET</option>
-                <option value="post" ${node.method === 'post' ? 'selected' : ''}>POST</option>
-                <option value="put" ${node.method === 'put' ? 'selected' : ''}>PUT</option>
-                <option value="delete" ${node.method === 'delete' ? 'selected' : ''}>DELETE</option>
-              </select>
-            </div>
-          `;
-        } else if (node.type === 'function') {
-          html += `
-            <div class="prop-group">
-              <label class="prop-label">Function Code</label>
-              <textarea class="prop-textarea" rows="12" 
-                        onchange="app.updateNodeProperty('${nodeId}', 'func', this.value)">${node.func || 'return msg;'}</textarea>
-            </div>
-          `;
-        } else if (node.type === 'inject') {
-          html += `
-            <div class="prop-group">
-              <label class="prop-label">Payload Type</label>
-              <select class="prop-select" onchange="app.updateNodeProperty('${nodeId}', 'payloadType', this.value)">
-                <option value="date" ${node.payloadType === 'date' ? 'selected' : ''}>Timestamp</option>
-                <option value="str" ${node.payloadType === 'str' ? 'selected' : ''}>String</option>
-                <option value="num" ${node.payloadType === 'num' ? 'selected' : ''}>Number</option>
-                <option value="bool" ${node.payloadType === 'bool' ? 'selected' : ''}>Boolean</option>
-                <option value="json" ${node.payloadType === 'json' ? 'selected' : ''}>JSON</option>
-              </select>
-            </div>
-            <div class="prop-group">
-              <label class="prop-label">Payload</label>
-              <input type="text" class="prop-input" value="${node.payload || ''}" 
-                     onchange="app.updateNodeProperty('${nodeId}', 'payload', this.value)">
-            </div>
-          `;
-        } else if (node.type === 'context') {
-          html += `
-            <div class="prop-group">
-              <label class="prop-label">Operation</label>
-              <select class="prop-select" onchange="app.updateNodeProperty('${nodeId}', 'operation', this.value)">
-                <option value="get" ${node.operation === 'get' ? 'selected' : ''}>Get</option>
-                <option value="set" ${node.operation === 'set' ? 'selected' : ''}>Set</option>
-                <option value="keys" ${node.operation === 'keys' ? 'selected' : ''}>List Keys</option>
-                <option value="delete" ${node.operation === 'delete' ? 'selected' : ''}>Delete</option>
-              </select>
-            </div>
-            <div class="prop-group">
-              <label class="prop-label">Scope</label>
-              <select class="prop-select" onchange="app.updateNodeProperty('${nodeId}', 'scope', this.value)">
-                <option value="flow" ${node.scope === 'flow' ? 'selected' : ''}>Flow</option>
-                <option value="global" ${node.scope === 'global' ? 'selected' : ''}>Global</option>
-              </select>
-            </div>
-            <div class="prop-group">
-              <label class="prop-label">Key</label>
-              <input type="text" class="prop-input" value="${node.key || ''}" 
-                     onchange="app.updateNodeProperty('${nodeId}', 'key', this.value)">
-            </div>
-          `;
-        } else if (node.type === 'switch') {
-          html += `
-            <div class="prop-group">
-              <label class="prop-label">Property</label>
-              <input type="text" class="prop-input" value="${node.property || 'payload'}" 
-                     onchange="app.updateNodeProperty('${nodeId}', 'property', this.value)">
-            </div>
-            <div class="prop-group">
-              <label class="prop-label">Rules (JSON)</label>
-              <textarea class="prop-textarea" rows="8" 
-                        onchange="app.updateNodeProperty('${nodeId}', 'rules', JSON.parse(this.value))">${JSON.stringify(node.rules || [{t: 'eq', v: '', vt: 'str'}], null, 2)}</textarea>
-            </div>
-          `;
-        } else if (node.type === 'change') {
-          html += `
-            <div class="prop-group">
-              <label class="prop-label">Rules (JSON)</label>
-              <textarea class="prop-textarea" rows="8" 
-                        onchange="app.updateNodeProperty('${nodeId}', 'rules', JSON.parse(this.value))">${JSON.stringify(node.rules || [{t: 'set', p: 'payload', to: '', tot: 'str'}], null, 2)}</textarea>
-            </div>
-          `;
-        } else if (node.type === 'template') {
-          html += `
-            <div class="prop-group">
-              <label class="prop-label">Template</label>
-              <textarea class="prop-textarea" rows="10" 
-                        onchange="app.updateNodeProperty('${nodeId}', 'template', this.value)">${node.template || ''}</textarea>
-            </div>
-            <div class="prop-group">
-              <label class="prop-label">Field</label>
-              <input type="text" class="prop-input" value="${node.field || 'payload'}" 
-                     onchange="app.updateNodeProperty('${nodeId}', 'field', this.value)">
-            </div>
-          `;
-        } else if (node.type === 'debug') {
-          html += `
-            <div class="prop-group">
-              <label class="prop-label">Output</label>
-              <select class="prop-select" onchange="app.updateNodeProperty('${nodeId}', 'complete', this.value)">
-                <option value="payload" ${node.complete === 'payload' ? 'selected' : ''}>msg.payload</option>
-                <option value="true" ${node.complete === 'true' ? 'selected' : ''}>Complete msg</option>
-              </select>
-            </div>
-          `;
-        }
-
-        panel.innerHTML = html;
-      },
-
-      updateNodeProperty(nodeId, key, value) {
-        const node = this.nodes.find(n => n.id === nodeId);
-        if (node) {
-          node[key] = value;
-        }
-      },
-
-      showContextMenu(x, y) {
-        const menu = document.getElementById('context-menu');
-        menu.style.left = x + 'px';
-        menu.style.top = y + 'px';
-        menu.classList.add('active');
-      },
-
-      hideContextMenu() {
-        document.getElementById('context-menu').classList.remove('active');
-      },
-
-      deleteSelectedNode() {
-        if (!this.selectedNode) return;
-        
-        // Remove connections
-        this.connections = this.connections.filter(c => 
-          c.from !== this.selectedNode && c.to !== this.selectedNode
-        );
-        
-        // Remove from node wires
-        this.nodes.forEach(node => {
-          node.wires = node.wires.map(wireGroup => 
-            wireGroup.filter(id => id !== this.selectedNode)
-          );
-        });
-        
-        // Remove node
-        this.nodes = this.nodes.filter(n => n.id !== this.selectedNode);
-        
-        // Remove DOM element
-        const el = this.canvas.querySelector(`[data-id="${this.selectedNode}"]`);
-        if (el) el.remove();
-        
-        this.selectedNode = null;
-        this.updateConnections();
-        this.hideContextMenu();
-        
-        document.getElementById('properties-panel').innerHTML = `
-          <h3 style="margin-bottom: 1rem;">Node Properties</h3>
-          <p style="color: var(--text-secondary); font-size: 0.875rem;">Select a node to edit its properties</p>
-        `;
-      },
-
-      duplicateSelectedNode() {
-        if (!this.selectedNode) return;
-        
-        const node = this.nodes.find(n => n.id === this.selectedNode);
-        if (!node) return;
-        
-        const newNode = JSON.parse(JSON.stringify(node));
-        newNode.id = 'node-' + Date.now();
-        newNode.x += 50;
-        newNode.y += 50;
-        newNode.wires = [[]];
-        
-        this.nodes.push(newNode);
-        this.renderNode(newNode);
-        this.hideContextMenu();
-      },
-
-      exportFlow() {
-        const flowName = document.getElementById('flow-name').value || 'my-flow';
-        const flowConfig = {
-          id: flowName.toLowerCase().replace(/\s+/g, '-'),
-          name: flowName,
-          description: 'Flow created with RedNox Visual Editor',
-          version: '1.0',
-          nodes: this.nodes.map(node => ({
-            id: node.id,
-            type: node.type,
-            name: node.name,
-            wires: node.wires,
-            ...Object.keys(node).reduce((acc, key) => {
-              if (!['id', 'type', 'name', 'wires', 'x', 'y'].includes(key)) {
-                acc[key] = node[key];
-              }
-              return acc;
-            }, {})
-          }))
-        };
-
-        const blob = new Blob([JSON.stringify(flowConfig, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${flowConfig.id}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-      },
-
-      importFlow() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.json';
-        input.onchange = (e) => {
-          const file = e.target.files[0];
-          if (!file) return;
-          
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            try {
-              const flowConfig = JSON.parse(e.target.result);
-              this.loadFlowConfig(flowConfig);
-            } catch (err) {
-              alert('Failed to import flow: ' + err.message);
-            }
-          };
-          reader.readAsText(file);
-        };
-        input.click();
-      },
-
-      loadFlowConfig(flowConfig) {
-        // Clear current flow
-        this.nodes = [];
-        this.connections = [];
-        this.canvas.innerHTML = '';
-        
-        document.getElementById('flow-name').value = flowConfig.name || flowConfig.id;
-        
-        // Add nodes with positions
-        flowConfig.nodes.forEach((nodeConfig, index) => {
-          const node = {
-            ...nodeConfig,
-            x: nodeConfig.x || (100 + (index % 5) * 200),
-            y: nodeConfig.y || (100 + Math.floor(index / 5) * 150)
-          };
-          this.nodes.push(node);
-          this.renderNode(node);
-        });
-        
-        // Build connections from wires
-        this.nodes.forEach(node => {
-          if (node.wires && node.wires.length > 0) {
-            node.wires[0].forEach(targetId => {
-              this.connections.push({ from: node.id, to: targetId });
-            });
-          }
-        });
-        
-        this.updateConnections();
-      },
-
-      newFlow() {
-        if (this.nodes.length > 0 && !confirm('Clear current flow?')) return;
-        
-        this.nodes = [];
-        this.connections = [];
-        this.canvas.innerHTML = '';
-        this.selectedNode = null;
-        document.getElementById('flow-name').value = 'my-flow';
-        document.getElementById('properties-panel').innerHTML = `
-          <h3 style="margin-bottom: 1rem;">Node Properties</h3>
-          <p style="color: var(--text-secondary); font-size: 0.875rem;">Select a node to edit its properties</p>
-        `;
-        this.updateConnections();
-      },
-
-      deployFlow() {
-        document.getElementById('deploy-modal').classList.add('active');
-      },
-
-      closeModal() {
-        document.getElementById('deploy-modal').classList.remove('active');
-      },
-
-      async submitDeploy() {
-        const endpoint = document.getElementById('api-endpoint').value;
-        if (!endpoint) {
-          alert('Please enter API endpoint');
-          return;
-        }
-
-        const flowName = document.getElementById('flow-name').value || 'my-flow';
-        const flowConfig = {
-          id: flowName.toLowerCase().replace(/\s+/g, '-'),
-          name: flowName,
-          description: 'Flow created with RedNox Visual Editor',
-          nodes: this.nodes.map(node => ({
-            id: node.id,
-            type: node.type,
-            name: node.name,
-            wires: node.wires,
-            ...Object.keys(node).reduce((acc, key) => {
-              if (!['id', 'type', 'name', 'wires', 'x', 'y'].includes(key)) {
-                acc[key] = node[key];
-              }
-              return acc;
-            }, {})
-          }))
-        };
-
-        const resultDiv = document.getElementById('deploy-result');
-        resultDiv.innerHTML = '<p style="color: var(--text-secondary);">Deploying...</p>';
-
-        try {
-          const response = await fetch(`${endpoint}/admin/flows`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(flowConfig)
-          });
-
-          const data = await response.json();
-
-          if (data.success || response.ok) {
-            resultDiv.innerHTML = `
-              <div class="alert alert-success">
-                ✅ Flow deployed successfully!
-              </div>
-              ${data.endpoints ? `
-                <div style="margin-top: 1rem;">
-                  <strong>Endpoints:</strong>
-                  <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
-                    ${data.endpoints.map(e => `
-                      <li style="margin: 0.25rem 0; font-family: monospace; font-size: 0.8125rem;">
-                        ${e.method} ${e.url}
-                      </li>
-                    `).join('')}
-                  </ul>
-                </div>
-              ` : ''}
-            `;
-          } else {
-            resultDiv.innerHTML = `
-              <div class="alert alert-error">
-                ❌ Deployment failed: ${data.error || 'Unknown error'}
-              </div>
-            `;
-          }
-        } catch (err) {
-          resultDiv.innerHTML = `
-            <div class="alert alert-error">
-              ❌ Network error: ${err.message}
-            </div>
-          `;
-        }
-      },
-
-      loadSampleFlow() {
-        // Load a simple sample flow
-        const sample = {
-          id: 'sample-chatbot',
-          name: 'Sample Chatbot',
-          nodes: [
-            {
-              id: 'http-in-1',
-              type: 'http-in',
-              name: 'Chat Endpoint',
-              url: '/chat',
-              method: 'post',
-              x: 100,
-              y: 150,
-              wires: [['function-1']]
-            },
-            {
-              id: 'function-1',
-              type: 'function',
-              name: 'Process Message',
-              func: 'msg.payload = {\n  response: "Hello! You said: " + msg.payload.message\n};\nreturn msg;',
-              x: 350,
-              y: 150,
-              wires: [['http-out-1']]
-            },
-            {
-              id: 'http-out-1',
-              type: 'http-response',
-              name: 'Send Response',
-              x: 600,
-              y: 150,
-              wires: []
-            }
-          ]
-        };
-        
-        this.loadFlowConfig(sample);
-      }
-    };
-
-    // Initialize on load
-    window.addEventListener('DOMContentLoaded', () => {
-      app.init();
-    });
-  </script>
-</body>
-</html>
+        return `M ${x
