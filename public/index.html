@@ -1,5 +1,4 @@
 
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,24 +6,836 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>RedNox - Flow Builder</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
-  <link rel="stylesheet" href="styles.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --primary-light: #818cf8;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --bg: #0f172a;
+      --bg-light: #1e293b;
+      --bg-lighter: #334155;
+      --surface: #1e293b;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --shadow: rgba(0, 0, 0, 0.3);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.875rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      z-index: 1000;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.875rem;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .back-btn {
+      background: none;
+      border: none;
+      color: var(--text);
+      font-size: 1.375rem;
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 8px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      line-height: 1;
+    }
+
+    .back-btn:hover {
+      background: var(--bg-lighter);
+    }
+
+    .back-btn.visible {
+      display: flex;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      font-weight: 600;
+      font-size: 1.125rem;
+      color: var(--text);
+    }
+
+    .logo-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+
+    .flow-title {
+      font-size: 0.9375rem;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .btn {
+      padding: 0.625rem 1rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+
+    /* Main Layout */
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Flow List View */
+    .flows-view {
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      display: none;
+    }
+
+    .flows-view.active {
+      display: block;
+    }
+
+    .flows-container {
+      padding: 1.25rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .flow-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.25rem;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .flow-card:hover {
+      border-color: var(--primary);
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+      transform: translateY(-2px);
+    }
+
+    .flow-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .flow-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .flow-name {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin-bottom: 0.375rem;
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      flex-wrap: wrap;
+    }
+
+    .flow-desc {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 0.625rem;
+    }
+
+    .flow-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+    }
+
+    .badge {
+      padding: 0.3125rem 0.625rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .badge-success {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+    }
+
+    .badge-danger {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+    }
+
+    .flow-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .action-btn {
+      padding: 0.5rem 0.875rem;
+      background: var(--bg-lighter);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
+    .action-btn:hover {
+      background: var(--bg-light);
+      border-color: var(--primary);
+      transform: translateY(-1px);
+    }
+
+    .action-btn:active {
+      transform: scale(0.96);
+    }
+
+    .action-btn.primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: white;
+    }
+
+    .action-btn.danger {
+      background: transparent;
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .action-btn.danger:hover {
+      background: var(--danger);
+      color: white;
+    }
+
+    .empty-state {
+      padding: 4rem 1.5rem;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .empty-icon {
+      font-size: 4rem;
+      margin-bottom: 1.25rem;
+      opacity: 0.4;
+    }
+
+    /* Canvas View */
+    .canvas-view {
+      width: 100%;
+      height: 100%;
+      display: none;
+      position: relative;
+    }
+
+    .canvas-view.active {
+      display: flex;
+    }
+
+    #drawflow {
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      background-image: 
+        radial-gradient(circle, var(--border) 1px, transparent 1px);
+      background-size: 24px 24px;
+      touch-action: none;
+    }
+
+    /* Drawflow Nodes */
+    .drawflow .drawflow-node {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: move;
+    }
+
+    .drawflow .drawflow-node.selected .node-bubble {
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.3), 0 8px 24px rgba(0,0,0,0.3);
+      transform: scale(1.05);
+    }
+
+    .drawflow .drawflow-node .node-bubble {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px var(--shadow);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+
+    .drawflow .drawflow-node:hover .node-bubble {
+      transform: scale(1.08);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    }
+
+    .drawflow .drawflow-node .node-icon {
+      font-size: 2rem;
+      color: white;
+    }
+
+    .drawflow .drawflow-node .node-name {
+      margin-top: 10px;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      text-align: center;
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      background: var(--surface);
+      padding: 0.25rem 0.625rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .drawflow .connection .main-path {
+      stroke: var(--primary);
+      stroke-width: 2.5px;
+      fill: none;
+      stroke-linecap: round;
+    }
+
+    .drawflow .connection.selected .main-path {
+      stroke: var(--primary-light);
+      stroke-width: 3px;
+    }
+
+    /* Canvas Toolbar */
+    .canvas-toolbar {
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      display: flex;
+      gap: 0.5rem;
+      z-index: 100;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.5rem;
+      box-shadow: 0 4px 16px var(--shadow);
+    }
+
+    .toolbar-btn {
+      width: 40px;
+      height: 40px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      font-size: 1.125rem;
+    }
+
+    .toolbar-btn:hover {
+      background: var(--bg-lighter);
+      color: var(--primary-light);
+    }
+
+    .toolbar-btn:active {
+      transform: scale(0.9);
+    }
+
+    /* Node Palette */
+    .node-palette {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-top-left-radius: 20px;
+      border-top-right-radius: 20px;
+      box-shadow: 0 -4px 24px var(--shadow);
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 2000;
+      max-height: 75vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .node-palette.active {
+      transform: translateY(0);
+    }
+
+    .palette-handle {
+      width: 48px;
+      height: 5px;
+      background: var(--border);
+      border-radius: 3px;
+      margin: 0.875rem auto;
+    }
+
+    .palette-header {
+      padding: 0 1.25rem 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .palette-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.75rem;
+      cursor: pointer;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .close-btn:hover {
+      background: var(--bg-lighter);
+      color: var(--text);
+    }
+
+    .palette-content {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 1.25rem;
+    }
+
+    .node-category {
+      margin-bottom: 1.5rem;
+    }
+
+    .category-title {
+      padding: 0.5rem 0 0.75rem;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+    }
+
+    .node-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .node-item {
+      padding: 1rem 0.75rem;
+      background: var(--bg-light);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      text-align: center;
+    }
+
+    .node-item:hover {
+      border-color: var(--primary);
+      background: var(--bg-lighter);
+      transform: translateY(-2px);
+    }
+
+    .node-item:active {
+      transform: scale(0.96);
+    }
+
+    .node-item-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    .node-item-name {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* Properties Panel */
+    .properties-panel {
+      position: fixed;
+      right: 0;
+      top: 57px;
+      bottom: 0;
+      width: 100%;
+      max-width: 360px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      box-shadow: -4px 0 24px var(--shadow);
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 1500;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .properties-panel.active {
+      transform: translateX(0);
+    }
+
+    .properties-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .properties-title {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .properties-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.25rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .form-input,
+    .form-select,
+    .form-textarea {
+      width: 100%;
+      padding: 0.75rem;
+      background: var(--bg-light);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.9375rem;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .form-input:focus,
+    .form-select:focus,
+    .form-textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 140px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.875rem;
+    }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 3000;
+      padding: 1rem;
+      overflow-y: auto;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 1.75rem;
+      width: 100%;
+      max-width: 520px;
+      box-shadow: 0 24px 48px rgba(0,0,0,0.4);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.75rem;
+    }
+
+    .modal-title {
+      font-size: 1.375rem;
+      font-weight: 600;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 1.25rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      box-shadow: 0 8px 24px var(--shadow);
+      z-index: 4000;
+      animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-width: 280px;
+      max-width: 90vw;
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translate(-50%, 100px);
+        opacity: 0;
+      }
+      to {
+        transform: translate(-50%, 0);
+        opacity: 1;
+      }
+    }
+
+    .toast-icon {
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
+
+    .toast-message {
+      flex: 1;
+      font-size: 0.9375rem;
+      font-weight: 500;
+    }
+
+    .toast.success {
+      border-left: 4px solid var(--success);
+    }
+
+    .toast.error {
+      border-left: 4px solid var(--danger);
+    }
+
+    .toast.info {
+      border-left: 4px solid var(--primary);
+    }
+
+    /* Loading */
+    .loading {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-light);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 5px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--bg-lighter);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .properties-panel {
+        top: 0;
+        max-width: 100%;
+        border-left: none;
+        border-top-left-radius: 20px;
+        border-top-right-radius: 20px;
+      }
+
+      .node-palette {
+        max-height: 80vh;
+      }
+    }
+
+    @media (min-width: 768px) {
+      .node-grid {
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      }
+
+      .flows-container {
+        padding: 2rem;
+      }
+
+      .canvas-toolbar {
+        top: 1.5rem;
+        left: 1.5rem;
+      }
+    }
+  </style>
 </head>
 <body>
   <div class="app">
     <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <button class="back-btn" id="backBtn" style="display: none;" onclick="showFlowsList()">←</button>
+        <button class="back-btn" id="backBtn" onclick="showFlowsList()">←</button>
         <div class="logo">
           <div class="logo-icon">R</div>
-          <span class="logo-text">RedNox</span>
+          <span>RedNox</span>
         </div>
         <div class="flow-title" id="flowTitle"></div>
       </div>
-      <div class="header-actions" id="headerActions">
+      <div id="headerActions">
         <button class="btn btn-primary" onclick="showNewFlowModal()">
           <span>+</span>
-          <span class="btn-text">New</span>
+          <span>New Flow</span>
         </button>
       </div>
     </header>
@@ -43,44 +854,39 @@
 
       <!-- Canvas View -->
       <div class="canvas-view" id="canvasView">
-        <div class="canvas-wrapper">
-          <div id="drawflow"></div>
-        </div>
+        <div id="drawflow"></div>
         
-        <!-- Mobile Toolbar -->
-        <div class="mobile-toolbar">
+        <!-- Canvas Toolbar -->
+        <div class="canvas-toolbar">
           <button class="toolbar-btn" onclick="showNodePalette()" title="Add Node">+</button>
           <button class="toolbar-btn" onclick="editor.zoom_in()" title="Zoom In">🔍+</button>
           <button class="toolbar-btn" onclick="editor.zoom_out()" title="Zoom Out">🔍−</button>
           <button class="toolbar-btn" onclick="editor.zoom_reset()" title="Reset">⊙</button>
-          <button class="toolbar-btn" onclick="validateFlow()" title="Validate">✓</button>
           <button class="toolbar-btn" onclick="saveFlow()" title="Save">💾</button>
-          <button class="toolbar-btn" onclick="showSettings()" title="Settings">⚙</button>
         </div>
       </div>
     </main>
   </div>
 
-  <!-- Node Palette Bottom Sheet -->
-  <div class="bottom-sheet" id="nodePalette">
-    <div class="bottom-sheet-handle"></div>
-    <div class="bottom-sheet-header">
-      <h3 class="bottom-sheet-title">Add Node</h3>
-      <button class="modal-close" onclick="closeNodePalette()">×</button>
+  <!-- Node Palette -->
+  <div class="node-palette" id="nodePalette">
+    <div class="palette-handle"></div>
+    <div class="palette-header">
+      <h3 class="palette-title">Add Node</h3>
+      <button class="close-btn" onclick="closeNodePalette()">×</button>
     </div>
-    <div class="bottom-sheet-content" id="nodePaletteContent"></div>
+    <div class="palette-content" id="nodePaletteContent"></div>
   </div>
 
-  <!-- Properties Bottom Sheet -->
-  <div class="properties-sheet" id="propertiesPanel">
-    <div class="bottom-sheet-handle"></div>
-    <div class="bottom-sheet-header">
-      <h3 class="bottom-sheet-title">Properties</h3>
-      <button class="modal-close" onclick="closeProperties()">×</button>
+  <!-- Properties Panel -->
+  <div class="properties-panel" id="propertiesPanel">
+    <div class="properties-header">
+      <h3 class="properties-title">Properties</h3>
+      <button class="close-btn" onclick="closeProperties()">×</button>
     </div>
-    <div class="bottom-sheet-content" id="propertiesContent">
+    <div class="properties-content" id="propertiesContent">
       <p style="color: var(--text-muted); text-align: center; padding: 2rem;">
-        Select a node to edit
+        Select a node to edit properties
       </p>
     </div>
   </div>
@@ -90,7 +896,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3 class="modal-title">Create New Flow</h3>
-        <button class="modal-close" onclick="closeModal('newFlowModal')">×</button>
+        <button class="close-btn" onclick="closeModal('newFlowModal')">×</button>
       </div>
       <div class="form-group">
         <label class="form-label">Flow ID *</label>
@@ -102,42 +908,653 @@
       </div>
       <div class="form-group">
         <label class="form-label">Description</label>
-        <textarea class="form-textarea" id="newFlowDesc" placeholder="What does this flow do?"></textarea>
+        <textarea class="form-textarea" id="newFlowDesc" placeholder="What does this flow do?" style="min-height: 100px;"></textarea>
       </div>
       <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
-        <button class="btn btn-secondary" style="flex: 1;" onclick="closeModal('newFlowModal')">Cancel</button>
+        <button class="btn" style="flex: 1; background: var(--bg-lighter); color: var(--text);" onclick="closeModal('newFlowModal')">Cancel</button>
         <button class="btn btn-primary" style="flex: 1;" onclick="createNewFlow()">Create</button>
       </div>
     </div>
   </div>
 
-  <!-- Settings Modal -->
-  <div class="modal" id="settingsModal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3 class="modal-title">Flow Settings</h3>
-        <button class="modal-close" onclick="closeModal('settingsModal')">×</button>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Flow ID</label>
-        <input type="text" class="form-input" id="flowId" placeholder="my-flow">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Flow Name</label>
-        <input type="text" class="form-input" id="flowName" placeholder="My Flow">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Description</label>
-        <textarea class="form-textarea" id="flowDesc" placeholder="What does this flow do?"></textarea>
-      </div>
-      <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
-        <button class="btn btn-secondary" style="flex: 1;" onclick="closeModal('settingsModal')">Cancel</button>
-        <button class="btn btn-primary" style="flex: 1;" onclick="saveSettings()">Save</button>
-      </div>
-    </div>
-  </div>
-
   <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
-  <script src="script.js"></script>
+  <script>
+    const API_BASE = window.location.origin;
+    let editor;
+    let currentFlow = null;
+    let nodeIdCounter = 1;
+    let flows = [];
+
+    const nodeTemplates = {
+      'http-in': { icon: '🌐', name: 'HTTP In', category: 'Input', color: '#6366f1', desc: 'HTTP endpoint', inputs: 0, outputs: 1 },
+      'http-response': { icon: '📤', name: 'HTTP Response', category: 'Output', color: '#10b981', desc: 'Send response', inputs: 1, outputs: 0 },
+      'http-request': { icon: '🔗', name: 'HTTP Request', category: 'Function', color: '#f59e0b', desc: 'HTTP call', inputs: 1, outputs: 1 },
+      'function': { icon: '⚡', name: 'Function', category: 'Function', color: '#f59e0b', desc: 'JavaScript code', inputs: 1, outputs: 1 },
+      'inject': { icon: '💉', name: 'Inject', category: 'Input', color: '#6366f1', desc: 'Trigger', inputs: 0, outputs: 1 },
+      'debug': { icon: '🐛', name: 'Debug', category: 'Output', color: '#10b981', desc: 'Log output', inputs: 1, outputs: 0 },
+      'switch': { icon: '🔀', name: 'Switch', category: 'Function', color: '#f59e0b', desc: 'Route by rules', inputs: 1, outputs: 3 },
+      'change': { icon: '✏️', name: 'Change', category: 'Function', color: '#f59e0b', desc: 'Modify message', inputs: 1, outputs: 1 },
+      'template': { icon: '📝', name: 'Template', category: 'Function', color: '#f59e0b', desc: 'Templating', inputs: 1, outputs: 1 },
+      'json': { icon: '{ }', name: 'JSON', category: 'Parser', color: '#f59e0b', desc: 'Parse JSON', inputs: 1, outputs: 1 },
+      'delay': { icon: '⏱️', name: 'Delay', category: 'Function', color: '#f59e0b', desc: 'Delay flow', inputs: 1, outputs: 1 },
+      'split': { icon: '✂️', name: 'Split', category: 'Sequence', color: '#f59e0b', desc: 'Split parts', inputs: 1, outputs: 1 },
+      'join': { icon: '🔗', name: 'Join', category: 'Sequence', color: '#f59e0b', desc: 'Join parts', inputs: 1, outputs: 1 },
+      'context': { icon: '💾', name: 'Context', category: 'Storage', color: '#6366f1', desc: 'Storage', inputs: 1, outputs: 1 },
+      'catch': { icon: '⚠️', name: 'Catch', category: 'Input', color: '#6366f1', desc: 'Error handler', inputs: 0, outputs: 1 }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadFlows();
+      renderNodePalette();
+    });
+
+    async function loadFlows() {
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows`);
+        const data = await response.json();
+        flows = data.flows || [];
+        renderFlowsList();
+      } catch (err) {
+        console.error('Load error:', err);
+        document.getElementById('flowsContainer').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">⚠️</div>
+            <h3>Failed to load flows</h3>
+            <p style="margin-top: 0.5rem; font-size: 0.875rem;">${err.message}</p>
+          </div>
+        `;
+      }
+    }
+
+    function renderFlowsList() {
+      const container = document.getElementById('flowsContainer');
+      
+      if (flows.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📦</div>
+            <h3>No flows yet</h3>
+            <p style="margin-top: 0.5rem; font-size: 0.875rem;">Create your first flow to get started</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = flows.map(flow => {
+        const config = typeof flow.config === 'string' ? JSON.parse(flow.config) : flow.config;
+        const nodeCount = config?.nodes?.length || 0;
+        
+        return `
+          <div class="flow-card">
+            <div class="flow-header">
+              <div class="flow-info">
+                <div class="flow-name">
+                  <span>${flow.name}</span>
+                  <span class="badge ${flow.enabled ? 'badge-success' : 'badge-danger'}">
+                    ${flow.enabled ? '● Active' : '○ Disabled'}
+                  </span>
+                </div>
+                ${flow.description ? `<div class="flow-desc">${flow.description}</div>` : ''}
+                <div class="flow-meta">
+                  <span>🔷 ${nodeCount} nodes</span>
+                  <span>🆔 ${flow.id}</span>
+                </div>
+              </div>
+            </div>
+            <div class="flow-actions">
+              <button class="action-btn primary" onclick="openFlowCanvas('${flow.id}')">
+                <span>📊</span>
+                <span>Open</span>
+              </button>
+              <button class="action-btn" onclick="duplicateFlow('${flow.id}')">
+                <span>📋</span>
+                <span>Copy</span>
+              </button>
+              <button class="action-btn ${flow.enabled ? '' : 'primary'}" onclick="toggleFlowEnabled('${flow.id}', ${!flow.enabled})">
+                <span>${flow.enabled ? '⏸' : '▶'}</span>
+                <span>${flow.enabled ? 'Disable' : 'Enable'}</span>
+              </button>
+              <button class="action-btn danger" onclick="deleteFlow('${flow.id}')">
+                <span>🗑</span>
+                <span>Delete</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function showFlowsList() {
+      document.getElementById('flowsView').classList.add('active');
+      document.getElementById('canvasView').classList.remove('active');
+      document.getElementById('backBtn').classList.remove('visible');
+      document.getElementById('flowTitle').textContent = '';
+      document.getElementById('headerActions').innerHTML = `
+        <button class="btn btn-primary" onclick="showNewFlowModal()">
+          <span>+</span>
+          <span>New Flow</span>
+        </button>
+      `;
+      closeProperties();
+      closeNodePalette();
+      currentFlow = null;
+    }
+
+    async function openFlowCanvas(flowId) {
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        const data = await response.json();
+        
+        currentFlow = data;
+        document.getElementById('flowsView').classList.remove('active');
+        document.getElementById('canvasView').classList.add('active');
+        document.getElementById('backBtn').classList.add('visible');
+        document.getElementById('flowTitle').textContent = data.name;
+        document.getElementById('headerActions').innerHTML = `
+          <button class="btn btn-success" onclick="saveFlow()">
+            <span>💾</span>
+            <span>Save</span>
+          </button>
+        `;
+        
+        if (!editor) {
+          initDrawflow();
+        }
+        
+        importFlow(data);
+      } catch (err) {
+        console.error('Load flow error:', err);
+        showToast('Failed to load flow', 'error');
+      }
+    }
+
+    function initDrawflow() {
+      const container = document.getElementById('drawflow');
+      editor = new Drawflow(container);
+      editor.reroute = true;
+      editor.start();
+
+      editor.on('nodeSelected', (id) => {
+        showNodeProperties(id);
+      });
+
+      editor.on('nodeUnselected', () => {
+        closeProperties();
+      });
+    }
+
+    function renderNodePalette() {
+      const palette = document.getElementById('nodePaletteContent');
+      const categories = {};
+
+      for (const [type, template] of Object.entries(nodeTemplates)) {
+        if (!categories[template.category]) {
+          categories[template.category] = [];
+        }
+        categories[template.category].push({ type, ...template });
+      }
+
+      let html = '';
+      for (const [category, nodes] of Object.entries(categories)) {
+        html += `<div class="node-category">`;
+        html += `<div class="category-title">${category}</div>`;
+        html += `<div class="node-grid">`;
+        for (const node of nodes) {
+          html += `
+            <div class="node-item" onclick="addNodeToCanvas('${node.type}')">
+              <div class="node-item-icon" style="background: ${node.color}">${node.icon}</div>
+              <div class="node-item-name">${node.name}</div>
+            </div>
+          `;
+        }
+        html += `</div></div>`;
+      }
+
+      palette.innerHTML = html;
+    }
+
+    function showNodePalette() {
+      document.getElementById('nodePalette').classList.add('active');
+    }
+
+    function closeNodePalette() {
+      document.getElementById('nodePalette').classList.remove('active');
+    }
+
+    function getNodeHTML(type, data) {
+      const template = nodeTemplates[type];
+      if (!template) return '';
+
+      return `
+        <div class="node-bubble" style="background: ${template.color}">
+          <div class="node-icon">${template.icon}</div>
+        </div>
+        <div class="node-name">${data.name || template.name}</div>
+      `;
+    }
+
+    function addNodeToCanvas(type) {
+      const template = nodeTemplates[type];
+      if (!template) return;
+
+      const data = {
+        type,
+        name: template.name,
+        config: getDefaultConfig(type)
+      };
+
+      const html = getNodeHTML(type, data);
+
+      const pos_x = 150 + (nodeIdCounter * 20);
+      const pos_y = 100 + (nodeIdCounter * 20);
+
+      const nodeId = `${type}-${nodeIdCounter}`;
+      editor.addNode(nodeId, template.inputs, template.outputs, pos_x, pos_y, '', data, html);
+      nodeIdCounter++;
+      
+      closeNodePalette();
+      showToast(`${template.name} added`, 'success');
+    }
+
+    function getDefaultConfig(type) {
+      const configs = {
+        'http-in': { method: 'post', url: '/endpoint' },
+        'http-request': { method: 'GET', url: '', timeout: 30000 },
+        'function': { func: 'return msg;', outputs: 1 },
+        'delay': { timeout: 1000, timeoutUnits: 'milliseconds' },
+        'inject': { payload: '', payloadType: 'date' },
+        'template': { template: '', syntax: 'mustache' },
+        'switch': { property: 'payload', rules: [] },
+        'change': { rules: [] },
+        'context': { operation: 'get', scope: 'flow', key: '' }
+      };
+      return configs[type] || {};
+    }
+
+    function showNodeProperties(id) {
+      const panel = document.getElementById('propertiesPanel');
+      const content = document.getElementById('propertiesContent');
+      
+      const node = editor.getNodeFromId(id);
+      if (!node) return;
+
+      panel.classList.add('active');
+      
+      let html = `
+        <div class="form-group">
+          <label class="form-label">Node Name</label>
+          <input type="text" class="form-input" id="nodeName" value="${node.data.name || ''}" onchange="updateNodeProperty('${id}', 'name', this.value)">
+        </div>
+      `;
+
+      html += renderNodeFields(node.data.type, node.data.config || {}, id);
+      
+      html += `
+        <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+          <button class="btn btn-danger" style="width: 100%; background: var(--danger); color: white;" onclick="deleteNode('${id}')">
+            🗑 Delete Node
+          </button>
+        </div>
+      `;
+
+      content.innerHTML = html;
+    }
+
+    function renderNodeFields(type, config, nodeId) {
+      switch (type) {
+        case 'http-in':
+          return `
+            <div class="form-group">
+              <label class="form-label">URL Path</label>
+              <input type="text" class="form-input" value="${config.url || ''}" onchange="updateNodeConfig('${nodeId}', 'url', this.value)">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Method</label>
+              <select class="form-select" onchange="updateNodeConfig('${nodeId}', 'method', this.value)">
+                <option value="get" ${config.method === 'get' ? 'selected' : ''}>GET</option>
+                <option value="post" ${config.method === 'post' ? 'selected' : ''}>POST</option>
+                <option value="put" ${config.method === 'put' ? 'selected' : ''}>PUT</option>
+                <option value="delete" ${config.method === 'delete' ? 'selected' : ''}>DELETE</option>
+              </select>
+            </div>
+          `;
+        case 'http-request':
+          return `
+            <div class="form-group">
+              <label class="form-label">URL</label>
+              <input type="text" class="form-input" value="${config.url || ''}" onchange="updateNodeConfig('${nodeId}', 'url', this.value)">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Method</label>
+              <select class="form-select" onchange="updateNodeConfig('${nodeId}', 'method', this.value)">
+                <option value="GET" ${config.method === 'GET' ? 'selected' : ''}>GET</option>
+                <option value="POST" ${config.method === 'POST' ? 'selected' : ''}>POST</option>
+                <option value="PUT" ${config.method === 'PUT' ? 'selected' : ''}>PUT</option>
+                <option value="DELETE" ${config.method === 'DELETE' ? 'selected' : ''}>DELETE</option>
+              </select>
+            </div>
+          `;
+        case 'function':
+          return `
+            <div class="form-group">
+              <label class="form-label">Function Code</label>
+              <textarea class="form-textarea" style="min-height: 200px;" onchange="updateNodeConfig('${nodeId}', 'func', this.value)">${config.func || 'return msg;'}</textarea>
+            </div>
+          `;
+        case 'delay':
+          return `
+            <div class="form-group">
+              <label class="form-label">Delay</label>
+              <input type="number" class="form-input" value="${config.timeout || 1000}" onchange="updateNodeConfig('${nodeId}', 'timeout', parseInt(this.value))">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Units</label>
+              <select class="form-select" onchange="updateNodeConfig('${nodeId}', 'timeoutUnits', this.value)">
+                <option value="milliseconds" ${config.timeoutUnits === 'milliseconds' ? 'selected' : ''}>Milliseconds</option>
+                <option value="seconds" ${config.timeoutUnits === 'seconds' ? 'selected' : ''}>Seconds</option>
+                <option value="minutes" ${config.timeoutUnits === 'minutes' ? 'selected' : ''}>Minutes</option>
+              </select>
+            </div>
+          `;
+        default:
+          return '<p style="color: var(--text-muted); text-align: center; padding: 1rem;">No additional properties</p>';
+      }
+    }
+
+    function closeProperties() {
+      document.getElementById('propertiesPanel').classList.remove('active');
+    }
+
+    function updateNodeProperty(id, key, value) {
+      const node = editor.getNodeFromId(id);
+      if (!node) return;
+      
+      node.data[key] = value;
+      editor.updateNodeDataFromId(id, node.data);
+      updateNodeUI(id);
+    }
+
+    function updateNodeConfig(id, key, value) {
+      const node = editor.getNodeFromId(id);
+      if (!node) return;
+      
+      if (!node.data.config) node.data.config = {};
+      node.data.config[key] = value;
+      editor.updateNodeDataFromId(id, node.data);
+    }
+
+    function updateNodeUI(id) {
+      const nodeInfo = editor.drawflow.drawflow.Home.data[id];
+      if (!nodeInfo) return;
+
+      const pos_x = nodeInfo.pos_x;
+      const pos_y = nodeInfo.pos_y;
+      const data = nodeInfo.data;
+      const type = data.type;
+      const html = getNodeHTML(type, data);
+      const inputsNumber = Object.keys(nodeInfo.inputs).length;
+      const outputsNumber = Object.keys(nodeInfo.outputs).length;
+
+      const outputConnections = [];
+      for (const outKey in nodeInfo.outputs) {
+        nodeInfo.outputs[outKey].connections.forEach(conn => {
+          outputConnections.push({
+            fromOut: outKey,
+            to: conn.node,
+            toIn: conn.input
+          });
+        });
+      }
+
+      editor.removeNodeId(id);
+      editor.addNode(id, inputsNumber, outputsNumber, pos_x, pos_y, '', data, html);
+
+      outputConnections.forEach(conn => {
+        editor.addConnection(id, conn.to, conn.fromOut, conn.toIn);
+      });
+    }
+
+    function deleteNode(id) {
+      if (!confirm('Delete this node?')) return;
+      editor.removeNodeId(id);
+      closeProperties();
+      showToast('Node deleted', 'success');
+    }
+
+    function exportFlow() {
+      const drawflowData = editor.export();
+      const nodes = [];
+
+      for (const [id, node] of Object.entries(drawflowData.drawflow.Home.data)) {
+        const nodeData = {
+          id: id,
+          type: node.data.type,
+          name: node.data.name || nodeTemplates[node.data.type]?.name,
+          ...node.data.config,
+          x: node.pos_x,
+          y: node.pos_y,
+          wires: []
+        };
+
+        const outputs = [];
+        for (let i = 0; i < Object.keys(node.outputs || {}).length; i++) {
+          outputs.push([]);
+        }
+
+        for (const [outputKey, output] of Object.entries(node.outputs || {})) {
+          const index = parseInt(outputKey.split('_')[1]) - 1;
+          outputs[index] = output.connections.map(conn => conn.node);
+        }
+
+        nodeData.wires = outputs;
+        nodes.push(nodeData);
+      }
+
+      return {
+        id: currentFlow?.id || 'new-flow',
+        name: currentFlow?.name || 'New Flow',
+        description: currentFlow?.description || '',
+        version: '1.0.0',
+        nodes
+      };
+    }
+
+    function importFlow(flow) {
+      if (!editor) return;
+      
+      editor.clear();
+
+      const config = typeof flow.config === 'string' ? JSON.parse(flow.config) : flow.config;
+
+      config.nodes.forEach(node => {
+        const template = nodeTemplates[node.type];
+        if (!template) return;
+
+        const data = {
+          type: node.type,
+          name: node.name,
+          config: { ...node }
+        };
+
+        const html = getNodeHTML(node.type, data);
+
+        editor.addNode(node.id, template.inputs, template.outputs, node.x || 100, node.y || 100, '', data, html);
+      });
+
+      config.nodes.forEach(node => {
+        node.wires.forEach((wireGroup, index) => {
+          wireGroup.forEach(targetId => {
+            editor.addConnection(node.id, targetId, `output_${index + 1}`, 'input_1');
+          });
+        });
+      });
+
+      showToast(`Flow loaded`, 'success');
+    }
+
+    async function saveFlow() {
+      const flowData = exportFlow();
+
+      if (!flowData.id || !flowData.name) {
+        showToast('Set flow ID and name first', 'error');
+        return;
+      }
+
+      try {
+        const method = currentFlow ? 'PUT' : 'POST';
+        const url = currentFlow 
+          ? `${API_BASE}/admin/flows/${currentFlow.id}`
+          : `${API_BASE}/admin/flows`;
+
+        const response = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(flowData)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          currentFlow = flowData;
+          showToast('Flow saved successfully', 'success');
+        } else {
+          showToast(data.error || 'Save failed', 'error');
+        }
+      } catch (err) {
+        console.error('Save error:', err);
+        showToast('Error saving flow', 'error');
+      }
+    }
+
+    function showNewFlowModal() {
+      document.getElementById('newFlowModal').classList.add('active');
+    }
+
+    async function createNewFlow() {
+      const id = document.getElementById('newFlowId').value.trim();
+      const name = document.getElementById('newFlowName').value.trim();
+      const description = document.getElementById('newFlowDesc').value.trim();
+      
+      if (!id || !name) {
+        showToast('ID and Name required', 'error');
+        return;
+      }
+      
+      const flowConfig = { id, name, description, nodes: [] };
+      
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(flowConfig)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          closeModal('newFlowModal');
+          showToast('Flow created', 'success');
+          await loadFlows();
+          openFlowCanvas(id);
+        } else {
+          showToast(data.error || 'Failed', 'error');
+        }
+      } catch (err) {
+        showToast('Error creating flow', 'error');
+      }
+    }
+
+    async function duplicateFlow(flowId) {
+      const flow = flows.find(f => f.id === flowId);
+      if (!flow) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        const data = await response.json();
+        
+        const newId = flow.id + '-copy-' + Date.now();
+        const newFlow = {
+          ...data,
+          id: newId,
+          name: flow.name + ' (Copy)'
+        };
+        
+        const createResponse = await fetch(`${API_BASE}/admin/flows`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newFlow)
+        });
+        
+        if (createResponse.ok) {
+          showToast('Flow duplicated', 'success');
+          loadFlows();
+        }
+      } catch (err) {
+        showToast('Duplication failed', 'error');
+      }
+    }
+
+    async function toggleFlowEnabled(flowId, enable) {
+      try {
+        const action = enable ? 'enable' : 'disable';
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}/${action}`, {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          showToast(`Flow ${action}d`, 'success');
+          loadFlows();
+        }
+      } catch (err) {
+        showToast('Toggle failed', 'error');
+      }
+    }
+
+    async function deleteFlow(flowId) {
+      const flow = flows.find(f => f.id === flowId);
+      if (!confirm(`Delete "${flow?.name}"?`)) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          showToast('Flow deleted', 'success');
+          loadFlows();
+        }
+      } catch (err) {
+        showToast('Delete failed', 'error');
+      }
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
+    }
+
+    function showToast(message, type = 'info') {
+      const existing = document.querySelector('.toast');
+      if (existing) existing.remove();
+
+      const icons = { success: '✓', error: '✕', info: 'ℹ' };
+
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.innerHTML = `
+        <div class="toast-icon">${icons[type] || 'ℹ'}</div>
+        <div class="toast-message">${message}</div>
+      `;
+
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && currentFlow) {
+        e.preventDefault();
+        saveFlow();
+      }
+    });
+  </script>
 </body>
 </html>
