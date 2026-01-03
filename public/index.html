@@ -349,60 +349,147 @@
       flex-direction: column;
       align-items: center;
       cursor: move;
+      width: 100px;
+      min-height: 100px;
     }
 
-    .drawflow .drawflow-node.selected .node-bubble {
-      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.3), 0 8px 24px rgba(0,0,0,0.3);
+    .drawflow .drawflow-node.selected .node-content {
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4), 0 6px 20px rgba(0,0,0,0.3);
+      transform: scale(1.03);
+    }
+
+    .drawflow .drawflow-node .node-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .drawflow .drawflow-node:hover .node-content {
       transform: scale(1.05);
     }
 
-    .drawflow .drawflow-node .node-bubble {
-      width: 72px;
-      height: 72px;
+    .drawflow .drawflow-node .node-icon-wrapper {
+      width: 56px;
+      height: 56px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 16px var(--shadow);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       position: relative;
     }
 
-    .drawflow .drawflow-node:hover .node-bubble {
-      transform: scale(1.08);
-      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    .drawflow .drawflow-node:hover .node-icon-wrapper {
+      box-shadow: 0 6px 16px rgba(0,0,0,0.35);
     }
 
     .drawflow .drawflow-node .node-icon {
-      font-size: 2rem;
+      font-size: 1.75rem;
       color: white;
+      line-height: 1;
     }
 
     .drawflow .drawflow-node .node-name {
-      margin-top: 10px;
-      font-size: 0.8125rem;
-      font-weight: 500;
+      font-size: 0.75rem;
+      font-weight: 600;
       text-align: center;
-      max-width: 120px;
+      max-width: 90px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       background: var(--surface);
-      padding: 0.25rem 0.625rem;
+      padding: 0.25rem 0.5rem;
       border-radius: 6px;
       border: 1px solid var(--border);
+      line-height: 1.2;
     }
 
+    /* Connection Points */
+    .drawflow .drawflow-node .input,
+    .drawflow .drawflow-node .output {
+      width: 14px;
+      height: 14px;
+      background: var(--primary);
+      border: 2px solid var(--bg);
+      border-radius: 50%;
+      position: absolute;
+      cursor: crosshair;
+      z-index: 10;
+      transition: all 0.2s;
+    }
+
+    .drawflow .drawflow-node .input:hover,
+    .drawflow .drawflow-node .output:hover {
+      background: var(--primary-light);
+      transform: scale(1.3);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    }
+
+    .drawflow .drawflow-node .input {
+      left: -7px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .drawflow .drawflow-node .output {
+      right: -7px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    /* Multiple outputs positioning */
+    .drawflow .drawflow-node .outputs {
+      position: absolute;
+      right: -7px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .drawflow .drawflow-node .outputs .output {
+      position: relative;
+      right: 0;
+      top: 0;
+      transform: none;
+    }
+
+    /* Connections */
     .drawflow .connection .main-path {
       stroke: var(--primary);
       stroke-width: 2.5px;
       fill: none;
       stroke-linecap: round;
+      transition: all 0.2s;
+    }
+
+    .drawflow .connection:hover .main-path {
+      stroke: var(--primary-light);
+      stroke-width: 3px;
+      filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.5));
     }
 
     .drawflow .connection.selected .main-path {
       stroke: var(--primary-light);
-      stroke-width: 3px;
+      stroke-width: 3.5px;
+      filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.6));
+    }
+
+    /* Connection animation */
+    .drawflow .connection .main-path {
+      stroke-dasharray: 5, 5;
+      animation: dash 20s linear infinite;
+    }
+
+    @keyframes dash {
+      to {
+        stroke-dashoffset: -100;
+      }
     }
 
     /* Canvas Toolbar */
@@ -1126,10 +1213,12 @@
       if (!template) return '';
 
       return `
-        <div class="node-bubble" style="background: ${template.color}">
-          <div class="node-icon">${template.icon}</div>
+        <div class="node-content">
+          <div class="node-icon-wrapper" style="background: ${template.color}">
+            <div class="node-icon">${template.icon}</div>
+          </div>
+          <div class="node-name">${data.name || template.name}</div>
         </div>
-        <div class="node-name">${data.name || template.name}</div>
       `;
     }
 
@@ -1145,13 +1234,27 @@
 
       const html = getNodeHTML(type, data);
 
-      const pos_x = 150 + (nodeIdCounter * 20);
-      const pos_y = 100 + (nodeIdCounter * 20);
+      // Center position with some randomness
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+      const pos_x = centerX - 50 + (Math.random() * 100 - 50);
+      const pos_y = centerY - 50 + (Math.random() * 100 - 50);
 
-      const nodeId = `${type}-${nodeIdCounter}`;
-      editor.addNode(nodeId, template.inputs, template.outputs, pos_x, pos_y, '', data, html);
-      nodeIdCounter++;
+      const nodeId = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
+      editor.addNode(
+        nodeId, 
+        template.inputs, 
+        template.outputs, 
+        pos_x, 
+        pos_y, 
+        '', 
+        data, 
+        html,
+        false // typenode
+      );
+      
+      nodeIdCounter++;
       closeNodePalette();
       showToast(`${template.name} added`, 'success');
     }
@@ -1287,31 +1390,22 @@
       const nodeInfo = editor.drawflow.drawflow.Home.data[id];
       if (!nodeInfo) return;
 
-      const pos_x = nodeInfo.pos_x;
-      const pos_y = nodeInfo.pos_y;
       const data = nodeInfo.data;
       const type = data.type;
       const html = getNodeHTML(type, data);
-      const inputsNumber = Object.keys(nodeInfo.inputs).length;
-      const outputsNumber = Object.keys(nodeInfo.outputs).length;
 
-      const outputConnections = [];
-      for (const outKey in nodeInfo.outputs) {
-        nodeInfo.outputs[outKey].connections.forEach(conn => {
-          outputConnections.push({
-            fromOut: outKey,
-            to: conn.node,
-            toIn: conn.input
-          });
-        });
+      // Update the node's HTML content
+      const nodeElement = document.getElementById(`node-${id}`);
+      if (nodeElement) {
+        // Find and update the content div
+        const contentDiv = nodeElement.querySelector('.drawflow_content_node');
+        if (contentDiv) {
+          contentDiv.innerHTML = html;
+        }
       }
 
-      editor.removeNodeId(id);
-      editor.addNode(id, inputsNumber, outputsNumber, pos_x, pos_y, '', data, html);
-
-      outputConnections.forEach(conn => {
-        editor.addConnection(id, conn.to, conn.fromOut, conn.toIn);
-      });
+      // Update data in drawflow
+      editor.updateNodeDataFromId(id, data);
     }
 
     function deleteNode(id) {
@@ -1336,17 +1430,20 @@
           wires: []
         };
 
-        const outputs = [];
-        for (let i = 0; i < Object.keys(node.outputs || {}).length; i++) {
-          outputs.push([]);
-        }
+        // Build wires array - each output can have multiple connections
+        const template = nodeTemplates[node.data.type];
+        const outputCount = template ? template.outputs : 1;
+        const wires = Array(outputCount).fill(null).map(() => []);
 
+        // Map connections to wires
         for (const [outputKey, output] of Object.entries(node.outputs || {})) {
-          const index = parseInt(outputKey.split('_')[1]) - 1;
-          outputs[index] = output.connections.map(conn => conn.node);
+          const outputIndex = parseInt(outputKey.replace('output_', '')) - 1;
+          if (outputIndex >= 0 && outputIndex < wires.length) {
+            wires[outputIndex] = output.connections.map(conn => conn.node);
+          }
         }
 
-        nodeData.wires = outputs;
+        nodeData.wires = wires;
         nodes.push(nodeData);
       }
 
@@ -1365,31 +1462,71 @@
       editor.clear();
 
       const config = typeof flow.config === 'string' ? JSON.parse(flow.config) : flow.config;
+      
+      if (!config.nodes || config.nodes.length === 0) {
+        showToast('Flow loaded (empty)', 'info');
+        return;
+      }
 
+      // First pass: Create all nodes
       config.nodes.forEach(node => {
         const template = nodeTemplates[node.type];
-        if (!template) return;
+        if (!template) {
+          console.warn(`Unknown node type: ${node.type}`);
+          return;
+        }
 
         const data = {
           type: node.type,
-          name: node.name,
+          name: node.name || template.name,
           config: { ...node }
         };
 
         const html = getNodeHTML(node.type, data);
 
-        editor.addNode(node.id, template.inputs, template.outputs, node.x || 100, node.y || 100, '', data, html);
+        const posX = node.x || 100;
+        const posY = node.y || 100;
+
+        editor.addNode(
+          node.id, 
+          template.inputs, 
+          template.outputs, 
+          posX, 
+          posY, 
+          '', 
+          data, 
+          html,
+          false
+        );
       });
 
+      // Second pass: Create all connections
       config.nodes.forEach(node => {
-        node.wires.forEach((wireGroup, index) => {
+        if (!node.wires || !Array.isArray(node.wires)) return;
+
+        node.wires.forEach((wireGroup, outputIndex) => {
+          if (!Array.isArray(wireGroup)) return;
+          
           wireGroup.forEach(targetId => {
-            editor.addConnection(node.id, targetId, `output_${index + 1}`, 'input_1');
+            // Check if target node exists
+            const targetNode = editor.getNodeFromId(targetId);
+            if (targetNode) {
+              try {
+                editor.addConnection(
+                  node.id, 
+                  targetId, 
+                  `output_${outputIndex + 1}`, 
+                  'input_1'
+                );
+              } catch (err) {
+                console.warn(`Failed to create connection from ${node.id} to ${targetId}:`, err);
+              }
+            }
           });
         });
       });
 
-      showToast(`Flow loaded`, 'success');
+      showToast(`Flow loaded: ${config.nodes.length} nodes`, 'success');
     }
 
     async function saveFlow() {
