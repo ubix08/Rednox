@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>RedNox - Flow Editor</title>
   <style>
     * {
@@ -20,6 +20,7 @@
       --success: #10b981;
       --danger: #ef4444;
       --warning: #f59e0b;
+      --info: #3b82f6;
       --bg: #0f172a;
       --bg-light: #1e293b;
       --bg-lighter: #334155;
@@ -27,10 +28,14 @@
       --text: #f1f5f9;
       --text-muted: #94a3b8;
       --border: #334155;
+      --node-http: #e7e7ae;
+      --node-function: #fdd0a2;
+      --node-storage: #7CB9E8;
+      --node-parser: #c7e9c0;
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
       overflow: hidden;
@@ -38,7 +43,6 @@
       touch-action: pan-y;
     }
 
-    /* App Container */
     .app {
       height: 100vh;
       display: flex;
@@ -48,85 +52,100 @@
     /* Header */
     .header {
       background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 1rem;
+      border-bottom: 2px solid var(--border);
+      padding: 0.875rem 1.25rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 1rem;
-      min-height: 60px;
+      min-height: 64px;
       z-index: 100;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     }
 
     .header-left {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 1rem;
       flex: 1;
       min-width: 0;
     }
 
     .back-btn {
-      background: none;
+      background: var(--bg-lighter);
       border: none;
       color: var(--text);
       font-size: 1.25rem;
       cursor: pointer;
-      padding: 0.5rem;
+      padding: 0.5rem 0.75rem;
       border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background 0.2s;
+      transition: all 0.2s;
+      font-weight: 600;
+    }
+
+    .back-btn:hover {
+      background: var(--bg);
+      transform: translateX(-2px);
     }
 
     .back-btn:active {
-      background: var(--bg-lighter);
+      transform: scale(0.95);
     }
 
     .logo {
-      width: 36px;
-      height: 36px;
+      width: 40px;
+      height: 40px;
       background: linear-gradient(135deg, var(--primary), var(--primary-light));
-      border-radius: 8px;
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: bold;
-      font-size: 1.125rem;
+      font-size: 1.25rem;
       flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
     }
 
     .title {
-      font-size: 1.125rem;
-      font-weight: 600;
+      font-size: 1.25rem;
+      font-weight: 700;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      letter-spacing: -0.01em;
     }
 
     .header-actions {
       display: flex;
-      gap: 0.5rem;
+      gap: 0.625rem;
       align-items: center;
     }
 
     .btn {
-      padding: 0.625rem 1rem;
+      padding: 0.625rem 1.125rem;
       border: none;
       border-radius: 8px;
       font-size: 0.875rem;
-      font-weight: 500;
+      font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
       white-space: nowrap;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
 
     .btn:active {
-      transform: scale(0.95);
+      transform: scale(0.97);
     }
 
     .btn-primary {
@@ -134,9 +153,22 @@
       color: white;
     }
 
+    .btn-primary:hover {
+      background: var(--primary-dark);
+    }
+
     .btn-secondary {
       background: var(--bg-lighter);
       color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg);
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: white;
     }
 
     .btn-icon {
@@ -158,10 +190,59 @@
       height: 100%;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
+      background: var(--bg);
+    }
+
+    .flows-header {
+      padding: 2rem 1.5rem 1rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .flows-header h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+    }
+
+    .search-box {
+      flex: 1;
+      max-width: 400px;
+      position: relative;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 0.75rem 1rem 0.75rem 2.75rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 0.9375rem;
+      transition: all 0.2s;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 1.125rem;
     }
 
     .flows-container {
-      padding: 1rem;
+      padding: 0 1.5rem 2rem;
       max-width: 1200px;
       margin: 0 auto;
     }
@@ -169,21 +250,46 @@
     .flow-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1rem;
+      border-radius: 14px;
+      padding: 1.25rem;
       margin-bottom: 1rem;
       transition: all 0.2s;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .flow-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary), var(--primary-light));
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .flow-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .flow-card:hover::before {
+      opacity: 1;
     }
 
     .flow-card:active {
-      transform: scale(0.98);
+      transform: translateY(0);
     }
 
     .flow-header {
       display: flex;
       align-items: flex-start;
-      gap: 0.75rem;
-      margin-bottom: 0.75rem;
+      gap: 1rem;
+      margin-bottom: 1rem;
     }
 
     .flow-info {
@@ -192,98 +298,118 @@
     }
 
     .flow-name {
-      font-size: 1rem;
-      font-weight: 600;
-      margin-bottom: 0.25rem;
+      font-size: 1.125rem;
+      font-weight: 700;
+      margin-bottom: 0.375rem;
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.625rem;
       flex-wrap: wrap;
     }
 
     .flow-desc {
       font-size: 0.875rem;
       color: var(--text-muted);
-      margin-bottom: 0.5rem;
-      line-height: 1.4;
+      margin-bottom: 0.75rem;
+      line-height: 1.5;
     }
 
     .flow-meta {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.75rem;
-      font-size: 0.75rem;
+      gap: 1rem;
+      font-size: 0.8125rem;
       color: var(--text-muted);
     }
 
+    .flow-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+
     .badge {
-      padding: 0.25rem 0.5rem;
-      border-radius: 12px;
+      padding: 0.3125rem 0.625rem;
+      border-radius: 14px;
       font-size: 0.75rem;
-      font-weight: 500;
+      font-weight: 600;
       display: inline-flex;
       align-items: center;
-      gap: 0.25rem;
+      gap: 0.375rem;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
     }
 
     .badge-success {
-      background: rgba(16, 185, 129, 0.2);
+      background: rgba(16, 185, 129, 0.15);
       color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
     }
 
     .badge-danger {
-      background: rgba(239, 68, 68, 0.2);
+      background: rgba(239, 68, 68, 0.15);
       color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.3);
     }
 
     .badge-info {
-      background: rgba(99, 102, 241, 0.2);
+      background: rgba(99, 102, 241, 0.15);
       color: var(--primary-light);
+      border: 1px solid rgba(99, 102, 241, 0.3);
     }
 
     .flow-actions {
       display: flex;
-      gap: 0.5rem;
-      padding-top: 0.75rem;
+      gap: 0.625rem;
+      padding-top: 1rem;
       border-top: 1px solid var(--border);
       flex-wrap: wrap;
     }
 
     .action-btn {
       flex: 1;
-      min-width: 80px;
-      padding: 0.625rem 0.75rem;
+      min-width: 90px;
+      padding: 0.75rem 0.875rem;
       background: var(--bg-lighter);
-      border: none;
+      border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text);
       font-size: 0.8125rem;
-      font-weight: 500;
+      font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 0.375rem;
+      gap: 0.5rem;
+    }
+
+    .action-btn:hover {
+      background: var(--bg);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     }
 
     .action-btn:active {
-      transform: scale(0.95);
+      transform: scale(0.97);
     }
 
     .action-btn.primary {
       background: var(--primary);
       color: white;
+      border-color: var(--primary);
     }
 
     .action-btn.danger {
       background: var(--danger);
       color: white;
+      border-color: var(--danger);
     }
 
     .action-btn.success {
       background: var(--success);
       color: white;
+      border-color: var(--success);
     }
 
     /* Canvas View */
@@ -298,16 +424,17 @@
     }
 
     .sidebar {
-      width: 320px;
+      width: 340px;
       background: var(--surface);
-      border-right: 1px solid var(--border);
+      border-right: 2px solid var(--border);
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       transform: translateX(-100%);
-      transition: transform 0.3s ease;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       position: absolute;
       height: 100%;
       z-index: 50;
+      box-shadow: 4px 0 16px rgba(0, 0, 0, 0.2);
     }
 
     .sidebar.open {
@@ -315,20 +442,21 @@
     }
 
     .sidebar-header {
-      padding: 1rem;
+      padding: 1.25rem;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
+      background: var(--bg-light);
     }
 
     .sidebar-title {
-      font-size: 1rem;
-      font-weight: 600;
+      font-size: 1.0625rem;
+      font-weight: 700;
     }
 
     .sidebar-content {
-      padding: 1rem;
+      padding: 1.25rem;
     }
 
     .canvas-container {
@@ -336,8 +464,10 @@
       position: relative;
       overflow: hidden;
       background: var(--bg);
-      background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
-      background-size: 24px 24px;
+      background-image: 
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 20px 20px;
       touch-action: none;
     }
 
@@ -345,6 +475,47 @@
       width: 100%;
       height: 100%;
       position: relative;
+      cursor: grab;
+    }
+
+    .canvas.dragging {
+      cursor: grabbing;
+    }
+
+    .canvas-controls {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      z-index: 30;
+    }
+
+    .canvas-control-btn {
+      width: 44px;
+      height: 44px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 1.125rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .canvas-control-btn:hover {
+      background: var(--primary);
+      color: white;
+      transform: scale(1.05);
+    }
+
+    .canvas-control-btn:active {
+      transform: scale(0.95);
     }
 
     /* Add Node Button */
@@ -352,15 +523,15 @@
       position: absolute;
       top: 1rem;
       left: 1rem;
-      width: 56px;
-      height: 56px;
-      background: var(--primary);
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
       border: none;
       border-radius: 50%;
       color: white;
-      font-size: 1.75rem;
+      font-size: 2rem;
       cursor: pointer;
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
       transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
       z-index: 40;
       display: flex;
@@ -368,8 +539,13 @@
       justify-content: center;
     }
 
+    .add-node-btn:hover {
+      transform: scale(1.1) rotate(90deg);
+      box-shadow: 0 12px 32px rgba(99, 102, 241, 0.5);
+    }
+
     .add-node-btn:active {
-      transform: scale(0.9) rotate(90deg);
+      transform: scale(0.95) rotate(90deg);
     }
 
     /* Node */
@@ -379,16 +555,20 @@
       border: 2px solid var(--border);
       border-radius: 12px;
       padding: 1rem;
-      min-width: 180px;
+      min-width: 200px;
       cursor: move;
-      transition: all 0.2s;
+      transition: box-shadow 0.2s, border-color 0.2s;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
       touch-action: none;
     }
 
+    .node:hover {
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
     .node.selected {
       border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3), 0 8px 24px rgba(0, 0, 0, 0.4);
     }
 
     .node-header {
@@ -399,15 +579,16 @@
     }
 
     .node-icon {
-      width: 36px;
-      height: 36px;
+      width: 40px;
+      height: 40px;
       background: var(--primary);
-      border-radius: 8px;
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.125rem;
+      font-size: 1.25rem;
       flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     }
 
     .node-info {
@@ -416,14 +597,16 @@
     }
 
     .node-type {
-      font-size: 0.75rem;
+      font-size: 0.6875rem;
       color: var(--text-muted);
       text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.05em;
     }
 
     .node-name {
-      font-weight: 600;
-      font-size: 0.875rem;
+      font-weight: 700;
+      font-size: 0.9375rem;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -436,10 +619,10 @@
     }
 
     .node-port {
-      width: 14px;
-      height: 14px;
+      width: 16px;
+      height: 16px;
       background: var(--border);
-      border: 2px solid var(--surface);
+      border: 3px solid var(--surface);
       border-radius: 50%;
       cursor: pointer;
       transition: all 0.2s;
@@ -447,9 +630,14 @@
       z-index: 5;
     }
 
-    .node-port:active {
+    .node-port:hover {
       background: var(--primary);
       transform: scale(1.3);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
+    }
+
+    .node-port:active {
+      transform: scale(1.1);
     }
 
     .node-port.input {
@@ -458,6 +646,16 @@
 
     .node-port.output {
       margin-right: -1.5rem;
+    }
+
+    .node-port.connecting {
+      background: var(--primary);
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.3); }
     }
 
     /* Connection */
@@ -469,40 +667,59 @@
 
     .connection path {
       stroke: var(--primary);
-      stroke-width: 2;
+      stroke-width: 3;
       fill: none;
       filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
     }
 
+    .connection.selected path {
+      stroke: var(--primary-light);
+      stroke-width: 4;
+    }
+
     /* Form Elements */
     .form-group {
-      margin-bottom: 1rem;
+      margin-bottom: 1.125rem;
     }
 
     .form-label {
       display: block;
       font-size: 0.875rem;
-      font-weight: 500;
+      font-weight: 600;
       margin-bottom: 0.5rem;
-      color: var(--text-muted);
+      color: var(--text);
     }
 
     .form-input, .form-select, .form-textarea {
       width: 100%;
-      padding: 0.75rem;
+      padding: 0.75rem 0.875rem;
       background: var(--bg-light);
       border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text);
       font-size: 0.875rem;
       font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
     }
 
     .form-textarea {
       resize: vertical;
-      min-height: 120px;
-      font-family: 'Courier New', monospace;
+      min-height: 140px;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
       font-size: 0.8125rem;
+      line-height: 1.5;
+    }
+
+    .form-hint {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.375rem;
     }
 
     /* Modal */
@@ -514,26 +731,45 @@
       width: 100%;
       height: 100%;
       background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(4px);
       z-index: 1000;
       padding: 1rem;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
 
     .modal.active {
       display: flex;
       align-items: flex-start;
       justify-content: center;
-      padding-top: 2rem;
+      padding-top: 3rem;
     }
 
     .modal-content {
       background: var(--surface);
       border-radius: 16px;
-      padding: 1.5rem;
+      padding: 1.75rem;
       width: 100%;
-      max-width: 500px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      max-width: 540px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(40px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     .modal-header {
@@ -544,14 +780,14 @@
     }
 
     .modal-title {
-      font-size: 1.25rem;
-      font-weight: 600;
+      font-size: 1.375rem;
+      font-weight: 700;
     }
 
     .modal-close {
-      background: none;
+      background: var(--bg-lighter);
       border: none;
-      color: var(--text-muted);
+      color: var(--text);
       font-size: 1.5rem;
       cursor: pointer;
       padding: 0;
@@ -560,18 +796,54 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 50%;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .modal-close:hover {
+      background: var(--danger);
+      color: white;
+      transform: rotate(90deg);
     }
 
     .modal-close:active {
-      background: var(--bg-lighter);
+      transform: scale(0.9) rotate(90deg);
     }
 
     /* Node Palette */
+    .node-categories {
+      margin-bottom: 1.5rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .category-btn {
+      padding: 0.5rem 1rem;
+      background: var(--bg-lighter);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--text);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .category-btn.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .category-btn:hover {
+      transform: translateY(-1px);
+    }
+
     .node-palette {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 0.75rem;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 0.875rem;
       max-height: 60vh;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
@@ -581,105 +853,144 @@
       background: var(--bg-light);
       border: 2px solid var(--border);
       border-radius: 12px;
-      padding: 1rem;
+      padding: 1.125rem;
       cursor: pointer;
       transition: all 0.2s;
       text-align: center;
     }
 
-    .palette-node:active {
-      transform: scale(0.95);
+    .palette-node:hover {
       border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .palette-node:active {
+      transform: scale(0.97);
     }
 
     .palette-icon {
-      font-size: 2rem;
-      margin-bottom: 0.5rem;
+      font-size: 2.25rem;
+      margin-bottom: 0.625rem;
     }
 
     .palette-name {
-      font-size: 0.875rem;
-      font-weight: 500;
-      margin-bottom: 0.25rem;
+      font-size: 0.9375rem;
+      font-weight: 700;
+      margin-bottom: 0.375rem;
     }
 
     .palette-category {
       font-size: 0.75rem;
       color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.05em;
     }
 
-    /* Fab Button */
+    /* FAB */
     .fab {
       position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
-      width: 56px;
-      height: 56px;
-      background: var(--primary);
+      bottom: 2rem;
+      right: 2rem;
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, var(--success), #059669);
       border: none;
       border-radius: 50%;
       color: white;
-      font-size: 1.5rem;
+      font-size: 1.75rem;
       cursor: pointer;
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
       transition: all 0.3s;
       z-index: 90;
     }
 
+    .fab:hover {
+      transform: scale(1.1);
+      box-shadow: 0 12px 32px rgba(16, 185, 129, 0.5);
+    }
+
     .fab:active {
-      transform: scale(0.9);
+      transform: scale(0.95);
     }
 
     /* Toast */
     .toast {
       position: fixed;
-      bottom: 1rem;
-      left: 1rem;
-      right: 1rem;
+      bottom: 1.5rem;
+      left: 1.5rem;
+      right: 1.5rem;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 1rem;
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+      padding: 1.125rem;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
       z-index: 2000;
       animation: slideUp 0.3s ease;
-      max-width: 500px;
+      max-width: 520px;
       margin: 0 auto;
-    }
-
-    @keyframes slideUp {
-      from {
-        transform: translateY(100px);
-        opacity: 0;
-      }
-      to {
-        transform: translateY(0);
-        opacity: 1;
-      }
     }
 
     .toast-success { border-left: 4px solid var(--success); }
     .toast-error { border-left: 4px solid var(--danger); }
-    .toast-info { border-left: 4px solid var(--primary); }
+    .toast-info { border-left: 4px solid var(--info); }
+    .toast-warning { border-left: 4px solid var(--warning); }
+
+    .toast-content {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .toast-icon {
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .toast-body {
+      flex: 1;
+    }
+
+    .toast-title {
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    }
+
+    .toast-message {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      white-space: pre-line;
+    }
 
     /* Empty State */
     .empty-state {
-      padding: 3rem 1.5rem;
+      padding: 4rem 2rem;
       text-align: center;
       color: var(--text-muted);
     }
 
     .empty-icon {
-      font-size: 3rem;
-      margin-bottom: 1rem;
+      font-size: 4rem;
+      margin-bottom: 1.5rem;
       opacity: 0.5;
+    }
+
+    .empty-state h3 {
+      font-size: 1.5rem;
+      margin-bottom: 0.75rem;
+      color: var(--text);
+    }
+
+    .empty-state p {
+      font-size: 1rem;
     }
 
     /* Loading */
     .loading {
       display: inline-block;
-      width: 24px;
-      height: 24px;
+      width: 28px;
+      height: 28px;
       border: 3px solid var(--border);
       border-top-color: var(--primary);
       border-radius: 50%;
@@ -690,36 +1001,117 @@
       to { transform: rotate(360deg); }
     }
 
-    /* Desktop Adjustments */
-    @media (min-width: 768px) {
+    /* Mini Map */
+    .minimap {
+      position: absolute;
+      bottom: 1rem;
+      left: 1rem;
+      width: 200px;
+      height: 150px;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      z-index: 30;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+
+    .minimap:hover {
+      opacity: 1;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .flows-header {
+        padding: 1.5rem 1rem 0.75rem;
+      }
+
+      .sidebar {
+        width: 100%;
+      }
+
+      .search-box {
+        max-width: 100%;
+      }
+
+      .node-palette {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .flow-actions {
+        flex-direction: column;
+      }
+
+      .action-btn {
+        width: 100%;
+      }
+
+      .canvas-controls {
+        right: 0.75rem;
+        top: 0.75rem;
+      }
+
+      .minimap {
+        display: none;
+      }
+    }
+
+    @media (min-width: 769px) {
       .sidebar {
         position: relative;
         transform: translateX(0);
       }
 
-      .canvas-view.active {
-        display: flex;
-      }
-
-      .node-palette {
-        grid-template-columns: repeat(3, 1fr);
-      }
-
       .flows-container {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-        gap: 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+        gap: 1.25rem;
       }
 
       .flow-card {
         margin-bottom: 0;
       }
+
+      .node-palette {
+        grid-template-columns: repeat(3, 1fr);
+      }
     }
 
-    @media (min-width: 1024px) {
+    @media (min-width: 1200px) {
       .node-palette {
         grid-template-columns: repeat(4, 1fr);
       }
+    }
+
+    /* Animations */
+    @keyframes shimmer {
+      0% {
+        background-position: -1000px 0;
+      }
+      100% {
+        background-position: 1000px 0;
+      }
+    }
+
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg-lighter) 25%, var(--bg) 50%, var(--bg-lighter) 75%);
+      background-size: 1000px 100%;
+      animation: shimmer 2s infinite;
+    }
+
+    /* Connection Drawing */
+    .temp-connection {
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    .temp-connection path {
+      stroke: var(--primary-light);
+      stroke-width: 3;
+      stroke-dasharray: 5, 5;
+      fill: none;
+      opacity: 0.6;
     }
   </style>
 </head>
@@ -728,12 +1120,15 @@
     <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <button class="back-btn" id="backBtn" style="display: none;" onclick="showFlowsList()">←</button>
+        <button class="back-btn" id="backBtn" style="display: none;" onclick="showFlowsList()">← Back</button>
         <div class="logo">R</div>
-        <div class="title" id="appTitle">RedNox</div>
+        <div class="title" id="appTitle">RedNox Flow Editor</div>
       </div>
       <div class="header-actions" id="headerActions">
-        <button class="btn btn-primary" onclick="showNewFlowModal()">+ New</button>
+        <button class="btn btn-primary" onclick="showNewFlowModal()">
+          <span>+</span>
+          <span>New Flow</span>
+        </button>
       </div>
     </header>
 
@@ -741,10 +1136,17 @@
     <main class="main">
       <!-- Flows List View -->
       <div class="flows-view" id="flowsView">
+        <div class="flows-header">
+          <h2>Your Flows</h2>
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" class="search-input" id="searchInput" placeholder="Search flows..." oninput="filterFlows()">
+          </div>
+        </div>
         <div class="flows-container" id="flowsContainer">
           <div class="empty-state">
             <div class="loading"></div>
-            <p style="margin-top: 1rem;">Loading flows...</p>
+            <p style="margin-top: 1.5rem; font-size: 1rem;">Loading flows...</p>
           </div>
         </div>
       </div>
@@ -758,26 +1160,46 @@
             <button class="btn btn-icon btn-secondary" onclick="closeSidebar()">×</button>
           </div>
           <div class="sidebar-content" id="sidebarContent">
-            <div style="padding: 2rem 1rem; text-align: center; color: var(--text-muted);">
-              Select a node to edit
+            <div style="padding: 3rem 1.5rem; text-align: center; color: var(--text-muted);">
+              <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;">📝</div>
+              <p>Select a node to view and edit its properties</p>
             </div>
           </div>
         </aside>
 
         <!-- Canvas -->
-        <div class="canvas-container">
-          <button class="add-node-btn" onclick="showNodePalette()">+</button>
+        <div class="canvas-container" id="canvasContainer">
+          <button class="add-node-btn" onclick="showNodePalette()" title="Add Node">+</button>
+          
+          <div class="canvas-controls">
+            <button class="canvas-control-btn" onclick="zoomIn()" title="Zoom In">+</button>
+            <button class="canvas-control-btn" onclick="zoomOut()" title="Zoom Out">−</button>
+            <button class="canvas-control-btn" onclick="resetView()" title="Reset View">⟲</button>
+            <button class="canvas-control-btn" onclick="toggleSidebar()" title="Toggle Sidebar">☰</button>
+          </div>
+
           <svg class="canvas" id="canvas">
-            <g id="connections"></g>
-            <g id="nodes"></g>
+            <defs>
+              <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                <polygon points="0 0, 10 3, 0 6" fill="var(--primary)" />
+              </marker>
+            </defs>
+            <g id="canvasGroup">
+              <g id="connections"></g>
+              <g id="nodes"></g>
+            </g>
+          </svg>
+
+          <svg class="temp-connection" id="tempConnection" style="display: none;">
+            <path id="tempPath" />
           </svg>
         </div>
       </div>
     </main>
   </div>
 
-  <!-- FAB for Save (shown in canvas view) -->
-  <button class="fab" id="saveFab" style="display: none;" onclick="saveCurrentFlow()">💾</button>
+  <!-- FAB for Save -->
+  <button class="fab" id="saveFab" style="display: none;" onclick="saveCurrentFlow()" title="Save Flow">💾</button>
 
   <!-- New Flow Modal -->
   <div class="modal" id="newFlowModal">
@@ -786,32 +1208,36 @@
         <h3 class="modal-title">Create New Flow</h3>
         <button class="modal-close" onclick="closeModal('newFlowModal')">×</button>
       </div>
-      <div class="form-group">
-        <label class="form-label">Flow ID *</label>
-        <input type="text" class="form-input" id="newFlowId" placeholder="my-flow">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Flow Name *</label>
-        <input type="text" class="form-input" id="newFlowName" placeholder="My Flow">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Description</label>
-        <textarea class="form-textarea" id="newFlowDesc" placeholder="What does this flow do?"></textarea>
-      </div>
-      <div style="display: flex; gap: 0.75rem;">
-        <button class="btn btn-secondary" style="flex: 1;" onclick="closeModal('newFlowModal')">Cancel</button>
-        <button class="btn btn-primary" style="flex: 1;" onclick="createNewFlow()">Create</button>
-      </div>
+      <form onsubmit="createNewFlow(event)">
+        <div class="form-group">
+          <label class="form-label">Flow ID *</label>
+          <input type="text" class="form-input" id="newFlowId" placeholder="my-awesome-flow" required pattern="[a-z0-9-]+" title="Use lowercase letters, numbers, and hyphens only">
+          <div class="form-hint">Lowercase letters, numbers, and hyphens only</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Flow Name *</label>
+          <input type="text" class="form-input" id="newFlowName" placeholder="My Awesome Flow" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea class="form-textarea" id="newFlowDesc" placeholder="What does this flow do?" rows="3"></textarea>
+        </div>
+        <div style="display: flex; gap: 0.75rem;">
+          <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="closeModal('newFlowModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="flex: 1;">Create Flow</button>
+        </div>
+      </form>
     </div>
   </div>
 
   <!-- Node Palette Modal -->
   <div class="modal" id="nodePaletteModal">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width: 720px;">
       <div class="modal-header">
         <h3 class="modal-title">Add Node</h3>
         <button class="modal-close" onclick="closeModal('nodePaletteModal')">×</button>
       </div>
+      <div class="node-categories" id="nodeCategories"></div>
       <div class="node-palette" id="nodePalette"></div>
     </div>
   </div>
@@ -823,28 +1249,57 @@
     let nodes = [];
     let connections = [];
     let selectedNode = null;
-    let viewMode = 'list'; // 'list' or 'canvas'
+    let viewMode = 'list';
+    let canvasOffset = { x: 0, y: 0 };
+    let canvasScale = 1;
+    let isDraggingCanvas = false;
+    let dragStartPos = { x: 0, y: 0 };
+    let isConnecting = false;
+    let connectionStart = null;
+    let currentCategory = 'all';
 
-    // Node Templates
+    // Node Templates with Categories
     const nodeTemplates = {
-      'http-in': { icon: '🌐', name: 'HTTP In', category: 'input' },
-      'http-response': { icon: '📤', name: 'HTTP Response', category: 'output' },
-      'http-request': { icon: '🔗', name: 'HTTP Request', category: 'function' },
-      'function': { icon: '⚡', name: 'Function', category: 'function' },
-      'switch': { icon: '🔀', name: 'Switch', category: 'function' },
-      'change': { icon: '✏️', name: 'Change', category: 'function' },
-      'template': { icon: '📝', name: 'Template', category: 'function' },
-      'json': { icon: '{ }', name: 'JSON', category: 'parser' },
-      'delay': { icon: '⏱️', name: 'Delay', category: 'function' },
-      'debug': { icon: '🐛', name: 'Debug', category: 'output' },
-      'inject': { icon: '💉', name: 'Inject', category: 'input' },
-      'split': { icon: '✂️', name: 'Split', category: 'sequence' },
-      'join': { icon: '🔗', name: 'Join', category: 'sequence' }
+      'http-in': { icon: '🌐', name: 'HTTP In', category: 'input', color: 'var(--node-http)' },
+      'http-response': { icon: '📤', name: 'HTTP Response', category: 'output', color: 'var(--node-http)' },
+      'http-request': { icon: '🔗', name: 'HTTP Request', category: 'function', color: 'var(--node-http)' },
+      'inject': { icon: '💉', name: 'Inject', category: 'input', color: 'var(--node-http)' },
+      'function': { icon: '⚡', name: 'Function', category: 'function', color: 'var(--node-function)' },
+      'template': { icon: '📝', name: 'Template', category: 'function', color: 'var(--node-function)' },
+      'switch': { icon: '🔀', name: 'Switch', category: 'function', color: 'var(--node-function)' },
+      'change': { icon: '✏️', name: 'Change', category: 'function', color: 'var(--node-function)' },
+      'range': { icon: '📊', name: 'Range', category: 'function', color: 'var(--node-function)' },
+      'delay': { icon: '⏱️', name: 'Delay', category: 'function', color: 'var(--node-function)' },
+      'trigger': { icon: '⚡', name: 'Trigger', category: 'function', color: 'var(--node-function)' },
+      'context': { icon: '💾', name: 'Context', category: 'storage', color: 'var(--node-storage)' },
+      'json': { icon: '{ }', name: 'JSON', category: 'parser', color: 'var(--node-parser)' },
+      'csv': { icon: '📄', name: 'CSV', category: 'parser', color: 'var(--node-parser)' },
+      'html': { icon: '🌐', name: 'HTML', category: 'parser', color: 'var(--node-parser)' },
+      'split': { icon: '✂️', name: 'Split', category: 'sequence', color: 'var(--node-function)' },
+      'join': { icon: '🔗', name: 'Join', category: 'sequence', color: 'var(--node-function)' },
+      'sort': { icon: '⬆️', name: 'Sort', category: 'sequence', color: 'var(--node-function)' },
+      'batch': { icon: '📦', name: 'Batch', category: 'sequence', color: 'var(--node-function)' },
+      'debug': { icon: '🐛', name: 'Debug', category: 'output', color: '#87a980' },
+      'catch': { icon: '🎣', name: 'Catch', category: 'input', color: 'var(--node-http)' },
+      'status': { icon: '📊', name: 'Status', category: 'input', color: 'var(--node-http)' },
+      'comment': { icon: '💬', name: 'Comment', category: 'common', color: '#ffffff' }
+    };
+
+    const categories = {
+      all: 'All Nodes',
+      input: 'Input',
+      output: 'Output',
+      function: 'Function',
+      parser: 'Parser',
+      sequence: 'Sequence',
+      storage: 'Storage',
+      common: 'Common'
     };
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
       loadFlows();
+      populateNodeCategories();
       populateNodePalette();
       initCanvas();
     });
@@ -857,48 +1312,673 @@
         flows = data.flows || [];
         renderFlowsList();
       } catch (err) {
-        showToast('Failed to load flows', 'error');
+        showToast('Failed to load flows', 'error', err.message);
+        document.getElementById('flowsContainer').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">⚠️</div>
+            <h3>Failed to Load Flows</h3>
+            <p>${err.message}</p>
+          </div>
+        `;
+    }
+
+    function renderNodeFields(node) {
+      switch (node.type) {
+        case 'http-in':
+          return `
+            <div class="form-group">
+              <label class="form-label">URL Path *</label>
+              <input type="text" class="form-input" id="nodeUrl" value="${escapeHtml(node.url || '')}" placeholder="/endpoint">
+              <div class="form-hint">Example: /webhook or /api/users</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Method</label>
+              <select class="form-select" id="nodeMethod">
+                <option value="get" ${node.method === 'get' ? 'selected' : ''}>GET</option>
+                <option value="post" ${node.method === 'post' ? 'selected' : ''}>POST</option>
+                <option value="put" ${node.method === 'put' ? 'selected' : ''}>PUT</option>
+                <option value="delete" ${node.method === 'delete' ? 'selected' : ''}>DELETE</option>
+                <option value="patch" ${node.method === 'patch' ? 'selected' : ''}>PATCH</option>
+              </select>
+            </div>
+          `;
+        case 'http-request':
+          return `
+            <div class="form-group">
+              <label class="form-label">URL</label>
+              <input type="text" class="form-input" id="nodeUrl" value="${escapeHtml(node.url || '')}" placeholder="https://api.example.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Method</label>
+              <select class="form-select" id="nodeMethod">
+                <option value="GET" ${node.method === 'GET' ? 'selected' : ''}>GET</option>
+                <option value="POST" ${node.method === 'POST' ? 'selected' : ''}>POST</option>
+                <option value="PUT" ${node.method === 'PUT' ? 'selected' : ''}>PUT</option>
+                <option value="DELETE" ${node.method === 'DELETE' ? 'selected' : ''}>DELETE</option>
+                <option value="PATCH" ${node.method === 'PATCH' ? 'selected' : ''}>PATCH</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Return Type</label>
+              <select class="form-select" id="nodeRet">
+                <option value="txt" ${node.ret === 'txt' ? 'selected' : ''}>Text</option>
+                <option value="obj" ${node.ret === 'obj' ? 'selected' : ''}>JSON Object</option>
+                <option value="bin" ${node.ret === 'bin' ? 'selected' : ''}>Binary</option>
+              </select>
+            </div>
+          `;
+        case 'function':
+          return `
+            <div class="form-group">
+              <label class="form-label">Function Code</label>
+              <textarea class="form-textarea" id="nodeFunc" style="min-height: 240px; font-family: 'Monaco', monospace;">${escapeHtml(node.func || 'return msg;')}</textarea>
+              <div class="form-hint">Use JavaScript. Available: msg, node, context, flow, global, env</div>
+            </div>
+          `;
+        case 'delay':
+          return `
+            <div class="form-group">
+              <label class="form-label">Delay (milliseconds)</label>
+              <input type="number" class="form-input" id="nodeTimeout" value="${node.timeout || 1000}" min="0">
+            </div>
+          `;
+        case 'template':
+          return `
+            <div class="form-group">
+              <label class="form-label">Template</label>
+              <textarea class="form-textarea" id="nodeTemplate" style="min-height: 180px;">${escapeHtml(node.template || '')}</textarea>
+              <div class="form-hint">Use {{msg.property}} for values</div>
+            </div>
+          `;
+        case 'inject':
+          return `
+            <div class="form-group">
+              <label class="form-label">Payload</label>
+              <input type="text" class="form-input" id="nodePayload" value="${escapeHtml(node.payload || '')}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Payload Type</label>
+              <select class="form-select" id="nodePayloadType">
+                <option value="date" ${node.payloadType === 'date' ? 'selected' : ''}>Timestamp</option>
+                <option value="str" ${node.payloadType === 'str' ? 'selected' : ''}>String</option>
+                <option value="num" ${node.payloadType === 'num' ? 'selected' : ''}>Number</option>
+                <option value="bool" ${node.payloadType === 'bool' ? 'selected' : ''}>Boolean</option>
+                <option value="json" ${node.payloadType === 'json' ? 'selected' : ''}>JSON</option>
+              </select>
+            </div>
+          `;
+        case 'context':
+          return `
+            <div class="form-group">
+              <label class="form-label">Operation</label>
+              <select class="form-select" id="nodeOperation">
+                <option value="get" ${node.operation === 'get' ? 'selected' : ''}>Get</option>
+                <option value="set" ${node.operation === 'set' ? 'selected' : ''}>Set</option>
+                <option value="keys" ${node.operation === 'keys' ? 'selected' : ''}>List Keys</option>
+                <option value="delete" ${node.operation === 'delete' ? 'selected' : ''}>Delete</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Scope</label>
+              <select class="form-select" id="nodeScope">
+                <option value="flow" ${node.scope === 'flow' ? 'selected' : ''}>Flow</option>
+                <option value="global" ${node.scope === 'global' ? 'selected' : ''}>Global</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Key</label>
+              <input type="text" class="form-input" id="nodeKey" value="${escapeHtml(node.key || '')}">
+            </div>
+          `;
+        case 'switch':
+          return `
+            <div class="form-group">
+              <label class="form-label">Property</label>
+              <input type="text" class="form-input" id="nodeProperty" value="${escapeHtml(node.property || 'payload')}">
+              <div class="form-hint">Property to test (e.g., payload, topic)</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Check all rules</label>
+              <select class="form-select" id="nodeCheckall">
+                <option value="true" ${node.checkall !== false ? 'selected' : ''}>Yes</option>
+                <option value="false" ${node.checkall === false ? 'selected' : ''}>No (stop at first match)</option>
+              </select>
+            </div>
+          `;
+        case 'change':
+          return `
+            <div class="form-group">
+              <label class="form-label">Property to Change</label>
+              <input type="text" class="form-input" id="nodeProperty" value="${escapeHtml(node.property || 'payload')}">
+            </div>
+          `;
+        default:
+          return '<p style="color: var(--text-muted); font-size: 0.875rem; padding: 1rem 0;">No additional configuration needed for this node type.</p>';
       }
     }
 
+    function updateNodeProperties() {
+      if (!selectedNode) return;
+      
+      selectedNode.name = document.getElementById('nodeName')?.value || '';
+      
+      switch (selectedNode.type) {
+        case 'http-in':
+          selectedNode.url = document.getElementById('nodeUrl')?.value || '';
+          selectedNode.method = document.getElementById('nodeMethod')?.value || 'post';
+          break;
+        case 'http-request':
+          selectedNode.url = document.getElementById('nodeUrl')?.value || '';
+          selectedNode.method = document.getElementById('nodeMethod')?.value || 'GET';
+          selectedNode.ret = document.getElementById('nodeRet')?.value || 'txt';
+          break;
+        case 'function':
+          selectedNode.func = document.getElementById('nodeFunc')?.value || 'return msg;';
+          break;
+        case 'delay':
+          selectedNode.timeout = parseInt(document.getElementById('nodeTimeout')?.value) || 1000;
+          break;
+        case 'template':
+          selectedNode.template = document.getElementById('nodeTemplate')?.value || '';
+          break;
+        case 'inject':
+          selectedNode.payload = document.getElementById('nodePayload')?.value || '';
+          selectedNode.payloadType = document.getElementById('nodePayloadType')?.value || 'date';
+          break;
+        case 'context':
+          selectedNode.operation = document.getElementById('nodeOperation')?.value || 'get';
+          selectedNode.scope = document.getElementById('nodeScope')?.value || 'flow';
+          selectedNode.key = document.getElementById('nodeKey')?.value || '';
+          break;
+        case 'switch':
+          selectedNode.property = document.getElementById('nodeProperty')?.value || 'payload';
+          selectedNode.checkall = document.getElementById('nodeCheckall')?.value === 'true';
+          break;
+        case 'change':
+          selectedNode.property = document.getElementById('nodeProperty')?.value || 'payload';
+          break;
+      }
+      
+      drawCanvas();
+      showToast('Node updated', 'success');
+    }
+
+    function deleteNode() {
+      if (!selectedNode || !confirm(`Delete node "${selectedNode.name || selectedNode.type}"?`)) return;
+      
+      const nodeId = selectedNode.id;
+      nodes = nodes.filter(n => n.id !== nodeId);
+      connections = connections.filter(c => c.from !== nodeId && c.to !== nodeId);
+      
+      // Remove from wires
+      nodes.forEach(n => {
+        if (n.wires) {
+          n.wires = n.wires.map(wireGroup => wireGroup.filter(id => id !== nodeId));
+        }
+      });
+      
+      selectedNode = null;
+      drawCanvas();
+      closeSidebar();
+      showToast('Node deleted', 'success');
+    }
+
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+    }
+
+    // Node Palette
+    function populateNodeCategories() {
+      const container = document.getElementById('nodeCategories');
+      container.innerHTML = Object.entries(categories).map(([key, name]) => `
+        <button class="category-btn ${key === currentCategory ? 'active' : ''}" onclick="filterNodePalette('${key}')">
+          ${name}
+        </button>
+      `).join('');
+    }
+
+    function filterNodePalette(category) {
+      currentCategory = category;
+      populateNodeCategories();
+      populateNodePalette();
+    }
+
+    function populateNodePalette() {
+      const palette = document.getElementById('nodePalette');
+      
+      const filtered = Object.entries(nodeTemplates).filter(([type, template]) => 
+        currentCategory === 'all' || template.category === currentCategory
+      );
+      
+      palette.innerHTML = filtered.map(([type, template]) => `
+        <div class="palette-node" onclick="addNode('${type}')">
+          <div class="palette-icon">${template.icon}</div>
+          <div class="palette-name">${template.name}</div>
+          <div class="palette-category">${template.category}</div>
+        </div>
+      `).join('');
+    }
+
+    function showNodePalette() {
+      document.getElementById('nodePaletteModal').classList.add('active');
+    }
+
+    function addNode(type) {
+      const template = nodeTemplates[type];
+      const newNode = {
+        id: 'node-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+        type: type,
+        name: template.name,
+        wires: [[]],
+        x: (400 - canvasOffset.x) / canvasScale,
+        y: (300 - canvasOffset.y) / canvasScale
+      };
+      
+      // Set defaults based on type
+      switch (type) {
+        case 'http-in':
+          newNode.url = '/endpoint';
+          newNode.method = 'post';
+          break;
+        case 'http-request':
+          newNode.method = 'GET';
+          newNode.ret = 'txt';
+          break;
+        case 'function':
+          newNode.func = '// Write your code here\nreturn msg;';
+          break;
+        case 'delay':
+          newNode.timeout = 1000;
+          break;
+        case 'inject':
+          newNode.payloadType = 'date';
+          break;
+        case 'context':
+          newNode.operation = 'get';
+          newNode.scope = 'flow';
+          break;
+        case 'switch':
+          newNode.property = 'payload';
+          newNode.checkall = true;
+          newNode.rules = [{ t: 'eq', v: '', vt: 'str' }];
+          break;
+      }
+      
+      nodes.push(newNode);
+      drawCanvas();
+      closeModal('nodePaletteModal');
+      showToast(`${template.name} added to canvas`, 'success');
+      
+      // Auto-select new node
+      setTimeout(() => selectNode(newNode), 100);
+    }
+
+    // Flow Operations
+    function showNewFlowModal() {
+      document.getElementById('newFlowModal').classList.add('active');
+      document.getElementById('newFlowId').value = '';
+      document.getElementById('newFlowName').value = '';
+      document.getElementById('newFlowDesc').value = '';
+    }
+
+    async function createNewFlow(event) {
+      event.preventDefault();
+      
+      const id = document.getElementById('newFlowId').value.trim();
+      const name = document.getElementById('newFlowName').value.trim();
+      const description = document.getElementById('newFlowDesc').value.trim();
+      
+      if (!id || !name) {
+        showToast('ID and Name are required', 'error');
+        return;
+      }
+      
+      const flowConfig = { 
+        id, 
+        name, 
+        description, 
+        version: '1.0.0',
+        nodes: [] 
+      };
+      
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(flowConfig)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success || response.ok) {
+          closeModal('newFlowModal');
+          showToast('Flow created successfully', 'success');
+          await loadFlows();
+          openFlowCanvas(id);
+        } else {
+          showToast('Failed to create flow', 'error', data.error || 'Unknown error');
+        }
+      } catch (err) {
+        showToast('Error creating flow', 'error', err.message);
+      }
+    }
+
+    async function saveCurrentFlow() {
+      if (!currentFlow) return;
+      
+      // Update node positions
+      const updatedConfig = {
+        id: currentFlow.id,
+        name: currentFlow.name,
+        description: currentFlow.description,
+        version: currentFlow.version || '1.0.0',
+        nodes: nodes.map(node => ({
+          ...node,
+          x: Math.round(node.x),
+          y: Math.round(node.y)
+        }))
+      };
+      
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${currentFlow.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedConfig)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success || response.ok) {
+          showToast('Flow saved successfully', 'success');
+          currentFlow.config = updatedConfig;
+          
+          // Show endpoints if any
+          if (data.endpoints && data.endpoints.length > 0) {
+            const endpointList = data.endpoints.map(e => 
+              `${e.method} ${e.url}`
+            ).join('\n');
+            setTimeout(() => {
+              showToast(`Endpoints available:\n${endpointList}`, 'info');
+            }, 1500);
+          }
+        } else {
+          showToast('Failed to save flow', 'error', data.error || 'Unknown error');
+        }
+      } catch (err) {
+        showToast('Error saving flow', 'error', err.message);
+      }
+    }
+
+    async function executeFlow() {
+      if (!currentFlow) return;
+      
+      const httpNodes = nodes.filter(n => n.type === 'http-in');
+      
+      if (httpNodes.length === 0) {
+        showToast('No HTTP endpoints found', 'warning', 'Add an HTTP In node to create an endpoint');
+        return;
+      }
+      
+      const endpoints = httpNodes.map(n => 
+        `${(n.method || 'POST').toUpperCase()} ${API_BASE}/api/${currentFlow.id}${n.url}`
+      ).join('\n\n');
+      
+      showToast(`Test your flow at:\n${endpoints}`, 'info');
+    }
+
+    async function duplicateFlow(flowId) {
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        const data = await response.json();
+        
+        const newId = flowId + '-copy-' + Date.now();
+        const newFlow = {
+          id: newId,
+          name: data.name + ' (Copy)',
+          description: data.description,
+          version: data.version,
+          nodes: data.config?.nodes || data.nodes || []
+        };
+        
+        const createResponse = await fetch(`${API_BASE}/admin/flows`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newFlow)
+        });
+        
+        if (createResponse.ok) {
+          showToast('Flow duplicated successfully', 'success');
+          loadFlows();
+        } else {
+          throw new Error('Duplication failed');
+        }
+      } catch (err) {
+        showToast('Failed to duplicate flow', 'error', err.message);
+      }
+    }
+
+    async function toggleFlowEnabled(flowId, enable) {
+      try {
+        const action = enable ? 'enable' : 'disable';
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}/${action}`, {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          showToast(`Flow ${action}d successfully`, 'success');
+          loadFlows();
+        } else {
+          throw new Error('Toggle failed');
+        }
+      } catch (err) {
+        showToast('Failed to toggle flow', 'error', err.message);
+      }
+    }
+
+    async function deleteFlow(flowId, flowName) {
+      if (!confirm(`Are you sure you want to delete "${flowName}"?\n\nThis action cannot be undone.`)) return;
+      
+      try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          showToast('Flow deleted successfully', 'success');
+          loadFlows();
+        } else {
+          throw new Error('Deletion failed');
+        }
+      } catch (err) {
+        showToast('Failed to delete flow', 'error', err.message);
+      }
+    }
+
+    // Modal
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
+    }
+
+    // Toast Notifications
+    function showToast(message, type = 'info', details = '') {
+      const existing = document.querySelector('.toast');
+      if (existing) existing.remove();
+      
+      const icons = {
+        success: '✅',
+        error: '❌',
+        info: 'ℹ️',
+        warning: '⚠️'
+      };
+      
+      const titles = {
+        success: 'Success',
+        error: 'Error',
+        info: 'Info',
+        warning: 'Warning'
+      };
+      
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `
+        <div class="toast-content">
+          <div class="toast-icon">${icons[type]}</div>
+          <div class="toast-body">
+            <div class="toast-title">${titles[type]}</div>
+            <div class="toast-message">${escapeHtml(message)}${details ? '\n' + escapeHtml(details) : ''}</div>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), type === 'info' ? 5000 : 3000);
+    }
+
+    // Utility Functions
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Keyboard Shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (viewMode === 'canvas') {
+        // Delete key
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedNode && 
+            !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+          e.preventDefault();
+          deleteNode();
+        }
+        
+        // Ctrl/Cmd + S to save
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          saveCurrentFlow();
+        }
+        
+        // Escape to deselect
+        if (e.key === 'Escape') {
+          selectedNode = null;
+          drawCanvas();
+          closeSidebar();
+        }
+        
+        // Ctrl/Cmd + A to add node
+        if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+          e.preventDefault();
+          showNodePalette();
+        }
+      }
+    });
+
+    // Prevent accidental navigation
+    window.addEventListener('beforeunload', (e) => {
+      if (viewMode === 'canvas' && nodes.length > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    // Touch improvements for mobile
+    let lastTap = 0;
+    document.addEventListener('touchend', (e) => {
+      const currentTime = new Date().getTime();
+      const tapLength = currentTime - lastTap;
+      if (tapLength < 500 && tapLength > 0) {
+        // Double tap detected
+        if (e.target.classList.contains('node')) {
+          selectNode(nodes.find(n => n.id === e.target.dataset.nodeId));
+        }
+      }
+      lastTap = currentTime;
+    });
+
+    // Initialize tooltips on hover (desktop only)
+    if (window.matchMedia('(hover: hover)').matches) {
+      document.addEventListener('mouseover', (e) => {
+        const btn = e.target.closest('[title]');
+        if (btn && btn.title) {
+          // Could add custom tooltip implementation here
+        }
+      });
+    }
+  </script>
+</body>
+</html>
+      }
+    }
+
+    // Filter Flows
+    function filterFlows() {
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      const filtered = flows.filter(f => 
+        f.name.toLowerCase().includes(search) || 
+        f.id.toLowerCase().includes(search) ||
+        (f.description && f.description.toLowerCase().includes(search))
+      );
+      renderFlowsList(filtered);
+    }
+
     // Render Flows List
-    function renderFlowsList() {
+    function renderFlowsList(flowsToRender = flows) {
       const container = document.getElementById('flowsContainer');
       
-      if (flows.length === 0) {
+      if (flowsToRender.length === 0) {
         container.innerHTML = `
           <div class="empty-state">
             <div class="empty-icon">📦</div>
-            <h3>No flows yet</h3>
-            <p style="margin-top: 0.5rem; font-size: 0.875rem;">Create your first flow to get started</p>
+            <h3>${flows.length === 0 ? 'No flows yet' : 'No matching flows'}</h3>
+            <p style="margin-top: 0.75rem; font-size: 0.9375rem;">
+              ${flows.length === 0 ? 'Create your first flow to get started' : 'Try a different search term'}
+            </p>
           </div>
         `;
         return;
       }
 
-      container.innerHTML = flows.map(flow => {
-        const nodeCount = flow.config ? JSON.parse(flow.config).nodes.length : 0;
+      container.innerHTML = flowsToRender.map(flow => {
+        const config = flow.config ? JSON.parse(flow.config) : { nodes: [] };
+        const nodeCount = config.nodes.length;
+        const httpNodes = config.nodes.filter(n => n.type === 'http-in').length;
+        
         return `
-          <div class="flow-card">
+          <div class="flow-card" onclick="openFlowCanvas('${flow.id}')">
             <div class="flow-header">
               <div class="flow-info">
                 <div class="flow-name">
-                  <span>${flow.name}</span>
+                  <span>${escapeHtml(flow.name)}</span>
                   <span class="badge ${flow.enabled ? 'badge-success' : 'badge-danger'}">
                     ${flow.enabled ? '● Active' : '○ Disabled'}
                   </span>
                 </div>
-                ${flow.description ? `<div class="flow-desc">${flow.description}</div>` : ''}
+                ${flow.description ? `<div class="flow-desc">${escapeHtml(flow.description)}</div>` : ''}
                 <div class="flow-meta">
-                  <span>🔷 ${nodeCount} nodes</span>
-                  <span>🆔 ${flow.id}</span>
+                  <span class="flow-meta-item">
+                    <span>🔷</span>
+                    <span>${nodeCount} node${nodeCount !== 1 ? 's' : ''}</span>
+                  </span>
+                  ${httpNodes > 0 ? `
+                  <span class="flow-meta-item">
+                    <span>🌐</span>
+                    <span>${httpNodes} endpoint${httpNodes !== 1 ? 's' : ''}</span>
+                  </span>
+                  ` : ''}
+                  <span class="flow-meta-item">
+                    <span>🆔</span>
+                    <span>${escapeHtml(flow.id)}</span>
+                  </span>
                 </div>
               </div>
             </div>
-            <div class="flow-actions">
+            <div class="flow-actions" onclick="event.stopPropagation()">
               <button class="action-btn primary" onclick="openFlowCanvas('${flow.id}')">
                 <span>📊</span>
-                <span>Open</span>
+                <span>Edit</span>
               </button>
               <button class="action-btn" onclick="duplicateFlow('${flow.id}')">
                 <span>📋</span>
@@ -908,7 +1988,7 @@
                 <span>${flow.enabled ? '⏸' : '▶'}</span>
                 <span>${flow.enabled ? 'Disable' : 'Enable'}</span>
               </button>
-              <button class="action-btn danger" onclick="deleteFlow('${flow.id}')">
+              <button class="action-btn danger" onclick="deleteFlow('${flow.id}', '${escapeHtml(flow.name)}')">
                 <span>🗑</span>
                 <span>Delete</span>
               </button>
@@ -924,17 +2004,20 @@
       document.getElementById('flowsView').style.display = 'block';
       document.getElementById('canvasView').classList.remove('active');
       document.getElementById('backBtn').style.display = 'none';
-      document.getElementById('appTitle').textContent = 'RedNox';
-      document.getElementById('headerActions').innerHTML = '<button class="btn btn-primary" onclick="showNewFlowModal()">+ New</button>';
+      document.getElementById('appTitle').textContent = 'RedNox Flow Editor';
+      document.getElementById('headerActions').innerHTML = '<button class="btn btn-primary" onclick="showNewFlowModal()"><span>+</span><span>New Flow</span></button>';
       document.getElementById('saveFab').style.display = 'none';
       currentFlow = null;
       closeSidebar();
+      loadFlows();
     }
 
     // Open Flow Canvas
     async function openFlowCanvas(flowId) {
       try {
         const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        if (!response.ok) throw new Error('Failed to load flow');
+        
         const data = await response.json();
         currentFlow = data;
         
@@ -944,23 +2027,29 @@
         document.getElementById('backBtn').style.display = 'flex';
         document.getElementById('appTitle').textContent = data.name;
         document.getElementById('headerActions').innerHTML = `
-          <button class="btn btn-secondary" onclick="executeFlow()">▶ Run</button>
-          <button class="btn btn-primary" onclick="saveCurrentFlow()">💾 Save</button>
+          <button class="btn btn-secondary" onclick="executeFlow()">
+            <span>▶</span>
+            <span>Test</span>
+          </button>
+          <button class="btn btn-success" onclick="saveCurrentFlow()">
+            <span>💾</span>
+            <span>Save</span>
+          </button>
         `;
         document.getElementById('saveFab').style.display = 'flex';
         
-        renderCanvas(data.config);
+        renderCanvas(data.config || data);
       } catch (err) {
-        showToast('Failed to load flow', 'error');
+        showToast('Failed to load flow', 'error', err.message);
       }
     }
 
     // Render Canvas
     function renderCanvas(config) {
-      nodes = config.nodes.map(node => ({
+      nodes = (config.nodes || []).map(node => ({
         ...node,
-        x: node.x || Math.random() * 300 + 100,
-        y: node.y || Math.random() * 300 + 100
+        x: node.x || Math.random() * 400 + 100,
+        y: node.y || Math.random() * 400 + 100
       }));
       
       connections = [];
@@ -969,6 +2058,7 @@
           node.wires.forEach((wireGroup, outputIndex) => {
             wireGroup.forEach(targetId => {
               connections.push({
+                id: `${node.id}-${targetId}-${outputIndex}`,
                 from: node.id,
                 to: targetId,
                 outputIndex
@@ -978,6 +2068,7 @@
         }
       });
       
+      resetView();
       drawCanvas();
     }
 
@@ -995,89 +2086,248 @@
         const toNode = nodes.find(n => n.id === conn.to);
         
         if (fromNode && toNode) {
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('class', 'connection');
+          svg.setAttribute('style', 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;');
+          
           const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          const x1 = fromNode.x + 90;
+          const x1 = fromNode.x + 100;
           const y1 = fromNode.y + 60;
-          const x2 = toNode.x + 90;
+          const x2 = toNode.x + 100;
           const y2 = toNode.y + 60;
           
           const cx = (x1 + x2) / 2;
           path.setAttribute('d', `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`);
-          path.setAttribute('class', 'connection');
-          connectionsGroup.appendChild(path);
+          path.setAttribute('marker-end', 'url(#arrowhead)');
+          
+          svg.appendChild(path);
+          connectionsGroup.appendChild(svg);
         }
       });
       
       // Draw nodes
       nodes.forEach(node => {
-        const template = nodeTemplates[node.type] || { icon: '❓', name: node.type };
-        
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+        const template = nodeTemplates[node.type] || { icon: '❓', name: node.type, color: '#666' };
         
         const foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
-        foreignObject.setAttribute('width', '180');
+        foreignObject.setAttribute('x', node.x);
+        foreignObject.setAttribute('y', node.y);
+        foreignObject.setAttribute('width', '200');
         foreignObject.setAttribute('height', '120');
         
         foreignObject.innerHTML = `
           <div xmlns="http://www.w3.org/1999/xhtml" class="node ${selectedNode?.id === node.id ? 'selected' : ''}" data-node-id="${node.id}">
             <div class="node-header">
-              <div class="node-icon">${template.icon}</div>
+              <div class="node-icon" style="background: ${template.color}">${template.icon}</div>
               <div class="node-info">
                 <div class="node-type">${node.type}</div>
-                <div class="node-name">${node.name || template.name}</div>
+                <div class="node-name" title="${escapeHtml(node.name || template.name)}">${escapeHtml(node.name || template.name)}</div>
               </div>
             </div>
             <div class="node-ports">
-              <div class="node-port input"></div>
-              <div class="node-port output"></div>
+              <div class="node-port input" data-port="input"></div>
+              <div class="node-port output" data-port="output"></div>
             </div>
           </div>
         `;
         
-        g.appendChild(foreignObject);
-        nodesGroup.appendChild(g);
+        nodesGroup.appendChild(foreignObject);
         
         const nodeElement = foreignObject.querySelector('.node');
-        let touchStartX, touchStartY, nodeStartX, nodeStartY;
-        
-        nodeElement.addEventListener('touchstart', (e) => {
-          e.preventDefault();
-          const touch = e.touches[0];
-          touchStartX = touch.clientX;
-          touchStartY = touch.clientY;
-          nodeStartX = node.x;
-          nodeStartY = node.y;
-        });
-        
-        nodeElement.addEventListener('touchmove', (e) => {
-          e.preventDefault();
-          const touch = e.touches[0];
-          const deltaX = touch.clientX - touchStartX;
-          const deltaY = touch.clientY - touchStartY;
-          node.x = nodeStartX + deltaX;
-          node.y = nodeStartY + deltaY;
-          drawCanvas();
-        });
-        
-        nodeElement.addEventListener('click', (e) => {
-          e.stopPropagation();
-          selectNode(node);
-        });
+        setupNodeInteractions(nodeElement, node);
       });
+    }
+
+    // Setup Node Interactions
+    function setupNodeInteractions(element, node) {
+      let touchStartX, touchStartY, nodeStartX, nodeStartY;
+      let isDragging = false;
+      
+      element.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('node-port')) return;
+        e.preventDefault();
+        isDragging = true;
+        touchStartX = e.clientX;
+        touchStartY = e.clientY;
+        nodeStartX = node.x;
+        nodeStartY = node.y;
+      });
+      
+      element.addEventListener('touchstart', (e) => {
+        if (e.target.classList.contains('node-port')) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        isDragging = true;
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+        nodeStartX = node.x;
+        nodeStartY = node.y;
+      });
+      
+      const moveHandler = (clientX, clientY) => {
+        if (!isDragging) return;
+        const deltaX = (clientX - touchStartX) / canvasScale;
+        const deltaY = (clientY - touchStartY) / canvasScale;
+        node.x = nodeStartX + deltaX;
+        node.y = nodeStartY + deltaY;
+        drawCanvas();
+      };
+      
+      document.addEventListener('mousemove', (e) => moveHandler(e.clientX, e.clientY));
+      document.addEventListener('touchmove', (e) => {
+        if (isDragging) {
+          e.preventDefault();
+          const touch = e.touches[0];
+          moveHandler(touch.clientX, touch.clientY);
+        }
+      });
+      
+      const endHandler = () => {
+        isDragging = false;
+      };
+      
+      document.addEventListener('mouseup', endHandler);
+      document.addEventListener('touchend', endHandler);
+      
+      element.addEventListener('click', (e) => {
+        if (!isDragging && !e.target.classList.contains('node-port')) {
+          selectNode(node);
+        }
+      });
+      
+      // Port connections
+      const outputPort = element.querySelector('[data-port="output"]');
+      if (outputPort) {
+        outputPort.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          startConnection(node);
+        });
+        outputPort.addEventListener('touchstart', (e) => {
+          e.stopPropagation();
+          startConnection(node);
+        });
+      }
+      
+      const inputPort = element.querySelector('[data-port="input"]');
+      if (inputPort) {
+        inputPort.addEventListener('mouseup', (e) => {
+          e.stopPropagation();
+          endConnection(node);
+        });
+        inputPort.addEventListener('touchend', (e) => {
+          e.stopPropagation();
+          endConnection(node);
+        });
+      }
+    }
+
+    // Connection Handling
+    function startConnection(node) {
+      isConnecting = true;
+      connectionStart = node;
+      document.getElementById('tempConnection').style.display = 'block';
+    }
+
+    function endConnection(targetNode) {
+      if (isConnecting && connectionStart && connectionStart.id !== targetNode.id) {
+        // Add connection
+        if (!connectionStart.wires) connectionStart.wires = [[]];
+        if (!connectionStart.wires[0].includes(targetNode.id)) {
+          connectionStart.wires[0].push(targetNode.id);
+          connections.push({
+            id: `${connectionStart.id}-${targetNode.id}-0`,
+            from: connectionStart.id,
+            to: targetNode.id,
+            outputIndex: 0
+          });
+          drawCanvas();
+          showToast('Connection created', 'success');
+        }
+      }
+      isConnecting = false;
+      connectionStart = null;
+      document.getElementById('tempConnection').style.display = 'none';
     }
 
     // Canvas Initialization
     function initCanvas() {
       const canvas = document.getElementById('canvas');
+      const container = document.getElementById('canvasContainer');
       
       canvas.addEventListener('click', (e) => {
-        if (e.target === canvas) {
+        if (e.target === canvas || e.target.id === 'canvasGroup') {
           selectedNode = null;
           drawCanvas();
           closeSidebar();
         }
       });
+      
+      // Pan canvas
+      let isPanning = false;
+      let panStart = { x: 0, y: 0 };
+      
+      container.addEventListener('mousedown', (e) => {
+        if (e.target === canvas || e.target.id === 'canvasGroup' || e.target === container) {
+          isPanning = true;
+          panStart = { x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y };
+          canvas.classList.add('dragging');
+        }
+      });
+      
+      container.addEventListener('mousemove', (e) => {
+        if (isPanning) {
+          canvasOffset.x = e.clientX - panStart.x;
+          canvasOffset.y = e.clientY - panStart.y;
+          updateCanvasTransform();
+        }
+        
+        // Update temp connection
+        if (isConnecting && connectionStart) {
+          const fromNode = connectionStart;
+          const x1 = fromNode.x + 100;
+          const y1 = fromNode.y + 60;
+          const x2 = e.clientX / canvasScale - canvasOffset.x / canvasScale;
+          const y2 = e.clientY / canvasScale - canvasOffset.y / canvasScale;
+          const cx = (x1 + x2) / 2;
+          
+          const path = document.getElementById('tempPath');
+          path.setAttribute('d', `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`);
+        }
+      });
+      
+      container.addEventListener('mouseup', () => {
+        isPanning = false;
+        canvas.classList.remove('dragging');
+      });
+      
+      // Zoom
+      container.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        canvasScale = Math.max(0.1, Math.min(2, canvasScale * delta));
+        updateCanvasTransform();
+      }, { passive: false });
+    }
+
+    function updateCanvasTransform() {
+      const group = document.getElementById('canvasGroup');
+      group.setAttribute('transform', `translate(${canvasOffset.x}, ${canvasOffset.y}) scale(${canvasScale})`);
+    }
+
+    function zoomIn() {
+      canvasScale = Math.min(2, canvasScale * 1.2);
+      updateCanvasTransform();
+    }
+
+    function zoomOut() {
+      canvasScale = Math.max(0.1, canvasScale * 0.8);
+      updateCanvasTransform();
+    }
+
+    function resetView() {
+      canvasScale = 1;
+      canvasOffset = { x: 0, y: 0 };
+      updateCanvasTransform();
     }
 
     // Select Node
@@ -1094,385 +2344,26 @@
       
       sidebar.classList.add('open');
       
+      const template = nodeTemplates[node.type] || {};
+      
       content.innerHTML = `
-        <div class="form-group">
-          <label class="form-label">Node Type</label>
-          <input type="text" class="form-input" value="${node.type}" disabled>
+        <div style="text-align: center; margin-bottom: 1.5rem;">
+          <div style="width: 60px; height: 60px; background: ${template.color || 'var(--primary)'}; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 2rem; margin-bottom: 0.75rem;">${template.icon || '❓'}</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">${node.type}</div>
         </div>
         <div class="form-group">
           <label class="form-label">Node Name</label>
-          <input type="text" class="form-input" id="nodeName" value="${node.name || ''}" placeholder="Node name">
+          <input type="text" class="form-input" id="nodeName" value="${escapeHtml(node.name || '')}" placeholder="Node name">
         </div>
         ${renderNodeFields(node)}
-        <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
-          <button class="btn btn-primary" style="width: 100%;" onclick="updateNodeProperties()">
-            ✓ Update Node
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+          <button class="btn btn-success" style="width: 100%;" onclick="updateNodeProperties()">
+            <span>✓</span>
+            <span>Update Node</span>
           </button>
           <button class="btn btn-secondary" style="width: 100%; background: var(--danger); color: white;" onclick="deleteNode()">
-            🗑 Delete Node
+            <span>🗑</span>
+            <span>Delete Node</span>
           </button>
         </div>
-      `;
-    }
-
-    function renderNodeFields(node) {
-      switch (node.type) {
-        case 'http-in':
-          return `
-            <div class="form-group">
-              <label class="form-label">URL Path *</label>
-              <input type="text" class="form-input" id="nodeUrl" value="${node.url || ''}" placeholder="/endpoint">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Method</label>
-              <select class="form-select" id="nodeMethod">
-                <option value="get" ${node.method === 'get' ? 'selected' : ''}>GET</option>
-                <option value="post" ${node.method === 'post' ? 'selected' : ''}>POST</option>
-                <option value="put" ${node.method === 'put' ? 'selected' : ''}>PUT</option>
-                <option value="delete" ${node.method === 'delete' ? 'selected' : ''}>DELETE</option>
-              </select>
-            </div>
-          `;
-        case 'http-request':
-          return `
-            <div class="form-group">
-              <label class="form-label">URL</label>
-              <input type="text" class="form-input" id="nodeUrl" value="${node.url || ''}" placeholder="https://api.example.com">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Method</label>
-              <select class="form-select" id="nodeMethod">
-                <option value="GET" ${node.method === 'GET' ? 'selected' : ''}>GET</option>
-                <option value="POST" ${node.method === 'POST' ? 'selected' : ''}>POST</option>
-                <option value="PUT" ${node.method === 'PUT' ? 'selected' : ''}>PUT</option>
-                <option value="DELETE" ${node.method === 'DELETE' ? 'selected' : ''}>DELETE</option>
-              </select>
-            </div>
-          `;
-        case 'function':
-          return `
-            <div class="form-group">
-              <label class="form-label">Function Code</label>
-              <textarea class="form-textarea" id="nodeFunc" style="min-height: 200px;">${node.func || 'return msg;'}</textarea>
-            </div>
-          `;
-        case 'delay':
-          return `
-            <div class="form-group">
-              <label class="form-label">Delay (ms)</label>
-              <input type="number" class="form-input" id="nodeTimeout" value="${node.timeout || 1000}">
-            </div>
-          `;
-        case 'template':
-          return `
-            <div class="form-group">
-              <label class="form-label">Template</label>
-              <textarea class="form-textarea" id="nodeTemplate" style="min-height: 150px;">${node.template || ''}</textarea>
-            </div>
-          `;
-        case 'inject':
-          return `
-            <div class="form-group">
-              <label class="form-label">Payload</label>
-              <input type="text" class="form-input" id="nodePayload" value="${node.payload || ''}">
-            </div>
-          `;
-        default:
-          return '<p style="color: var(--text-muted); font-size: 0.875rem;">No additional properties</p>';
-      }
-    }
-
-    function updateNodeProperties() {
-      if (!selectedNode) return;
-      
-      selectedNode.name = document.getElementById('nodeName')?.value || '';
-      
-      switch (selectedNode.type) {
-        case 'http-in':
-          selectedNode.url = document.getElementById('nodeUrl')?.value || '';
-          selectedNode.method = document.getElementById('nodeMethod')?.value || 'post';
-          break;
-        case 'http-request':
-          selectedNode.url = document.getElementById('nodeUrl')?.value || '';
-          selectedNode.method = document.getElementById('nodeMethod')?.value || 'GET';
-          break;
-        case 'function':
-          selectedNode.func = document.getElementById('nodeFunc')?.value || 'return msg;';
-          break;
-        case 'delay':
-          selectedNode.timeout = parseInt(document.getElementById('nodeTimeout')?.value) || 1000;
-          break;
-        case 'template':
-          selectedNode.template = document.getElementById('nodeTemplate')?.value || '';
-          break;
-        case 'inject':
-          selectedNode.payload = document.getElementById('nodePayload')?.value || '';
-          break;
-      }
-      
-      drawCanvas();
-      showToast('Node updated', 'success');
-    }
-
-    function deleteNode() {
-      if (!selectedNode || !confirm('Delete this node?')) return;
-      
-      nodes = nodes.filter(n => n.id !== selectedNode.id);
-      connections = connections.filter(c => c.from !== selectedNode.id && c.to !== selectedNode.id);
-      
-      selectedNode = null;
-      drawCanvas();
-      closeSidebar();
-      showToast('Node deleted', 'success');
-    }
-
-    function closeSidebar() {
-      document.getElementById('sidebar').classList.remove('open');
-    }
-
-    // Node Palette
-    function populateNodePalette() {
-      const palette = document.getElementById('nodePalette');
-      
-      palette.innerHTML = Object.entries(nodeTemplates).map(([type, template]) => `
-        <div class="palette-node" onclick="addNode('${type}')">
-          <div class="palette-icon">${template.icon}</div>
-          <div class="palette-name">${template.name}</div>
-          <div class="palette-category">${template.category}</div>
-        </div>
-      `).join('');
-    }
-
-    function showNodePalette() {
-      document.getElementById('nodePaletteModal').classList.add('active');
-    }
-
-    function addNode(type) {
-      const template = nodeTemplates[type];
-      const newNode = {
-        id: 'node-' + Date.now(),
-        type: type,
-        name: template.name,
-        wires: [[]],
-        x: 100 + Math.random() * 200,
-        y: 100 + Math.random() * 200
-      };
-      
-      switch (type) {
-        case 'http-in':
-          newNode.url = '/endpoint';
-          newNode.method = 'post';
-          break;
-        case 'function':
-          newNode.func = 'return msg;';
-          break;
-        case 'delay':
-          newNode.timeout = 1000;
-          break;
-      }
-      
-      nodes.push(newNode);
-      drawCanvas();
-      closeModal('nodePaletteModal');
-      showToast(`${template.name} added`, 'success');
-    }
-
-    // Flow Operations
-    function showNewFlowModal() {
-      document.getElementById('newFlowModal').classList.add('active');
-    }
-
-    async function createNewFlow() {
-      const id = document.getElementById('newFlowId').value.trim();
-      const name = document.getElementById('newFlowName').value.trim();
-      const description = document.getElementById('newFlowDesc').value.trim();
-      
-      if (!id || !name) {
-        showToast('ID and Name required', 'error');
-        return;
-      }
-      
-      const flowConfig = { id, name, description, nodes: [] };
-      
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(flowConfig)
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          closeModal('newFlowModal');
-          showToast('Flow created', 'success');
-          await loadFlows();
-          openFlowCanvas(id);
-        } else {
-          showToast(data.error || 'Failed to create', 'error');
-        }
-      } catch (err) {
-        showToast('Error creating flow', 'error');
-      }
-    }
-
-    async function saveCurrentFlow() {
-      if (!currentFlow) return;
-      
-      const updatedConfig = {
-        ...currentFlow.config,
-        nodes: nodes.map(node => ({ ...node }))
-      };
-      
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows/${currentFlow.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedConfig)
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          showToast('Flow saved', 'success');
-          currentFlow.config = updatedConfig;
-        } else {
-          showToast(data.error || 'Save failed', 'error');
-        }
-      } catch (err) {
-        showToast('Error saving', 'error');
-      }
-    }
-
-    async function executeFlow() {
-      if (!currentFlow) return;
-      
-      showToast('Flow execution started', 'info');
-      
-      // Find http-in nodes and show their endpoints
-      const httpNodes = nodes.filter(n => n.type === 'http-in');
-      if (httpNodes.length > 0) {
-        const endpoints = httpNodes.map(n => 
-          `POST ${API_BASE}/api/${currentFlow.id}${n.url}`
-        ).join('\n');
-        
-        setTimeout(() => {
-          showToast(`Endpoints ready:\n${endpoints}`, 'info');
-        }, 500);
-      }
-    }
-
-    async function duplicateFlow(flowId) {
-      const flow = flows.find(f => f.id === flowId);
-      if (!flow) return;
-      
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
-        const data = await response.json();
-        
-        const newId = flow.id + '-copy-' + Date.now();
-        const newFlow = {
-          ...data.config,
-          id: newId,
-          name: flow.name + ' (Copy)'
-        };
-        
-        const createResponse = await fetch(`${API_BASE}/admin/flows`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newFlow)
-        });
-        
-        if (createResponse.ok) {
-          showToast('Flow duplicated', 'success');
-          loadFlows();
-        }
-      } catch (err) {
-        showToast('Duplication failed', 'error');
-      }
-    }
-
-    async function toggleFlowEnabled(flowId, enable) {
-      try {
-        const action = enable ? 'enable' : 'disable';
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}/${action}`, {
-          method: 'POST'
-        });
-        
-        if (response.ok) {
-          showToast(`Flow ${action}d`, 'success');
-          loadFlows();
-        }
-      } catch (err) {
-        showToast('Toggle failed', 'error');
-      }
-    }
-
-    async function deleteFlow(flowId) {
-      const flow = flows.find(f => f.id === flowId);
-      if (!confirm(`Delete "${flow?.name}"?`)) return;
-      
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`, {
-          method: 'DELETE'
-        });
-        
-        if (response.ok) {
-          showToast('Flow deleted', 'success');
-          loadFlows();
-        }
-      } catch (err) {
-        showToast('Delete failed', 'error');
-      }
-    }
-
-    // Modal
-    function closeModal(id) {
-      document.getElementById(id).classList.remove('active');
-    }
-
-    // Toast
-    function showToast(message, type = 'info') {
-      const existing = document.querySelector('.toast');
-      if (existing) existing.remove();
-      
-      const toast = document.createElement('div');
-      toast.className = `toast toast-${type}`;
-      toast.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <div style="font-size: 1.25rem;">
-            ${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}
-          </div>
-          <div style="flex: 1;">
-            <div style="font-weight: 600;">${type.charAt(0).toUpperCase() + type.slice(1)}</div>
-            <div style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem; white-space: pre-line;">${message}</div>
-          </div>
-        </div>
-      `;
-      
-      document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), 3000);
-    }
-
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-      if (viewMode === 'canvas') {
-        if (e.key === 'Delete' && selectedNode) {
-          deleteNode();
-        }
-        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-          e.preventDefault();
-          saveCurrentFlow();
-        }
-      }
-    });
-
-    // Prevent pull-to-refresh on mobile
-    document.body.addEventListener('touchmove', (e) => {
-      if (e.target === document.body) {
-        e.preventDefault();
-      }
-    }, { passive: false });
-  </script>
-</body>
-</html>
+      `
