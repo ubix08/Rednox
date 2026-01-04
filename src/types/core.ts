@@ -1,6 +1,6 @@
 
 // ===================================================================
-// RedNox - Pure Node-RED Compatible Types
+// RedNox - Pure Node-RED Compatible Types with UI Metadata
 // ===================================================================
 
 export interface NodeMessage {
@@ -94,19 +94,102 @@ export interface NodeContext {
   keys(): Promise<string[]>;
 }
 
+// ===================================================================
+// UI Metadata Types
+// ===================================================================
+
+export type PropertyFieldType = 
+  | 'text' 
+  | 'number' 
+  | 'select' 
+  | 'checkbox' 
+  | 'textarea' 
+  | 'code' 
+  | 'json'
+  | 'color'
+  | 'url'
+  | 'email';
+
+export interface NodePropertyField {
+  name: string;
+  label: string;
+  type: PropertyFieldType;
+  default?: any;
+  required?: boolean;
+  placeholder?: string;
+  description?: string;
+  
+  // For select type
+  options?: Array<{ value: string; label: string }> | string[];
+  
+  // For number type
+  min?: number;
+  max?: number;
+  step?: number;
+  
+  // For textarea/code type
+  rows?: number;
+  language?: string;
+  
+  // Validation
+  pattern?: string;
+  validate?: string; // Function body as string
+}
+
+export interface NodeUIMetadata {
+  icon: string;
+  color: string;
+  colorLight?: string;
+  paletteLabel?: string;
+  label?: string | ((node: NodeConfig) => string);
+  labelStyle?: string | ((node: NodeConfig) => string);
+  
+  properties?: NodePropertyField[];
+  
+  // Help documentation
+  info?: string;
+  
+  // Advanced options
+  align?: 'left' | 'right';
+  button?: {
+    enabled: boolean;
+    onclick?: string;
+  };
+}
+
 export interface RuntimeNodeDefinition {
   type: string;
   category: string;
-  color?: string;
   defaults: Record<string, any>;
   inputs: number;
   outputs: number;
-  icon?: string;
-  label?: string | ((this: Node) => string);
   
+  // Runtime execution
   execute: (msg: NodeMessage, node: Node, context: ExecutionContext) => Promise<NodeMessage | NodeMessage[] | NodeMessage[][] | null>;
   onInit?: (node: Node, context: ExecutionContext) => Promise<void>;
   onClose?: (node: Node, context: ExecutionContext) => Promise<void>;
+  
+  // UI Metadata
+  ui?: NodeUIMetadata;
+}
+
+// ===================================================================
+// API Response Types
+// ===================================================================
+
+export interface NodeDescriptor {
+  type: string;
+  category: string;
+  inputs: number;
+  outputs: number;
+  defaults: Record<string, any>;
+  ui: NodeUIMetadata;
+}
+
+export interface NodesDiscoveryResponse {
+  nodes: NodeDescriptor[];
+  count: number;
+  version: string;
 }
 
 // ===================================================================
@@ -143,9 +226,12 @@ export interface HttpRoute {
 export interface Env {
   DB: D1Database;
   FLOW_EXECUTOR: DurableObjectNamespace;
+  R2_BUCKET?: R2Bucket;
   OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   GEMINI_API_KEY?: string;
+  GOOGLE_SEARCH_API_KEY?: string;
+  GOOGLE_SEARCH_CX?: string;
 }
 
 export interface ValidationResult {
