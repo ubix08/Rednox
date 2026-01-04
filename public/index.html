@@ -188,7 +188,6 @@
       gap: 1rem;
     }
 
-    /* HORIZONTAL FLOW CARDS */
     .flow-card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -260,7 +259,6 @@
       border: 1px solid rgba(239, 68, 68, 0.3);
     }
 
-    /* INLINE SMOOTH ICON BUTTONS */
     .flow-actions {
       display: flex;
       gap: 0.5rem;
@@ -346,7 +344,6 @@
       touch-action: none;
     }
 
-    /* MAKE.COM STYLE NODES - SMOOTH CIRCLES */
     .drawflow .drawflow-node {
       background: transparent;
       border: none;
@@ -378,7 +375,6 @@
       transform: scale(1.08);
     }
 
-    /* SMOOTH CIRCLE NODE ICON */
     .drawflow .drawflow-node .node-icon-wrapper {
       width: 64px;
       height: 64px;
@@ -419,7 +415,6 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
 
-    /* Connection Points */
     .drawflow .drawflow-node .input,
     .drawflow .drawflow-node .output {
       width: 16px;
@@ -453,7 +448,6 @@
       transform: translateY(-50%);
     }
 
-    /* Multiple outputs positioning */
     .drawflow .drawflow-node .outputs {
       position: absolute;
       right: -8px;
@@ -471,7 +465,6 @@
       transform: none;
     }
 
-    /* Connections */
     .drawflow .connection .main-path {
       stroke: var(--primary);
       stroke-width: 3px;
@@ -493,7 +486,6 @@
       filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.8));
     }
 
-    /* Connection animation */
     .drawflow .connection .main-path {
       stroke-dasharray: 8, 8;
       animation: dash 25s linear infinite;
@@ -698,7 +690,7 @@
       top: 0;
       bottom: 0;
       width: 100%;
-      max-width: 380px;
+      max-width: 400px;
       background: var(--surface);
       border-left: 1px solid var(--border);
       box-shadow: -6px 0 30px var(--shadow);
@@ -773,6 +765,18 @@
       min-height: 140px;
       font-family: 'Courier New', monospace;
       font-size: 0.875rem;
+    }
+
+    .form-checkbox {
+      width: auto;
+      margin-right: 0.5rem;
+    }
+
+    .field-description {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      margin-top: 0.375rem;
+      line-height: 1.4;
     }
 
     /* Modal */
@@ -904,7 +908,7 @@
       background: var(--bg-lighter);
     }
 
-    /* Responsive - MOBILE FIRST */
+    /* Responsive */
     @media (max-width: 768px) {
       .properties-panel {
         top: 0;
@@ -1012,7 +1016,12 @@
       <h3 class="palette-title">Add Node</h3>
       <button class="close-btn" onclick="closeNodePalette()">×</button>
     </div>
-    <div class="palette-content" id="nodePaletteContent"></div>
+    <div class="palette-content" id="nodePaletteContent">
+      <div class="empty-state">
+        <div class="loading"></div>
+        <p style="margin-top: 1rem;">Loading nodes...</p>
+      </div>
+    </div>
   </div>
 
   <div class="properties-panel" id="propertiesPanel">
@@ -1057,31 +1066,412 @@
     const API_BASE = window.location.origin;
     let editor;
     let currentFlow = null;
-    let nodeIdCounter = 1;
     let flows = [];
+    let nodeDefinitions = {}; // Dynamically loaded node definitions
 
-    const nodeTemplates = {
-      'http-in': { icon: '🌐', name: 'HTTP In', category: 'Input', color: '#6366f1', colorLight: '#818cf8', desc: 'HTTP endpoint', inputs: 0, outputs: 1 },
-      'http-response': { icon: '📤', name: 'HTTP Response', category: 'Output', color: '#10b981', colorLight: '#059669', desc: 'Send response', inputs: 1, outputs: 0 },
-      'http-request': { icon: '🔗', name: 'HTTP Request', category: 'Function', color: '#f59e0b', colorLight: '#fb923c', desc: 'HTTP call', inputs: 1, outputs: 1 },
-      'function': { icon: '⚡', name: 'Function', category: 'Function', color: '#f59e0b', colorLight: '#fb923c', desc: 'JavaScript code', inputs: 1, outputs: 1 },
-      'inject': { icon: '💉', name: 'Inject', category: 'Input', color: '#6366f1', colorLight: '#818cf8', desc: 'Trigger', inputs: 0, outputs: 1 },
-      'debug': { icon: '🐛', name: 'Debug', category: 'Output', color: '#10b981', colorLight: '#059669', desc: 'Log output', inputs: 1, outputs: 0 },
-      'switch': { icon: '🔀', name: 'Switch', category: 'Function', color: '#f59e0b', colorLight: '#fb923c', desc: 'Route by rules', inputs: 1, outputs: 3 },
-      'change': { icon: '✏️', name: 'Change', category: 'Function', color: '#f59e0b', colorLight: '#fb923c', desc: 'Modify message', inputs: 1, outputs: 1 },
-      'template': { icon: '📝', name: 'Template', category: 'Function', color: '#f59e0b', colorLight: '#fb923c', desc: 'Templating', inputs: 1, outputs: 1 },
-      'json': { icon: '{ }', name: 'JSON', category: 'Parser', color: '#8b5cf6', colorLight: '#a78bfa', desc: 'Parse JSON', inputs: 1, outputs: 1 },
-      'delay': { icon: '⏱️', name: 'Delay', category: 'Function', color: '#f59e0b', colorLight: '#fb923c', desc: 'Delay flow', inputs: 1, outputs: 1 },
-      'split': { icon: '✂️', name: 'Split', category: 'Sequence', color: '#ec4899', colorLight: '#f472b6', desc: 'Split parts', inputs: 1, outputs: 1 },
-      'join': { icon: '🔗', name: 'Join', category: 'Sequence', color: '#ec4899', colorLight: '#f472b6', desc: 'Join parts', inputs: 1, outputs: 1 },
-      'context': { icon: '💾', name: 'Context', category: 'Storage', color: '#6366f1', colorLight: '#818cf8', desc: 'Storage', inputs: 1, outputs: 1 },
-      'catch': { icon: '⚠️', name: 'Catch', category: 'Input', color: '#ef4444', colorLight: '#f87171', desc: 'Error handler', inputs: 0, outputs: 1 }
-    };
+    // ===================================================================
+    // INITIALIZATION
+    // ===================================================================
 
-    document.addEventListener('DOMContentLoaded', () => {
-      loadFlows();
-      renderNodePalette();
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadNodeDefinitions();
+      await loadFlows();
     });
+
+    // ===================================================================
+    // DYNAMIC NODE DISCOVERY
+    // ===================================================================
+
+    async function loadNodeDefinitions() {
+      try {
+        const response = await fetch(`${API_BASE}/admin/nodes`);
+        const data = await response.json();
+        
+        if (data.nodes) {
+          // Convert array to object keyed by type
+          data.nodes.forEach(node => {
+            nodeDefinitions[node.type] = node;
+          });
+          
+          console.log(`[RedNox] Loaded ${data.nodes.length} node definitions`);
+          renderNodePalette();
+        }
+      } catch (err) {
+        console.error('Failed to load node definitions:', err);
+        showToast('Failed to load node definitions', 'error');
+      }
+    }
+
+    function renderNodePalette() {
+      const palette = document.getElementById('nodePaletteContent');
+      
+      if (Object.keys(nodeDefinitions).length === 0) {
+        palette.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">⚠️</div>
+            <p>No nodes available</p>
+          </div>
+        `;
+        return;
+      }
+      
+      // Group by category
+      const categories = {};
+      for (const [type, node] of Object.entries(nodeDefinitions)) {
+        if (!categories[node.category]) {
+          categories[node.category] = [];
+        }
+        categories[node.category].push({ type, ...node });
+      }
+
+      let html = '';
+      for (const [category, nodes] of Object.entries(categories)) {
+        html += `<div class="node-category">`;
+        html += `<div class="category-title">${category}</div>`;
+        html += `<div class="node-grid">`;
+        
+        for (const node of nodes) {
+          const icon = node.ui?.icon || '⚙️';
+          const color = node.ui?.color || '#dddddd';
+          const colorLight = node.ui?.colorLight || '#eeeeee';
+          const label = node.ui?.paletteLabel || node.type;
+          
+          html += `
+            <div class="node-item" 
+                 onclick="addNodeToCanvas('${node.type}')" 
+                 style="--item-color: ${color}; --item-color-light: ${colorLight}"
+                 title="${node.ui?.info ? node.ui.info.substring(0, 100) : ''}">
+              <div class="node-item-icon">${icon}</div>
+              <div class="node-item-name">${label}</div>
+            </div>
+          `;
+        }
+        
+        html += `</div></div>`;
+      }
+
+      palette.innerHTML = html;
+    }
+
+    // ===================================================================
+    // NODE OPERATIONS
+    // ===================================================================
+
+    function getNodeHTML(type, data) {
+      const definition = nodeDefinitions[type];
+      if (!definition) return '';
+
+      const icon = definition.ui?.icon || '⚙️';
+      const color = definition.ui?.color || '#dddddd';
+      const colorLight = definition.ui?.colorLight || '#eeeeee';
+      
+      // Get label
+      let label = data.name;
+      if (!label && definition.ui?.label) {
+        if (typeof definition.ui.label === 'string') {
+          label = definition.ui.label;
+        } else {
+          // Try to evaluate label function (simplified)
+          label = definition.ui.paletteLabel || type;
+        }
+      }
+      if (!label) {
+        label = definition.ui?.paletteLabel || type;
+      }
+
+      return `
+        <div class="node-content">
+          <div class="node-icon-wrapper" style="--node-color: ${color}; --node-color-light: ${colorLight}; background: linear-gradient(135deg, ${color}, ${colorLight})">
+            <div class="node-icon">${icon}</div>
+          </div>
+          <div class="node-name">${label}</div>
+        </div>
+      `;
+    }
+
+    function addNodeToCanvas(type) {
+      const definition = nodeDefinitions[type];
+      if (!definition) {
+        showToast('Node type not found', 'error');
+        return;
+      }
+
+      // Get default values from definition
+      const config = {};
+      if (definition.defaults) {
+        for (const [key, defaultDef] of Object.entries(definition.defaults)) {
+          config[key] = defaultDef.value;
+        }
+      }
+
+      const data = {
+        type,
+        name: '',
+        config
+      };
+
+      const html = getNodeHTML(type, data);
+
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+      const pos_x = centerX - 50 + (Math.random() * 100 - 50);
+      const pos_y = centerY - 50 + (Math.random() * 100 - 50);
+
+      const nodeId = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      editor.addNode(
+        nodeId, 
+        definition.inputs, 
+        definition.outputs, 
+        pos_x, 
+        pos_y, 
+        '', 
+        data, 
+        html,
+        false
+      );
+      
+      closeNodePalette();
+      showToast(`${definition.ui?.paletteLabel || type} added`, 'success');
+    }
+
+    // ===================================================================
+    // PROPERTY EDITOR - DYNAMIC RENDERING
+    // ===================================================================
+
+    function showNodeProperties(id) {
+      const panel = document.getElementById('propertiesPanel');
+      const content = document.getElementById('propertiesContent');
+      
+      const node = editor.getNodeFromId(id);
+      if (!node) return;
+
+      const definition = nodeDefinitions[node.data.type];
+      if (!definition) return;
+
+      panel.classList.add('active');
+      
+      let html = `
+        <div class="form-group">
+          <label class="form-label">Node Name</label>
+          <input type="text" 
+                 class="form-input" 
+                 id="nodeName" 
+                 value="${node.data.name || ''}" 
+                 onchange="updateNodeProperty('${id}', 'name', this.value)"
+                 placeholder="Optional display name">
+        </div>
+      `;
+
+      // Render properties from UI metadata
+      if (definition.ui?.properties) {
+        for (const prop of definition.ui.properties) {
+          html += renderPropertyField(prop, node.data.config, id);
+        }
+      }
+      
+      html += `
+        <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+          <button class="btn btn-danger" style="width: 100%; background: var(--danger); color: white;" onclick="deleteNode('${id}')">
+            🗑 Delete Node
+          </button>
+        </div>
+      `;
+
+      content.innerHTML = html;
+    }
+
+    function renderPropertyField(prop, config, nodeId) {
+      const value = config[prop.name] ?? prop.default ?? '';
+      let html = '<div class="form-group">';
+      html += `<label class="form-label">${prop.label}${prop.required ? ' *' : ''}</label>`;
+
+      switch (prop.type) {
+        case 'text':
+        case 'url':
+        case 'email':
+          html += `
+            <input type="${prop.type}" 
+                   class="form-input" 
+                   value="${escapeHtml(value)}" 
+                   placeholder="${prop.placeholder || ''}"
+                   ${prop.required ? 'required' : ''}
+                   ${prop.pattern ? `pattern="${prop.pattern}"` : ''}
+                   onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.value)">
+          `;
+          break;
+
+        case 'number':
+          html += `
+            <input type="number" 
+                   class="form-input" 
+                   value="${value}" 
+                   ${prop.min !== undefined ? `min="${prop.min}"` : ''}
+                   ${prop.max !== undefined ? `max="${prop.max}"` : ''}
+                   ${prop.step !== undefined ? `step="${prop.step}"` : ''}
+                   placeholder="${prop.placeholder || ''}"
+                   ${prop.required ? 'required' : ''}
+                   onchange="updateNodeConfig('${nodeId}', '${prop.name}', parseFloat(this.value))">
+          `;
+          break;
+
+        case 'checkbox':
+          html += `
+            <label style="display: flex; align-items: center; cursor: pointer;">
+              <input type="checkbox" 
+                     class="form-checkbox" 
+                     ${value ? 'checked' : ''}
+                     onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.checked)">
+              <span>${prop.description || 'Enable'}</span>
+            </label>
+          `;
+          break;
+
+        case 'select':
+          html += `<select class="form-select" onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.value)">`;
+          
+          const options = prop.options || [];
+          for (const opt of options) {
+            const optValue = typeof opt === 'string' ? opt : opt.value;
+            const optLabel = typeof opt === 'string' ? opt : opt.label;
+            html += `<option value="${escapeHtml(optValue)}" ${value === optValue ? 'selected' : ''}>${escapeHtml(optLabel)}</option>`;
+          }
+          
+          html += `</select>`;
+          break;
+
+        case 'textarea':
+          html += `
+            <textarea class="form-textarea" 
+                      ${prop.rows ? `rows="${prop.rows}"` : 'style="min-height: 100px"'}
+                      placeholder="${prop.placeholder || ''}"
+                      ${prop.required ? 'required' : ''}
+                      onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.value)">${escapeHtml(value)}</textarea>
+          `;
+          break;
+
+        case 'code':
+          html += `
+            <textarea class="form-textarea" 
+                      ${prop.rows ? `rows="${prop.rows}"` : 'style="min-height: 200px; font-family: \'Courier New\', monospace; font-size: 0.875rem;"'}
+                      placeholder="${prop.placeholder || ''}"
+                      ${prop.required ? 'required' : ''}
+                      onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.value)">${escapeHtml(value)}</textarea>
+          `;
+          break;
+
+        case 'json':
+          const jsonValue = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+          html += `
+            <textarea class="form-textarea" 
+                      style="min-height: 150px; font-family: 'Courier New', monospace; font-size: 0.875rem;"
+                      placeholder="${prop.placeholder || '{}'}"
+                      onchange="updateNodeConfigJSON('${nodeId}', '${prop.name}', this.value)">${escapeHtml(jsonValue)}</textarea>
+          `;
+          break;
+
+        case 'color':
+          html += `
+            <input type="color" 
+                   class="form-input" 
+                   value="${value || '#000000'}" 
+                   onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.value)">
+          `;
+          break;
+
+        default:
+          html += `
+            <input type="text" 
+                   class="form-input" 
+                   value="${escapeHtml(value)}" 
+                   onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.value)">
+          `;
+      }
+
+      if (prop.description && prop.type !== 'checkbox') {
+        html += `<div class="field-description">${prop.description}</div>`;
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    function updateNodeConfigJSON(id, key, value) {
+      try {
+        const parsed = JSON.parse(value);
+        updateNodeConfig(id, key, parsed);
+      } catch (err) {
+        showToast('Invalid JSON', 'error');
+      }
+    }
+
+    function escapeHtml(text) {
+      const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return String(text).replace(/[&<>"']/g, m => map[m]);
+    }
+
+    // ===================================================================
+    // NODE UPDATE FUNCTIONS
+    // ===================================================================
+
+    function updateNodeProperty(id, key, value) {
+      const node = editor.getNodeFromId(id);
+      if (!node) return;
+      
+      node.data[key] = value;
+      editor.updateNodeDataFromId(id, node.data);
+      updateNodeUI(id);
+    }
+
+    function updateNodeConfig(id, key, value) {
+      const node = editor.getNodeFromId(id);
+      if (!node) return;
+      
+      if (!node.data.config) node.data.config = {};
+      node.data.config[key] = value;
+      editor.updateNodeDataFromId(id, node.data);
+      updateNodeUI(id);
+    }
+
+    function updateNodeUI(id) {
+      const nodeInfo = editor.drawflow.drawflow.Home.data[id];
+      if (!nodeInfo) return;
+
+      const data = nodeInfo.data;
+      const type = data.type;
+      const html = getNodeHTML(type, data);
+
+      const nodeElement = document.getElementById(`node-${id}`);
+      if (nodeElement) {
+        const contentDiv = nodeElement.querySelector('.drawflow_content_node');
+        if (contentDiv) {
+          contentDiv.innerHTML = html;
+        }
+      }
+
+      editor.updateNodeDataFromId(id, data);
+    }
+
+    function deleteNode(id) {
+      if (!confirm('Delete this node?')) return;
+      editor.removeNodeId(id);
+      closeProperties();
+      showToast('Node deleted', 'success');
+    }
+
+    function closeProperties() {
+      document.getElementById('propertiesPanel').classList.remove('active');
+    }
+
+    // ===================================================================
+    // FLOW MANAGEMENT
+    // ===================================================================
 
     async function loadFlows() {
       try {
@@ -1212,264 +1602,23 @@
       });
     }
 
-    function renderNodePalette() {
-      const palette = document.getElementById('nodePaletteContent');
-      const categories = {};
-
-      for (const [type, template] of Object.entries(nodeTemplates)) {
-        if (!categories[template.category]) {
-          categories[template.category] = [];
-        }
-        categories[template.category].push({ type, ...template });
-      }
-
-      let html = '';
-      for (const [category, nodes] of Object.entries(categories)) {
-        html += `<div class="node-category">`;
-        html += `<div class="category-title">${category}</div>`;
-        html += `<div class="node-grid">`;
-        for (const node of nodes) {
-          html += `
-            <div class="node-item" onclick="addNodeToCanvas('${node.type}')" style="--item-color: ${node.color}; --item-color-light: ${node.colorLight}">
-              <div class="node-item-icon">${node.icon}</div>
-              <div class="node-item-name">${node.name}</div>
-            </div>
-          `;
-        }
-        html += `</div></div>`;
-      }
-
-      palette.innerHTML = html;
-    }
-
-    function showNodePalette() {
-      document.getElementById('nodePalette').classList.add('active');
-    }
-
-    function closeNodePalette() {
-      document.getElementById('nodePalette').classList.remove('active');
-    }
-
-    function getNodeHTML(type, data) {
-      const template = nodeTemplates[type];
-      if (!template) return '';
-
-      return `
-        <div class="node-content">
-          <div class="node-icon-wrapper" style="--node-color: ${template.color}; --node-color-light: ${template.colorLight}; background: linear-gradient(135deg, ${template.color}, ${template.colorLight})">
-            <div class="node-icon">${template.icon}</div>
-          </div>
-          <div class="node-name">${data.name || template.name}</div>
-        </div>
-      `;
-    }
-
-    function addNodeToCanvas(type) {
-      const template = nodeTemplates[type];
-      if (!template) return;
-
-      const data = {
-        type,
-        name: template.name,
-        config: getDefaultConfig(type)
-      };
-
-      const html = getNodeHTML(type, data);
-
-      const centerX = window.innerWidth / 2;
-      const centerY = window.innerHeight / 2;
-      const pos_x = centerX - 50 + (Math.random() * 100 - 50);
-      const pos_y = centerY - 50 + (Math.random() * 100 - 50);
-
-      const nodeId = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      editor.addNode(
-        nodeId, 
-        template.inputs, 
-        template.outputs, 
-        pos_x, 
-        pos_y, 
-        '', 
-        data, 
-        html,
-        false
-      );
-      
-      nodeIdCounter++;
-      closeNodePalette();
-      showToast(`${template.name} added`, 'success');
-    }
-
-    function getDefaultConfig(type) {
-      const configs = {
-        'http-in': { method: 'post', url: '/endpoint' },
-        'http-request': { method: 'GET', url: '', timeout: 30000 },
-        'function': { func: 'return msg;', outputs: 1 },
-        'delay': { timeout: 1000, timeoutUnits: 'milliseconds' },
-        'inject': { payload: '', payloadType: 'date' },
-        'template': { template: '', syntax: 'mustache' },
-        'switch': { property: 'payload', rules: [] },
-        'change': { rules: [] },
-        'context': { operation: 'get', scope: 'flow', key: '' }
-      };
-      return configs[type] || {};
-    }
-
-    function showNodeProperties(id) {
-      const panel = document.getElementById('propertiesPanel');
-      const content = document.getElementById('propertiesContent');
-      
-      const node = editor.getNodeFromId(id);
-      if (!node) return;
-
-      panel.classList.add('active');
-      
-      let html = `
-        <div class="form-group">
-          <label class="form-label">Node Name</label>
-          <input type="text" class="form-input" id="nodeName" value="${node.data.name || ''}" onchange="updateNodeProperty('${id}', 'name', this.value)">
-        </div>
-      `;
-
-      html += renderNodeFields(node.data.type, node.data.config || {}, id);
-      
-      html += `
-        <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
-          <button class="btn btn-danger" style="width: 100%; background: var(--danger); color: white;" onclick="deleteNode('${id}')">
-            🗑 Delete Node
-          </button>
-        </div>
-      `;
-
-      content.innerHTML = html;
-    }
-
-    function renderNodeFields(type, config, nodeId) {
-      switch (type) {
-        case 'http-in':
-          return `
-            <div class="form-group">
-              <label class="form-label">URL Path</label>
-              <input type="text" class="form-input" value="${config.url || ''}" onchange="updateNodeConfig('${nodeId}', 'url', this.value)">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Method</label>
-              <select class="form-select" onchange="updateNodeConfig('${nodeId}', 'method', this.value)">
-                <option value="get" ${config.method === 'get' ? 'selected' : ''}>GET</option>
-                <option value="post" ${config.method === 'post' ? 'selected' : ''}>POST</option>
-                <option value="put" ${config.method === 'put' ? 'selected' : ''}>PUT</option>
-                <option value="delete" ${config.method === 'delete' ? 'selected' : ''}>DELETE</option>
-              </select>
-            </div>
-          `;
-        case 'http-request':
-          return `
-            <div class="form-group">
-              <label class="form-label">URL</label>
-              <input type="text" class="form-input" value="${config.url || ''}" onchange="updateNodeConfig('${nodeId}', 'url', this.value)">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Method</label>
-              <select class="form-select" onchange="updateNodeConfig('${nodeId}', 'method', this.value)">
-                <option value="GET" ${config.method === 'GET' ? 'selected' : ''}>GET</option>
-                <option value="POST" ${config.method === 'POST' ? 'selected' : ''}>POST</option>
-                <option value="PUT" ${config.method === 'PUT' ? 'selected' : ''}>PUT</option>
-                <option value="DELETE" ${config.method === 'DELETE' ? 'selected' : ''}>DELETE</option>
-              </select>
-            </div>
-          `;
-        case 'function':
-          return `
-            <div class="form-group">
-              <label class="form-label">Function Code</label>
-              <textarea class="form-textarea" style="min-height: 200px;" onchange="updateNodeConfig('${nodeId}', 'func', this.value)">${config.func || 'return msg;'}</textarea>
-            </div>
-          `;
-        case 'delay':
-          return `
-            <div class="form-group">
-              <label class="form-label">Delay</label>
-              <input type="number" class="form-input" value="${config.timeout || 1000}" onchange="updateNodeConfig('${nodeId}', 'timeout', parseInt(this.value))">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Units</label>
-              <select class="form-select" onchange="updateNodeConfig('${nodeId}', 'timeoutUnits', this.value)">
-                <option value="milliseconds" ${config.timeoutUnits === 'milliseconds' ? 'selected' : ''}>Milliseconds</option>
-                <option value="seconds" ${config.timeoutUnits === 'seconds' ? 'selected' : ''}>Seconds</option>
-                <option value="minutes" ${config.timeoutUnits === 'minutes' ? 'selected' : ''}>Minutes</option>
-              </select>
-            </div>
-          `;
-        default:
-          return '<p style="color: var(--text-muted); text-align: center; padding: 1rem;">No additional properties</p>';
-      }
-    }
-
-    function closeProperties() {
-      document.getElementById('propertiesPanel').classList.remove('active');
-    }
-
-    function updateNodeProperty(id, key, value) {
-      const node = editor.getNodeFromId(id);
-      if (!node) return;
-      
-      node.data[key] = value;
-      editor.updateNodeDataFromId(id, node.data);
-      updateNodeUI(id);
-    }
-
-    function updateNodeConfig(id, key, value) {
-      const node = editor.getNodeFromId(id);
-      if (!node) return;
-      
-      if (!node.data.config) node.data.config = {};
-      node.data.config[key] = value;
-      editor.updateNodeDataFromId(id, node.data);
-    }
-
-    function updateNodeUI(id) {
-      const nodeInfo = editor.drawflow.drawflow.Home.data[id];
-      if (!nodeInfo) return;
-
-      const data = nodeInfo.data;
-      const type = data.type;
-      const html = getNodeHTML(type, data);
-
-      const nodeElement = document.getElementById(`node-${id}`);
-      if (nodeElement) {
-        const contentDiv = nodeElement.querySelector('.drawflow_content_node');
-        if (contentDiv) {
-          contentDiv.innerHTML = html;
-        }
-      }
-
-      editor.updateNodeDataFromId(id, data);
-    }
-
-    function deleteNode(id) {
-      if (!confirm('Delete this node?')) return;
-      editor.removeNodeId(id);
-      closeProperties();
-      showToast('Node deleted', 'success');
-    }
-
     function exportFlow() {
       const drawflowData = editor.export();
       const nodes = [];
 
       for (const [id, node] of Object.entries(drawflowData.drawflow.Home.data)) {
+        const definition = nodeDefinitions[node.data.type];
         const nodeData = {
           id: id,
           type: node.data.type,
-          name: node.data.name || nodeTemplates[node.data.type]?.name,
+          name: node.data.name || (definition?.ui?.paletteLabel || node.data.type),
           ...node.data.config,
           x: node.pos_x,
           y: node.pos_y,
           wires: []
         };
 
-        const template = nodeTemplates[node.data.type];
-        const outputCount = template ? template.outputs : 1;
+        const outputCount = definition ? definition.outputs : 1;
         const wires = Array(outputCount).fill(null).map(() => []);
 
         for (const [outputKey, output] of Object.entries(node.outputs || {})) {
@@ -1505,15 +1654,15 @@
       }
 
       config.nodes.forEach(node => {
-        const template = nodeTemplates[node.type];
-        if (!template) {
+        const definition = nodeDefinitions[node.type];
+        if (!definition) {
           console.warn(`Unknown node type: ${node.type}`);
           return;
         }
 
         const data = {
           type: node.type,
-          name: node.name || template.name,
+          name: node.name || (definition.ui?.paletteLabel || node.type),
           config: { ...node }
         };
 
@@ -1524,8 +1673,8 @@
 
         editor.addNode(
           node.id, 
-          template.inputs, 
-          template.outputs, 
+          definition.inputs, 
+          definition.outputs, 
           posX, 
           posY, 
           '', 
@@ -1595,6 +1744,10 @@
         showToast('Error saving flow', 'error');
       }
     }
+
+    // ===================================================================
+    // FLOW ACTIONS
+    // ===================================================================
 
     function showNewFlowModal() {
       document.getElementById('newFlowModal').classList.add('active');
@@ -1698,6 +1851,18 @@
       }
     }
 
+    // ===================================================================
+    // UI HELPERS
+    // ===================================================================
+
+    function showNodePalette() {
+      document.getElementById('nodePalette').classList.add('active');
+    }
+
+    function closeNodePalette() {
+      document.getElementById('nodePalette').classList.remove('active');
+    }
+
     function closeModal(id) {
       document.getElementById(id).classList.remove('active');
     }
@@ -1719,6 +1884,7 @@
       setTimeout(() => toast.remove(), 3000);
     }
 
+    // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's' && currentFlow) {
         e.preventDefault();
