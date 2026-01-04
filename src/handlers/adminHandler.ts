@@ -1,10 +1,10 @@
-
 // ===================================================================
-// adminHandler.ts - Flow Management (FIXED)
+// adminHandler.ts - Flow Management + Node Discovery
 // ===================================================================
 
 import { Env, FlowConfig, D1_SCHEMA_STATEMENTS } from '../types/core';
 import { jsonResponse, validateFlow } from '../utils';
+import { registry } from '../core/NodeRegistry';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,6 +21,51 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   }
   
   try {
+    // ===================================================================
+    // NODE DISCOVERY API
+    // ===================================================================
+    
+    if (path === '/admin/nodes' && request.method === 'GET') {
+      const discovery = registry.exportForUI();
+      return jsonResponse(discovery, corsHeaders);
+    }
+    
+    if (path === '/admin/nodes/categories' && request.method === 'GET') {
+      const byCategory = registry.getByCategory();
+      const categories = Array.from(byCategory.entries()).map(([name, nodes]) => ({
+        name,
+        count: nodes.length,
+        nodes: nodes.map(n => ({
+          type: n.type,
+          label: n.ui.paletteLabel,
+          icon: n.ui.icon
+        }))
+      }));
+      return jsonResponse({ categories, total: registry.list().length }, corsHeaders);
+    }
+    
+    if (path.match(/^\/admin\/nodes\/[^/]+$/) && request.method === 'GET') {
+      const nodeType = path.split('/').pop()!;
+      const definition = registry.get(nodeType);
+      
+      if (!definition) {
+        return jsonResponse({ error: 'Node type not found' }, corsHeaders, 404);
+      }
+      
+      return jsonResponse({
+        type: definition.type,
+        category: definition.category,
+        inputs: definition.inputs,
+        outputs: definition.outputs,
+        defaults: definition.defaults,
+        ui: definition.ui
+      }, corsHeaders);
+    }
+    
+    // ===================================================================
+    // DATABASE & FLOW MANAGEMENT
+    // ===================================================================
+    
     if (!env.DB) {
       return jsonResponse({ 
         error: 'Database not configured',
@@ -206,8 +251,6 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
   try {
     const requestData = await request.json();
     
-    // The frontend sends the full flow config in the request body
-    // Extract metadata and ensure proper structure
     const flowConfig: FlowConfig = {
       id: requestData.id || crypto.randomUUID(),
       name: requestData.name || 'Unnamed Flow',
@@ -216,7 +259,6 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
       nodes: requestData.nodes || []
     };
     
-    // Validate flow structure
     const validation = validateFlow(flowConfig);
     if (!validation.valid) {
       return jsonResponse({
@@ -226,10 +268,8 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
       }, corsHeaders, 400);
     }
     
-    // Extract HTTP triggers
     const httpTriggers = extractHttpTriggers(flowConfig, flowConfig.id);
     
-    // Store in database
     const statements = [
       env.DB.prepare(`
         INSERT INTO flows (id, name, description, config, enabled)
@@ -238,7 +278,7 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
         flowConfig.id,
         flowConfig.name,
         flowConfig.description || '',
-        JSON.stringify(flowConfig)  // Store the complete config
+        JSON.stringify(flowConfig)
       ),
       ...httpTriggers.map(trigger => 
         env.DB.prepare(`
@@ -283,16 +323,14 @@ async function updateFlow(env: Env, request: Request, flowId: string, origin: st
   try {
     const requestData = await request.json();
     
-    // Build flow config from request data
     const flowConfig: FlowConfig = {
-      id: flowId,  // Use the flowId from the URL
+      id: flowId,
       name: requestData.name || 'Unnamed Flow',
       description: requestData.description,
       version: requestData.version,
       nodes: requestData.nodes || []
     };
     
-    // Validate flow
     const validation = validateFlow(flowConfig);
     if (!validation.valid) {
       return jsonResponse({
@@ -302,10 +340,8 @@ async function updateFlow(env: Env, request: Request, flowId: string, origin: st
       }, corsHeaders, 400);
     }
     
-    // Extract HTTP triggers
     const httpTriggers = extractHttpTriggers(flowConfig, flowId);
     
-    // Use batch transaction
     const statements = [
       env.DB.prepare(`
         UPDATE flows 
@@ -468,7 +504,8 @@ async function getStats(env: Env): Promise<Response> {
     return jsonResponse({
       flows: flowCount?.count || 0,
       routes: routeCount?.count || 0,
-      logs: logCount?.count || 0
+      logs: logCount?.count || 0,
+      nodes: registry.list().length
     }, corsHeaders);
   } catch (err: any) {
     return jsonResponse({
@@ -496,7 +533,6 @@ function extractHttpTriggers(flowData: FlowConfig, flowId: string): Array<{
         nodePath = '/' + nodePath;
       }
       
-      // Path format: /{flow-id}{endpoint}
       const fullPath = `/${flowId}${nodePath}`;
       
       triggers.push({
