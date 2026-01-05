@@ -1,302 +1,909 @@
 
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="description" content="RedNox - Visual Flow Builder for Node-RED compatible workflows">
-  <meta name="theme-color" content="#6366f1">
-  <title>RedNox - Flow Builder</title>
-  
-  <!-- External Dependencies -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
-  
-  <!-- Application Styles -->
-  <link rel="stylesheet" href="styles/variables.css">
-  <link rel="stylesheet" href="styles/base.css">
-  <link rel="stylesheet" href="styles/components.css">
-  <link rel="stylesheet" href="styles/canvas.css">
-  <link rel="stylesheet" href="styles/mobile.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RedNox Admin - Flow Builder</title>
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.21/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/drawflow@0.0.59/dist/drawflow.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/drawflow@0.0.59/dist/drawflow.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app" id="app">
-    <!-- Header -->
-    <header class="header">
-      <div class="header-left">
-        <button class="back-btn" id="backBtn" aria-label="Back to flows">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-        </button>
-        <div class="logo">
-          <div class="logo-icon">R</div>
-          <span class="logo-text">RedNox</span>
+  <div id="app">
+    <!-- Toast Notifications -->
+    <transition-group name="toast">
+      <div 
+        v-for="toast in toasts" 
+        :key="toast.id" 
+        :class="['toast', toast.type]"
+      >
+        <span class="text-xl">{{ getToastIcon(toast.type) }}</span>
+        <div class="flex-1">
+          <div class="font-semibold text-sm">{{ toast.title }}</div>
+          <div v-if="toast.message" class="text-sm text-gray-600">{{ toast.message }}</div>
         </div>
-        <div class="flow-title" id="flowTitle"></div>
-      </div>
-      <div class="header-right" id="headerActions">
-        <button class="btn btn-primary" id="newFlowBtn">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          <span>New Flow</span>
+        <button @click="removeToast(toast.id)" class="text-gray-400 hover:text-gray-600">
+          <span>❌</span>
         </button>
       </div>
-    </header>
+    </transition-group>
 
-    <!-- Main Content -->
-    <main class="main">
-      <!-- Flows List View -->
-      <div class="flows-view active" id="flowsView">
-        <div class="flows-header">
-          <div class="search-box">
-            <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
-            <input type="text" class="search-input" id="flowSearch" placeholder="Search flows...">
-          </div>
-          <div class="flows-stats" id="flowsStats">
-            <span class="stat-item">
-              <span class="stat-value">0</span>
-              <span class="stat-label">Flows</span>
+    <!-- Mobile Menu Button -->
+    <button 
+      v-if="currentView === 'flows' && currentFlow" 
+      @click="mobileMenuOpen = !mobileMenuOpen"
+      class="md:hidden fixed top-4 left-4 z-50 btn btn-secondary btn-sm"
+    >
+      <span>{{ mobileMenuOpen ? '❌' : '☰' }}</span>
+    </button>
+
+    <!-- Mobile Overlay -->
+    <div 
+      v-if="mobileMenuOpen" 
+      @click="mobileMenuOpen = false"
+      class="mobile-overlay md:hidden"
+    ></div>
+
+    <!-- Context Menu -->
+    <div 
+      v-if="contextMenu.show" 
+      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+      class="context-menu"
+      @click="contextMenu.show = false"
+    >
+      <div class="context-menu-item" @click="pasteNode">
+        <span>📋</span>
+        Paste
+      </div>
+      <div class="context-menu-divider"></div>
+      <div class="context-menu-item" @click="clearCanvas">
+        <span>🗑️</span>
+        Clear All
+      </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="flex h-screen bg-gray-50">
+      <!-- Sidebar -->
+      <div 
+        v-if="currentView === 'dashboard' || currentView === 'flows' || currentView === 'routes'"
+        class="sidebar w-64 bg-white border-r border-gray-200 flex flex-col"
+        :class="{ 'open': mobileMenuOpen && !currentFlow }"
+      >
+        <!-- Header -->
+        <div class="p-6 border-b border-gray-200">
+          <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-400 bg-clip-text text-transparent">RedNox</h1>
+          <p class="text-sm text-gray-500 mt-1">Flow Builder v3.0</p>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="flex-1 p-4 custom-scroll overflow-y-auto">
+          <button 
+            @click="navigateTo('dashboard')" 
+            class="w-full flex items-center gap-3 p-3 rounded-lg mb-2 transition-colors"
+            :class="currentView === 'dashboard' ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'"
+          >
+            <span>📊</span>
+            <span class="font-medium">Dashboard</span>
+          </button>
+
+          <button 
+            @click="navigateTo('flows')" 
+            class="w-full flex items-center gap-3 p-3 rounded-lg mb-2 transition-colors"
+            :class="currentView === 'flows' ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'"
+          >
+            <span>🌐</span>
+            <span class="font-medium">Flows</span>
+            <span v-if="flows.length > 0" class="ml-auto badge badge-info">{{ flows.length }}</span>
+          </button>
+
+          <button 
+            @click="navigateTo('routes')" 
+            class="w-full flex items-center gap-3 p-3 rounded-lg mb-2 transition-colors"
+            :class="currentView === 'routes' ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'"
+          >
+            <span>⚡</span>
+            <span class="font-medium">Routes</span>
+            <span v-if="routes.length > 0" class="ml-auto badge badge-success">{{ routes.length }}</span>
+          </button>
+
+          <button 
+            @click="navigateTo('settings')" 
+            class="w-full flex items-center gap-3 p-3 rounded-lg transition-colors"
+            :class="currentView === 'settings' ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'"
+          >
+            <span>⚙️</span>
+            <span class="font-medium">Settings</span>
+          </button>
+        </nav>
+
+        <!-- Footer -->
+        <div class="p-4 border-t border-gray-200">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-gray-500">API Status</span>
+            <span :class="apiConnected ? 'badge-success' : 'badge-error'" class="badge">
+              {{ apiConnected ? 'Connected' : 'Disconnected' }}
             </span>
-            <span class="stat-item">
-              <span class="stat-value">0</span>
-              <span class="stat-label">Active</span>
-            </span>
-          </div>
-        </div>
-        <div class="flows-container" id="flowsContainer">
-          <div class="loading-state">
-            <div class="spinner"></div>
-            <p>Loading flows...</p>
           </div>
         </div>
       </div>
 
-      <!-- Canvas View -->
-      <div class="canvas-view" id="canvasView">
-        <div id="drawflow"></div>
-        
-        <!-- Canvas Toolbar -->
-        <div class="canvas-toolbar">
-          <button class="toolbar-btn toolbar-btn-primary" id="addNodeBtn" title="Add Node (N)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 5v14M5 12h14"/>
-            </svg>
-          </button>
-          <div class="toolbar-divider"></div>
-          <button class="toolbar-btn" id="zoomInBtn" title="Zoom In (+)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M11 8v6M8 11h6"/>
-            </svg>
-          </button>
-          <button class="toolbar-btn" id="zoomOutBtn" title="Zoom Out (-)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M8 11h6"/>
-            </svg>
-          </button>
-          <button class="toolbar-btn" id="zoomResetBtn" title="Reset View (0)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/>
-            </svg>
-          </button>
-          <div class="toolbar-divider"></div>
-          <button class="toolbar-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 7v6h6M21 17a9 9 0 00-9-9 9 9 0 00-9 9"/>
-            </svg>
-          </button>
-          <button class="toolbar-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 7v6h-6M3 17a9 9 0 019-9 9 9 0 019 9"/>
-            </svg>
-          </button>
-          <div class="toolbar-divider"></div>
-          <button class="toolbar-btn" id="validateBtn" title="Validate Flow (V)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-          </button>
-          <button class="toolbar-btn" id="helpBtn" title="Help (?)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>
-            </svg>
-          </button>
+      <!-- Main Content -->
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- Dashboard View -->
+        <div v-if="currentView === 'dashboard'" class="flex-1 overflow-y-auto p-4 md:p-8 custom-scroll">
+          <div class="max-w-7xl mx-auto">
+            <div class="mb-8">
+              <h2 class="text-3xl font-bold text-gray-900 mb-2">Dashboard</h2>
+              <p class="text-gray-600">Manage your flows and monitor system status</p>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
+              <div class="card hover:shadow-lg cursor-pointer" @click="navigateTo('flows')">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="text-sm text-gray-600 font-medium">Total Flows</div>
+                  <div class="p-2 bg-blue-50 rounded-lg">
+                    <span>🌐</span>
+                  </div>
+                </div>
+                <div class="text-3xl font-bold text-gray-900 mb-1">{{ stats.flows || 0 }}</div>
+                <div class="text-xs text-gray-500">Active: {{ flows.filter(f => f.enabled).length }}</div>
+              </div>
+
+              <div class="card hover:shadow-lg cursor-pointer" @click="navigateTo('routes')">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="text-sm text-gray-600 font-medium">Active Routes</div>
+                  <div class="p-2 bg-green-50 rounded-lg">
+                    <span>⚡</span>
+                  </div>
+                </div>
+                <div class="text-3xl font-bold text-gray-900 mb-1">{{ stats.routes || 0 }}</div>
+                <div class="text-xs text-gray-500">HTTP endpoints</div>
+              </div>
+
+              <div class="card hover:shadow-lg">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="text-sm text-gray-600 font-medium">Execution Logs</div>
+                  <div class="p-2 bg-purple-50 rounded-lg">
+                    <span>💾</span>
+                  </div>
+                </div>
+                <div class="text-3xl font-bold text-gray-900 mb-1">{{ stats.logs || 0 }}</div>
+                <div class="text-xs text-gray-500">Total executions</div>
+              </div>
+
+              <div class="card hover:shadow-lg">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="text-sm text-gray-600 font-medium">Node Types</div>
+                  <div class="p-2 bg-orange-50 rounded-lg">
+                    <span>📦</span>
+                  </div>
+                </div>
+                <div class="text-3xl font-bold text-gray-900 mb-1">{{ stats.nodes || 0 }}</div>
+                <div class="text-xs text-gray-500">Available nodes</div>
+              </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="card mb-8">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <button @click="showCreateFlowModal = true" class="btn btn-primary justify-center">
+                  <span>➕</span>
+                  Create New Flow
+                </button>
+                <button @click="initializeDatabase" class="btn btn-secondary justify-center" :disabled="loading">
+                  <span>💾</span>
+                  {{ loading ? 'Initializing...' : 'Initialize Database' }}
+                </button>
+                <button @click="refreshAll" class="btn btn-secondary justify-center">
+                  <span>🔄</span>
+                  Refresh Data
+                </button>
+              </div>
+            </div>
+
+            <!-- Recent Flows -->
+            <div class="card">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Recent Flows</h3>
+                <button @click="navigateTo('flows')" class="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                  View All →
+                </button>
+              </div>
+              
+              <div v-if="loading" class="text-center py-8">
+                <div class="spinner mx-auto mb-2"></div>
+                <p class="text-sm text-gray-500">Loading flows...</p>
+              </div>
+
+              <div v-else-if="flows.length === 0" class="empty-state">
+                <span class="empty-state-icon text-gray-400 text-5xl">🌐</span>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">No flows yet</h3>
+                <p class="text-gray-600 mb-4">Create your first flow to get started with automation</p>
+                <button @click="showCreateFlowModal = true" class="btn btn-primary">
+                  <span>➕</span>
+                  Create Your First Flow
+                </button>
+              </div>
+
+              <div v-else class="space-y-3">
+                <div 
+                  v-for="flow in flows.slice(0, 5)" 
+                  :key="flow.id"
+                  class="flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all cursor-pointer"
+                  @click="editFlow(flow)"
+                >
+                  <div class="flex items-center gap-3 flex-1 min-w-0">
+                    <div class="p-2 bg-gray-100 rounded-lg">
+                      <span class="text-gray-600">🌐</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <div class="font-medium text-gray-900 truncate">{{ flow.name }}</div>
+                      <div class="text-sm text-gray-500 truncate">{{ flow.description || 'No description' }}</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-3 flex-shrink-0">
+                    <span :class="flow.enabled ? 'badge-success' : 'badge-error'" class="badge">
+                      {{ flow.enabled ? 'Active' : 'Disabled' }}
+                    </span>
+                    <span class="text-gray-400">›</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Zoom Level Indicator -->
-        <div class="zoom-indicator" id="zoomIndicator">100%</div>
+        <!-- Flows List View -->
+        <div v-if="currentView === 'flows' && !currentFlow" class="flex-1 overflow-y-auto p-4 md:p-8 custom-scroll">
+          <div class="max-w-7xl mx-auto">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+              <div>
+                <h2 class="text-3xl font-bold text-gray-900 mb-2">Flows</h2>
+                <p class="text-gray-600">Manage and configure your automation flows</p>
+              </div>
+              <button @click="showCreateFlowModal = true" class="btn btn-primary w-full sm:w-auto justify-center">
+                <span>➕</span>
+                Create Flow
+              </button>
+            </div>
+
+            <!-- Search and Filter -->
+            <div class="card mb-6">
+              <div class="flex flex-col sm:flex-row gap-4">
+                <div class="flex-1">
+                  <div class="relative">
+                    <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</span>
+                    <input 
+                      v-model="flowSearch"
+                      type="text" 
+                      class="input pl-10" 
+                      placeholder="Search flows..."
+                    />
+                  </div>
+                </div>
+                <select v-model="flowFilter" class="select w-full sm:w-auto">
+                  <option value="all">All Flows</option>
+                  <option value="enabled">Active Only</option>
+                  <option value="disabled">Disabled Only</option>
+                </select>
+              </div>
+            </div>
+
+            <div v-if="loading" class="text-center py-12">
+              <div class="spinner mx-auto mb-2"></div>
+              <p class="text-sm text-gray-500">Loading flows...</p>
+            </div>
+
+            <div v-else-if="filteredFlows.length === 0" class="card">
+              <div class="empty-state">
+                <span class="empty-state-icon text-gray-400 text-5xl">🌐</span>
+                <h3 class="text-xl font-semibold text-gray-900 mb-2">
+                  {{ flowSearch ? 'No matching flows' : 'No flows yet' }}
+                </h3>
+                <p class="text-gray-600 mb-6">
+                  {{ flowSearch ? 'Try a different search term' : 'Create your first flow to start building automation' }}
+                </p>
+                <button v-if="!flowSearch" @click="showCreateFlowModal = true" class="btn btn-primary">
+                  <span>➕</span>
+                  Create Your First Flow
+                </button>
+              </div>
+            </div>
+
+            <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+              <div v-for="flow in filteredFlows" :key="flow.id" class="card hover:shadow-lg transition-all">
+                <div class="flex items-start justify-between mb-3">
+                  <div class="flex-1 min-w-0">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1 truncate">{{ flow.name }}</h3>
+                    <p class="text-sm text-gray-600 line-clamp-2">{{ flow.description || 'No description' }}</p>
+                  </div>
+                  <span :class="flow.enabled ? 'badge-success' : 'badge-error'" class="badge ml-2 flex-shrink-0">
+                    {{ flow.enabled ? 'Active' : 'Disabled' }}
+                  </span>
+                </div>
+
+                <div class="flex items-center gap-4 text-xs text-gray-500 mb-4">
+                  <div class="flex items-center gap-1">
+                    <span>⏰</span>
+                    <span>{{ formatDate(flow.updated_at) }}</span>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <span>📦</span>
+                    <span>{{ getFlowNodeCount(flow) }} nodes</span>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2">
+                  <button @click="editFlow(flow)" class="btn btn-sm btn-primary">
+                    <span>✏️</span>
+                    Edit
+                  </button>
+                  <button 
+                    @click="duplicateFlow(flow)"
+                    class="btn btn-sm btn-secondary"
+                  >
+                    <span>📋</span>
+                    Duplicate
+                  </button>
+                  <button 
+                    @click="toggleFlowStatus(flow)"
+                    class="btn btn-sm btn-secondary"
+                  >
+                    <span>{{ flow.enabled ? '🙈' : '👁️' }}</span>
+                    {{ flow.enabled ? 'Disable' : 'Enable' }}
+                  </button>
+                  <button @click="confirmDeleteFlow(flow)" class="btn btn-sm btn-danger ml-auto">
+                    <span>🗑️</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow Editor -->
+        <div v-if="currentView === 'flows' && currentFlow" class="flex-1 flex flex-col overflow-hidden">
+          <!-- Editor Toolbar -->
+          <div class="toolbar">
+            <div class="flex items-center gap-4 flex-1 min-w-0">
+              <button @click="closeEditor" class="btn btn-sm btn-secondary">
+                <span>←</span>
+                <span class="hidden sm:inline">Back</span>
+              </button>
+              <div class="flex-1 min-w-0">
+                <input 
+                  v-model="currentFlow.name" 
+                  class="text-lg font-semibold border-none outline-none bg-transparent w-full"
+                  placeholder="Flow Name"
+                />
+                <input 
+                  v-model="currentFlow.description" 
+                  class="text-sm text-gray-600 border-none outline-none bg-transparent w-full"
+                  placeholder="Add description..."
+                />
+              </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <button @click="saveFlow" class="btn btn-sm btn-success" :disabled="saving">
+                <span>💾</span>
+                {{ saving ? 'Saving...' : 'Save' }}
+              </button>
+              <button @click="exportFlow" class="btn btn-sm btn-secondary">
+                <span>⬇️</span>
+                <span class="hidden sm:inline">Export</span>
+              </button>
+              <button @click="showImportModal = true" class="btn btn-sm btn-secondary">
+                <span>⬆️</span>
+                <span class="hidden sm:inline">Import</span>
+              </button>
+              <button @click="validateCurrentFlow" class="btn btn-sm btn-secondary">
+                <span>✅</span>
+                <span class="hidden sm:inline">Validate</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex-1 flex overflow-hidden">
+            <!-- Node Palette -->
+            <div 
+              class="w-64 bg-white border-r border-gray-200 overflow-y-auto custom-scroll p-4"
+              :class="{ 'open': mobileMenuOpen }"
+            >
+              <div class="mb-4">
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</span>
+                  <input 
+                    v-model="nodePaletteSearch"
+                    type="text" 
+                    class="input pl-9 text-sm" 
+                    placeholder="Search nodes..."
+                  />
+                </div>
+              </div>
+
+              <div v-if="filteredNodeCategories.length === 0" class="text-center py-8 text-sm text-gray-500">
+                No nodes found
+              </div>
+
+              <div v-for="category in filteredNodeCategories" :key="category" class="mb-6">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase mb-3 tracking-wider">{{ category }}</h3>
+                <div 
+                  v-for="node in getNodesByCategory(category)"
+                  :key="node.type"
+                  @click="addNodeToCanvas(node)"
+                  class="node-palette-item"
+                  :style="`border-left: 3px solid ${node.ui.color}`"
+                  :title="node.ui.info ? node.ui.info.substring(0, 100) : ''"
+                >
+                  <span class="node-icon">{{ node.ui.icon }}</span>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium truncate">{{ node.ui.paletteLabel }}</div>
+                    <div class="text-xs text-gray-500">{{ node.inputs }}→{{ node.outputs }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Canvas -->
+            <div class="flex-1 relative">
+              <div id="drawflow" class="w-full h-full" @contextmenu.prevent="showContextMenu"></div>
+              
+              <!-- Zoom Controls -->
+              <div class="zoom-controls">
+                <button class="zoom-btn" @click="zoomIn" title="Zoom In">
+                  <span>➕</span>
+                </button>
+                <button class="zoom-btn" @click="zoomReset" title="Reset Zoom">
+                  <span class="text-xs font-semibold">{{ Math.round(editorZoom * 100) }}%</span>
+                </button>
+                <button class="zoom-btn" @click="zoomOut" title="Zoom Out">
+                  <span>➖</span>
+                </button>
+                <button class="zoom-btn" @click="fitToScreen" title="Fit to Screen">
+                  <span>🔎</span>
+                </button>
+              </div>
+
+              <!-- Canvas Info -->
+              <div class="absolute top-4 left-4 bg-white px-3 py-2 rounded-lg shadow-md text-xs text-gray-600">
+                <div class="flex items-center gap-4">
+                  <span>{{ Object.keys(editor.drawflow.drawflow.Home.data).length }} nodes</span>
+                  <span>{{ getConnectionCount() }} connections</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Properties Panel -->
+            <div 
+              v-if="selectedNode"
+              class="properties-panel w-80 bg-white border-l border-gray-200 overflow-y-auto custom-scroll"
+              :class="{ 'open': selectedNode }"
+            >
+              <div class="p-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-lg font-semibold text-gray-900">Node Properties</h3>
+                  <button @click="selectedNode = null" class="text-gray-400 hover:text-gray-600 md:hidden">
+                    <span>❌</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="p-4 space-y-4">
+                <!-- Common Properties -->
+                <div class="form-group">
+                  <label class="form-label">Node Type</label>
+                  <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                    <span class="text-lg">{{ getNodeIcon(selectedNode.type) }}</span>
+                    <span class="text-sm font-medium">{{ selectedNode.type }}</span>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Name</label>
+                  <input v-model="selectedNode.name" class="input" placeholder="Node name" />
+                  <p class="form-hint">Display name for this node</p>
+                </div>
+
+                <!-- Type-specific properties -->
+                <div v-if="selectedNode.type === 'http-in'">
+                  <div class="form-group">
+                    <label class="form-label">HTTP Method</label>
+                    <select v-model="selectedNode.method" class="select">
+                      <option value="get">GET</option>
+                      <option value="post">POST</option>
+                      <option value="put">PUT</option>
+                      <option value="delete">DELETE</option>
+                      <option value="patch">PATCH</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">URL Path</label>
+                    <input v-model="selectedNode.url" class="input" placeholder="/endpoint" />
+                    <p class="form-hint">Endpoint path (e.g., /webhook, /api/data)</p>
+                  </div>
+
+                  <div class="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <p class="text-xs font-medium text-blue-900 mb-1">Full URL:</p>
+                    <code class="text-xs text-blue-700 break-all">{{ apiBase }}/api/{{ currentFlow.id }}{{ selectedNode.url || '/endpoint' }}</code>
+                  </div>
+                </div>
+
+                <div v-else-if="selectedNode.type === 'function'">
+                  <div class="form-group">
+                    <label class="form-label">Function Code</label>
+                    <textarea 
+                      v-model="selectedNode.func" 
+                      class="code-editor" 
+                      rows="14"
+                      placeholder="// Your code here&#10;return msg;"
+                      spellcheck="false"
+                    ></textarea>
+                    <p class="form-hint">JavaScript code to transform the message</p>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Outputs</label>
+                    <input 
+                      v-model.number="selectedNode.outputs" 
+                      type="number" 
+                      class="input" 
+                      min="0" 
+                      max="10"
+                    />
+                    <p class="form-hint">Number of output ports (0-10)</p>
+                  </div>
+
+                  **Summary:**
+
+                      Setup Code (Optional)
+                    
+                    <div class="p-3 border-t border-gray-200">
+                      <textarea 
+                        v-model="selectedNode.initialize" 
+                        class="code-editor" 
+                        rows="6"
+                        placeholder="// Runs once when flow starts"
+                      ></textarea>
+                    </div>
+
+                  **Summary:**
+
+                      Close Code (Optional)
+                    
+                    <div class="p-3 border-t border-gray-200">
+                      <textarea 
+                        v-model="selectedNode.finalize" 
+                        class="code-editor" 
+                        rows="6"
+                        placeholder="// Runs when flow stops"
+                      ></textarea>
+                    </div>
+                </div>
+
+                <div v-else-if="selectedNode.type === 'switch'">
+                  <div class="form-group">
+                    <label class="form-label">Property to Test</label>
+                    <input v-model="selectedNode.property" class="input" placeholder="payload" />
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Rules</label>
+                    <div class="space-y-2">
+                      <div v-for="(rule, index) in selectedNode.rules" :key="index" class="flex gap-2">
+                        <select v-model="rule.t" class="select flex-1">
+                          <option value="eq">==</option>
+                          <option value="neq">!=</option>
+                          <option value="lt">&lt;</option>
+                          <option value="lte">&lt;=</option>
+                          <option value="gt">&gt;</option>
+                          <option value="gte">&gt;=</option>
+                          <option value="cont">contains</option>
+                          <option value="regex">matches regex</option>
+                          <option value="true">is true</option>
+                          <option value="false">is false</option>
+                          <option value="null">is null</option>
+                          <option value="nnull">is not null</option>
+                          <option value="empty">is empty</option>
+                          <option value="nempty">is not empty</option>
+                        </select>
+                        <input v-if="!['true','false','null','nnull','empty','nempty'].includes(rule.t)" v-model="rule.v" class="input flex-1" placeholder="value" />
+                        <button @click="removeRule(index)" class="btn btn-sm btn-danger">
+                          <span>❌</span>
+                        </button>
+                      </div>
+                      <button @click="addRule" class="btn btn-sm btn-secondary w-full">
+                        <span>➕</span>
+                        Add Rule
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else-if="selectedNode.type === 'change'">
+                  <div class="form-group">
+                    <label class="form-label">Rules</label>
+                    <div class="space-y-3">
+                      <div v-for="(rule, index) in selectedNode.rules" :key="index" class="p-3 border border-gray-200 rounded-lg">
+                        <div class="flex items-center justify-between mb-2">
+                          <select v-model="rule.t" class="select text-sm">
+                            <option value="set">Set</option>
+                            <option value="change">Change</option>
+                            <option value="delete">Delete</option>
+                            <option value="move">Move</option>
+                          </select>
+                          <button @click="removeChangeRule(index)" class="text-red-500 hover:text-red-700">
+                            <span>❌</span>
+                          </button>
+                        </div>
+                        <input v-model="rule.p" class="input text-sm mb-2" placeholder="Property (e.g., payload)" />
+                        <input v-if="rule.t !== 'delete'" v-model="rule.to" class="input text-sm" placeholder="Value" />
+                      </div>
+                      <button @click="addChangeRule" class="btn btn-sm btn-secondary w-full">
+                        <span>➕</span>
+                        Add Rule
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else-if="selectedNode.type === 'inject'">
+                  <div class="form-group">
+                    <label class="form-label">Payload Type</label>
+                    <select v-model="selectedNode.payloadType" class="select">
+                      <option value="date">Timestamp</option>
+                      <option value="str">String</option>
+                      <option value="num">Number</option>
+                      <option value="bool">Boolean</option>
+                      <option value="json">JSON</option>
+                    </select>
+                  </div>
+
+                  <div v-if="selectedNode.payloadType !== 'date'" class="form-group">
+                    <label class="form-label">Payload Value</label>
+                    <textarea v-model="selectedNode.payload" class="textarea" rows="3" placeholder="Value to inject"></textarea>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Repeat (seconds)</label>
+                    <input v-model.number="selectedNode.repeat" type="number" class="input" min="0" placeholder="0 = manual only" />
+                    <p class="form-hint">Interval in seconds (0 for manual trigger only)</p>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input v-model="selectedNode.once" type="checkbox" class="rounded" />
+                      <span class="form-label mb-0">Inject once at start</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div v-else-if="selectedNode.type === 'delay'">
+                  <div class="form-group">
+                    <label class="form-label">Action</label>
+                    <select v-model="selectedNode.pauseType" class="select">
+                      <option value="delay">Fixed Delay</option>
+                      <option value="random">Random Delay</option>
+                      <option value="rate">Rate Limit</option>
+                    </select>
+                  </div>
+
+                  <div v-if="selectedNode.pauseType === 'delay'" class="form-group">
+                    <label class="form-label">Delay Duration</label>
+                    <div class="flex gap-2">
+                      <input v-model.number="selectedNode.timeout" type="number" class="input" min="0" />
+                      <select v-model="selectedNode.timeoutUnits" class="select">
+                        <option value="milliseconds">ms</option>
+                        <option value="seconds">seconds</option>
+                        <option value="minutes">minutes</option>
+                        <option value="hours">hours</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else-if="selectedNode.type === 'template'">
+                  <div class="form-group">
+                    <label class="form-label">Template</label>
+                    <textarea v-model="selectedNode.template" class="textarea" rows="8" placeholder="Use {{property}} for substitution"></textarea>
+                    <p class="form-hint">Use Mustache syntax: {{'{{'}}payload.name{{'}}'}}</p>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Output Format</label>
+                    <select v-model="selectedNode.output" class="select">
+                      <option value="str">Plain text</option>
+                      <option value="json">Parsed JSON</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div v-else-if="selectedNode.type === 'json'">
+                  <div class="form-group">
+                    <label class="form-label">Action</label>
+                    <select v-model="selectedNode.action" class="select">
+                      <option value="">Auto-detect</option>
+                      <option value="obj">Always convert to Object</option>
+                      <option value="str">Always convert to String</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input v-model="selectedNode.pretty" type="checkbox" class="rounded" />
+                      <span class="form-label mb-0">Pretty print JSON</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div v-else-if="selectedNode.type === 'debug'">
+                  <div class="form-group">
+                    <label class="form-label">Output</label>
+                    <select v-model="selectedNode.complete" class="select">
+                      <option value="payload">msg.payload</option>
+                      <option value="true">Complete msg object</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input v-model="selectedNode.active" type="checkbox" class="rounded" />
+                      <span class="form-label mb-0">Enabled</span>
+                    </label>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input v-model="selectedNode.console" type="checkbox" class="rounded" />
+                      <span class="form-label mb-0">Output to console</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div v-else-if="selectedNode.type === 'context'">
+                  <div class="form-group">
+                    <label class="form-label">Action</label>
+                    <select v-model="selectedNode.action" class="select">
+                      <option value="get">Get value</option>
+                      <option value="set">Set value</option>
+                      <option value="delete">Delete</option>
+                      <option value="keys">List keys</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Storage Scope</label>
+                    <select v-model="selectedNode.storage" class="select">
+                      <option value="flow">Flow context</option>
+                      <option value="global">Global context</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Key</label>
+                    <input v-model="selectedNode.property" class="input" placeholder="storage-key" />
+                  </div>
+
+                  <div v-if="selectedNode.action === 'set'" class="form-group">
+                    <label class="form-label">Value</label>
+                    <textarea v-model="selectedNode.value" class="textarea" rows="3" placeholder="Value to store"></textarea>
+                  </div>
+                </div>
+
+                <!-- Delete Node Button -->
+                <div class="pt-4 border-t border-gray-200">
+                  <button @click="deleteSelectedNode" class="btn btn-danger w-full justify-center">
+                    <span>🗑️</span>
+                    Delete Node
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Routes View -->
+        <div v-if="currentView === 'routes'" class="flex-1 overflow-y-auto p-4 md:p-8 custom-scroll">
+          <div class="max-w-7xl mx-auto">
+            <h2 class="text-3xl font-bold text-gray-900 mb-2">Routes</h2>
+            <p class="text-gray-600 mb-6">Active HTTP endpoints</p>
+
+            <div v-if="loading" class="text-center py-12">
+              <div class="spinner mx-auto mb-2"></div>
+              <p class="text-sm text-gray-500">Loading routes...</p>
+            </div>
+
+            <div v-else-if="routes.length === 0" class="card empty-state">
+              <span class="empty-state-icon text-gray-400 text-5xl">⚡</span>
+              <h3 class="text-xl font-semibold text-gray-900 mb-2">No routes yet</h3>
+              <p class="text-gray-600 mb-6">Create flows with HTTP In nodes to add routes</p>
+            </div>
+
+            <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div v-for="route in routes" :key="route.id" class="card">
+                <div class="flex items-center gap-3 mb-4">
+                  <span class="badge" :class="route.method === 'GET' ? 'badge-info' : 'badge-success'">{{ route.method }}</span>
+                  <code class="flex-1 truncate text-sm font-mono">{{ route.path }}</code>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">Flow: {{ route.flow_name }}</p>
+                <div class="p-3 bg-gray-50 rounded-lg">
+                  <p class="text-xs font-medium text-gray-700 mb-1">Full URL:</p>
+                  <code class="text-xs text-gray-900 break-all">{{ route.fullUrl }}</code>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings View -->
+        <div v-if="currentView === 'settings'" class="flex-1 overflow-y-auto p-4 md:p-8 custom-scroll">
+          <div class="max-w-7xl mx-auto">
+            <h2 class="text-3xl font-bold text-gray-900 mb-2">Settings</h2>
+            <p class="text-gray-600 mb-6">Configure system settings</p>
+            <div class="card">
+              <div class="form-group">
+                <label class="form-label">API Base URL</label>
+                <input v-model="apiBase" class="input" disabled />
+                <p class="form-hint">The base URL for API endpoints</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Create Flow Modal -->
+        <div v-if="showCreateFlowModal" class="modal-overlay" @click="showCreateFlowModal = false">
+          <div class="modal" @click.stop>
+            <h3 class="text-xl font-bold mb-4">Create New Flow</h3>
+            <div class="form-group">
+              <label class="form-label">Name</label>
+              <input v-model="newFlowName" class="input" placeholder="Flow Name" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <textarea v-model="newFlowDesc" class="textarea" placeholder="Flow Description"></textarea>
+            </div>
+            <div class="flex gap-2 justify-end">
+              <button @click="showCreateFlowModal = false" class="btn btn-secondary">Cancel</button>
+              <button @click="createFlow" class="btn btn-primary" :disabled="!newFlowName">Create</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Import Modal -->
+        <div v-if="showImportModal" class="modal-overlay" @click="showImportModal = false">
+          <div class="modal" @click.stop>
+            <h3 class="text-xl font-bold mb-4">Import Flow</h3>
+            <div class="form-group">
+              <label class="form-label">Select JSON File</label>
+              <input type="file" @change="handleImportFile" accept=".json" class="input" />
+            </div>
+            <div class="flex gap-2 justify-end">
+              <button @click="showImportModal = false" class="btn btn-secondary">Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Confirm Delete Modal -->
+        <div v-if="showConfirmDelete" class="modal-overlay" @click="showConfirmDelete = false">
+          <div class="modal" @click.stop>
+            <h3 class="text-xl font-bold mb-4">Confirm Deletion</h3>
+            <p class="text-gray-600 mb-6">Are you sure you want to delete the flow "{{ confirmFlow.name }}"?</p>
+            <div class="flex gap-2 justify-end">
+              <button @click="showConfirmDelete = false" class="btn btn-secondary">Cancel</button>
+              <button @click="deleteFlow(confirmFlow)" class="btn btn-danger">Delete</button>
+            </div>
+          </div>
+        </div>
       </div>
-    </main>
+    </div>
   </div>
-
-  <!-- Node Palette -->
-  <div class="node-palette" id="nodePalette">
-    <div class="palette-handle"></div>
-    <div class="palette-header">
-      <h3 class="palette-title">Add Node</h3>
-      <div class="palette-search">
-        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
-        <input type="text" class="search-input" id="nodeSearch" placeholder="Search nodes...">
-      </div>
-      <button class="close-btn" id="closePaletteBtn" aria-label="Close">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 6L6 18M6 6l12 12"/>
-        </svg>
-      </button>
-    </div>
-    <div class="palette-content" id="nodePaletteContent">
-      <div class="loading-state">
-        <div class="spinner"></div>
-        <p>Loading nodes...</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Properties Panel -->
-  <div class="properties-panel" id="propertiesPanel">
-    <div class="properties-header">
-      <h3 class="properties-title">Properties</h3>
-      <button class="close-btn" id="closePropertiesBtn" aria-label="Close">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 6L6 18M6 6l12 12"/>
-        </svg>
-      </button>
-    </div>
-    <div class="properties-content" id="propertiesContent">
-      <div class="empty-state">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>
-        </svg>
-        <p>Select a node to edit properties</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modals -->
-  <div class="modal" id="newFlowModal">
-    <div class="modal-overlay"></div>
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3 class="modal-title">Create New Flow</h3>
-        <button class="close-btn" id="closeNewFlowModal" aria-label="Close">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 6L6 18M6 6l12 12"/>
-          </svg>
-        </button>
-      </div>
-      <form id="newFlowForm" class="modal-form">
-        <div class="form-group">
-          <label class="form-label" for="newFlowId">Flow ID *</label>
-          <input type="text" class="form-input" id="newFlowId" placeholder="my-flow" pattern="[a-z0-9-]+" required>
-          <div class="field-description">Lowercase letters, numbers, and hyphens only</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="newFlowName">Flow Name *</label>
-          <input type="text" class="form-input" id="newFlowName" placeholder="My Flow" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="newFlowDesc">Description</label>
-          <textarea class="form-textarea" id="newFlowDesc" placeholder="What does this flow do?" rows="3"></textarea>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" id="cancelNewFlowBtn">Cancel</button>
-          <button type="submit" class="btn btn-primary">Create Flow</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Help Modal -->
-  <div class="modal" id="helpModal">
-    <div class="modal-overlay"></div>
-    <div class="modal-content modal-large">
-      <div class="modal-header">
-        <h3 class="modal-title">Keyboard Shortcuts</h3>
-        <button class="close-btn" id="closeHelpModal" aria-label="Close">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 6L6 18M6 6l12 12"/>
-          </svg>
-        </button>
-      </div>
-      <div class="shortcuts-grid">
-        <div class="shortcut-item">
-          <kbd>N</kbd>
-          <span>Add Node</span>
-        </div>
-        <div class="shortcut-item">
-          <kbd>Ctrl</kbd> + <kbd>S</kbd>
-          <span>Save Flow</span>
-        </div>
-        <div class="shortcut-item">
-          <kbd>Ctrl</kbd> + <kbd>Z</kbd>
-          <span>Undo</span>
-        </div>
-        <div class="shortcut-item">
-          <kbd>Ctrl</kbd> + <kbd>Y</kbd>
-          <span>Redo</span>
-        </div>
-        <div class="shortcut-item">
-          <kbd>Delete</kbd>
-          <span>Delete Node</span>
-        </div>
-        <div class="shortcut-item">
-          <kbd>+</kbd>
-          <span>Zoom In</span>
-        </div>
-        <div class="shortcut-item">
-          <kbd>-</kbd>
-          <span>Zoom Out</span>
-        </div>
-        <div class="shortcut-item">
-          <kbd>0</kbd>
-          <span>Reset Zoom</span>
-        </div>
-        <div class="shortcut-item">
-          <kbd>V</kbd>
-          <span>Validate Flow</span>
-        </div>
-        <div class="shortcut-item">
-          <kbd>?</kbd>
-          <span>Show Help</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Validation Panel -->
-  <div class="validation-panel" id="validationPanel">
-    <div class="validation-header">
-      <h4>Flow Validation</h4>
-      <button class="close-btn" id="closeValidationBtn" aria-label="Close">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 6L6 18M6 6l12 12"/>
-        </svg>
-      </button>
-    </div>
-    <div class="validation-content" id="validationContent"></div>
-  </div>
-
-  <!-- Toast Container -->
-  <div class="toast-container" id="toastContainer"></div>
-
-  <!-- External Dependencies -->
-  <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
-  
-  <!-- Application Scripts -->
-  <script src="js/config.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/state.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/nodes.js"></script>
-  <script src="js/canvas.js"></script>
-  <script src="js/flows.js"></script>
-  <script src="js/validation.js"></script>
-  <script src="js/shortcuts.js"></script>
-  <script src="js/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
