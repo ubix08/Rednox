@@ -9,11 +9,12 @@ const API_BASE = window.location.origin;
 const state = {
     flows: [],
     routes: [],
-    nodes: [],
+    nodeDefinitions: new Map(),
     categories: [],
     currentFlow: null,
     editor: null,
-    selectedNode: null
+    selectedNodeId: null,
+    zoom: 1
 };
 
 // ===================================================================
@@ -33,8 +34,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initializeDatabase();
     
     // Load initial data
-    await loadFlows();
     await loadNodes();
+    await loadFlows();
     
     // Setup Drawflow
     setupDrawflow();
@@ -84,24 +85,60 @@ function setupEventListeners() {
         showToast('Data refreshed', 'success');
     });
     
-    // Editor close button
+    // Editor controls
     document.getElementById('closeEditorBtn').addEventListener('click', () => {
         closeFlowEditor();
     });
     
-    // Save flow button
     document.getElementById('saveFlowBtn').addEventListener('click', async () => {
         await saveCurrentFlow();
     });
     
-    // Validate button
     document.getElementById('validateBtn').addEventListener('click', () => {
         validateCurrentFlow();
+    });
+    
+    document.getElementById('clearFlowBtn').addEventListener('click', () => {
+        if (confirm('Clear all nodes from canvas?')) {
+            state.editor.clear();
+            showToast('Canvas cleared', 'info');
+        }
+    });
+    
+    // Zoom controls
+    document.getElementById('zoomInBtn').addEventListener('click', () => {
+        state.zoom = Math.min(state.zoom + 0.1, 2);
+        state.editor.zoom_in();
+    });
+    
+    document.getElementById('zoomOutBtn').addEventListener('click', () => {
+        state.zoom = Math.max(state.zoom - 0.1, 0.5);
+        state.editor.zoom_out();
+    });
+    
+    document.getElementById('zoomResetBtn').addEventListener('click', () => {
+        state.zoom = 1;
+        state.editor.zoom_reset();
+    });
+    
+    // Properties panel close
+    document.getElementById('closePropsBtn').addEventListener('click', () => {
+        document.getElementById('propertiesPanel').classList.remove('visible');
     });
     
     // Confirm modal
     document.getElementById('confirmCancelBtn').addEventListener('click', () => {
         closeConfirmModal();
+    });
+    
+    // Palette search
+    document.getElementById('paletteSearch').addEventListener('input', (e) => {
+        filterPaletteNodes(e.target.value);
+    });
+    
+    // Node search
+    document.getElementById('nodeSearchInput')?.addEventListener('input', (e) => {
+        filterNodeCategories(e.target.value);
     });
 }
 
@@ -111,11 +148,9 @@ function setupEventListeners() {
 
 async function initializeDatabase() {
     try {
-        // Check if database is initialized by trying to fetch flows
         const response = await fetch(`${API_BASE}/admin/flows`);
         
         if (!response.ok) {
-            // Database might not be initialized, try to initialize
             console.log('Database not initialized, attempting initialization...');
             
             const initResponse = await fetch(`${API_BASE}/admin/init`, {
@@ -168,10 +203,21 @@ async function loadRoutes() {
 
 async function loadNodes() {
     try {
-        const response = await fetch(`${API_BASE}/admin/nodes/categories`);
-        const data = await response.json();
+        // Load full node definitions
+        const nodeResponse = await fetch(`${API_BASE}/admin/nodes`);
+        const nodeData = await nodeResponse.json();
         
-        state.categories = data.categories || [];
+        if (nodeData.nodes) {
+            nodeData.nodes.forEach(node => {
+                state.nodeDefinitions.set(node.type, node);
+            });
+        }
+        
+        // Load categories
+        const categoryResponse = await fetch(`${API_BASE}/admin/nodes/categories`);
+        const categoryData = await categoryResponse.json();
+        
+        state.categories = categoryData.categories || [];
         renderNodes();
         renderNodePalette();
     } catch (error) {
@@ -245,7 +291,7 @@ function renderNodes() {
     }
     
     container.innerHTML = state.categories.map(category => `
-        <div class="node-category">
+        <div class="node-category" data-category="${escapeHtml(category.name)}">
             <div class="node-category-title">
                 ${escapeHtml(category.name)}
                 <span class="node-count">${category.count}</span>
@@ -266,10 +312,13 @@ function renderNodePalette() {
     const palette = document.getElementById('paletteNodes');
     
     palette.innerHTML = state.categories.map(category => `
-        <div class="palette-category">
+        <div class="palette-category" data-category="${escapeHtml(category.name)}">
             <div class="palette-category-title">${escapeHtml(category.name)}</div>
             ${category.nodes.map(node => `
-                <div class="palette-node" draggable="true" data-node-type="${node.type}">
+                <div class="palette-node" 
+                     draggable="true" 
+                     data-node-type="${node.type}"
+                     data-node-label="${escapeHtml(node.label)}">
                     ${node.icon || '📦'} ${escapeHtml(node.label)}
                 </div>
             `).join('')}
@@ -293,30 +342,74 @@ function updateStats() {
 }
 
 // ===================================================================
-// Flow Editor
+// Flow Editor - Drawflow Setup
 // ===================================================================
 
 function setupDrawflow() {
     const container = document.getElementById('drawflow');
     state.editor = new Drawflow(container);
     state.editor.reroute = true;
+    state.editor.reroute_fix_curvature = true;
+    state.editor.force_first_input = false;
     state.editor.start();
     
     // Editor events
+    state.editor.on('nodeCreated', (nodeId) => {
+        console.log('Node created:', nodeId);
+    });
+    
     state.editor.on('nodeSelected', (nodeId) => {
-        state.selectedNode = nodeId;
+        state.selectedNodeId = nodeId;
         showNodeProperties(nodeId);
+        document.getElementById('propertiesPanel').classList.add('visible');
     });
     
     state.editor.on('nodeUnselected', () => {
-        state.selectedNode = null;
+        state.selectedNodeId = null;
         clearNodeProperties();
     });
+    
+    state.editor.on('nodeRemoved', (nodeId) => {
+        if (state.selectedNodeId === nodeId) {
+            state.selectedNodeId = null;
+            clearNodeProperties();
+        }
+    });
+    
+    state.editor.on('connectionCreated', (connection) => {
+        console.log('Connection created:', connection);
+    });
+    
+    state.editor.on('connectionRemoved', (connection) => {
+        console.log('Connection removed:', connection);
+    });
+    
+    // Setup drop zone for nodes
+    const dropZone = container;
+    
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    });
+    
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        handleDrop(e);
+    });
 }
+
+// ===================================================================
+// Flow Editor - Open/Close
+// ===================================================================
 
 async function openFlowEditor(flowId) {
     const modal = document.getElementById('editorModal');
     modal.classList.add('active');
+    
+    // Clear editor first
+    state.editor.clear();
+    state.editor.zoom_reset();
+    state.zoom = 1;
+    clearNodeProperties();
     
     if (flowId) {
         // Load existing flow
@@ -326,6 +419,7 @@ async function openFlowEditor(flowId) {
             
             state.currentFlow = flow;
             document.getElementById('flowName').value = flow.name;
+            document.getElementById('flowDescription').value = flow.description || '';
             
             // Load flow into editor
             if (flow.config && flow.config.nodes) {
@@ -340,10 +434,11 @@ async function openFlowEditor(flowId) {
         state.currentFlow = {
             id: generateId(),
             name: 'New Flow',
+            description: '',
             nodes: []
         };
         document.getElementById('flowName').value = state.currentFlow.name;
-        state.editor.clear();
+        document.getElementById('flowDescription').value = '';
     }
 }
 
@@ -352,64 +447,152 @@ function closeFlowEditor() {
     modal.classList.remove('active');
     state.currentFlow = null;
     state.editor.clear();
+    clearNodeProperties();
 }
 
+// ===================================================================
+// Flow Editor - Loading Flows
+// ===================================================================
+
 function loadFlowIntoEditor(config) {
-    state.editor.clear();
-    
     if (!config.nodes || config.nodes.length === 0) {
         return;
     }
     
-    // Add nodes to editor
+    // Create a map to store old ID to new ID mapping
+    const idMap = new Map();
+    
+    // First pass: Add all nodes
     config.nodes.forEach(node => {
-        const html = createNodeHTML(node);
-        const inputs = node.inputs || 1;
-        const outputs = node.outputs || 1;
+        const nodeDefinition = state.nodeDefinitions.get(node.type);
+        if (!nodeDefinition) {
+            console.warn(`Node type not found: ${node.type}`);
+            return;
+        }
+        
+        const html = createNodeHTML(node, nodeDefinition);
+        const inputCount = nodeDefinition.inputs || 1;
+        const outputCount = nodeDefinition.outputs || 1;
         const x = node.x || 100;
         const y = node.y || 100;
         
-        state.editor.addNode(
+        // Add node to editor
+        const newNodeId = state.editor.addNode(
             node.type,
-            inputs,
-            outputs,
+            inputCount,
+            outputCount,
             x,
             y,
             node.type,
             node,
             html
         );
+        
+        // Map old ID to new ID
+        idMap.set(node.id, newNodeId);
     });
+    
+    // Second pass: Add connections if available
+    if (config.connections) {
+        config.connections.forEach(conn => {
+            const outputNodeId = idMap.get(conn.source.node);
+            const inputNodeId = idMap.get(conn.target.node);
+            
+            if (outputNodeId && inputNodeId) {
+                try {
+                    state.editor.addConnection(
+                        outputNodeId,
+                        inputNodeId,
+                        `output_${conn.source.port || 1}`,
+                        `input_${conn.target.port || 1}`
+                    );
+                } catch (error) {
+                    console.warn('Could not create connection:', error);
+                }
+            }
+        });
+    }
 }
 
-function createNodeHTML(node) {
+function createNodeHTML(nodeData, nodeDefinition) {
+    const ui = nodeDefinition.ui || {};
+    const icon = ui.icon || '📦';
+    const label = ui.paletteLabel || nodeData.type;
+    const color = ui.color || '#0066cc';
+    
     return `
-        <div class="node-content">
-            <div class="node-header">${escapeHtml(node.type)}</div>
+        <div class="node-content" style="border-left: 4px solid ${color}">
+            <div class="node-header">
+                ${icon} ${escapeHtml(label)}
+            </div>
             <div class="node-body">
-                ${node.name ? `<div>${escapeHtml(node.name)}</div>` : ''}
+                ${nodeData.name ? `<div style="font-weight: 500">${escapeHtml(nodeData.name)}</div>` : ''}
+                ${nodeData.url ? `<div style="font-size: 0.7rem; color: #666">${escapeHtml(nodeData.url)}</div>` : ''}
+                ${nodeData.method ? `<div style="font-size: 0.7rem; color: #666">${escapeHtml(nodeData.method)}</div>` : ''}
             </div>
         </div>
     `;
 }
 
+// ===================================================================
+// Flow Editor - Saving Flows
+// ===================================================================
+
 async function saveCurrentFlow() {
     if (!state.currentFlow) return;
     
-    const flowName = document.getElementById('flowName').value;
+    const flowName = document.getElementById('flowName').value.trim();
+    const flowDescription = document.getElementById('flowDescription').value.trim();
+    
+    if (!flowName) {
+        showToast('Flow name is required', 'error');
+        return;
+    }
+    
     const exportData = state.editor.export();
+    const drawflowData = exportData.drawflow.Home.data;
+    
+    // Extract nodes
+    const nodes = Object.values(drawflowData).map(node => {
+        const nodeData = node.data || {};
+        return {
+            id: node.id.toString(),
+            type: node.name,
+            x: node.pos_x,
+            y: node.pos_y,
+            ...nodeData
+        };
+    });
+    
+    // Extract connections
+    const connections = [];
+    Object.values(drawflowData).forEach(node => {
+        if (node.outputs) {
+            Object.entries(node.outputs).forEach(([outputKey, outputData]) => {
+                if (outputData.connections) {
+                    outputData.connections.forEach(conn => {
+                        connections.push({
+                            source: {
+                                node: node.id.toString(),
+                                port: outputKey.replace('output_', '')
+                            },
+                            target: {
+                                node: conn.node,
+                                port: conn.output.replace('input_', '')
+                            }
+                        });
+                    });
+                }
+            });
+        }
+    });
     
     const flowData = {
         id: state.currentFlow.id,
         name: flowName,
-        description: state.currentFlow.description || '',
-        nodes: Object.values(exportData.drawflow.Home.data).map(node => ({
-            id: node.id,
-            type: node.name,
-            x: node.pos_x,
-            y: node.pos_y,
-            ...node.data
-        }))
+        description: flowDescription,
+        nodes: nodes,
+        connections: connections
     };
     
     try {
@@ -425,13 +608,26 @@ async function saveCurrentFlow() {
             body: JSON.stringify(flowData)
         });
         
+        const result = await response.json();
+        
         if (response.ok) {
             showToast('Flow saved successfully', 'success');
+            
+            // Show endpoints if available
+            if (result.endpoints && result.endpoints.length > 0) {
+                const endpointInfo = result.endpoints.map(ep => 
+                    `${ep.method} ${ep.url}`
+                ).join('\n');
+                console.log('Flow endpoints:\n', endpointInfo);
+            }
+            
             await loadFlows();
             closeFlowEditor();
         } else {
-            const error = await response.json();
-            showToast(`Error: ${error.error}`, 'error');
+            showToast(`Error: ${result.error}`, 'error');
+            if (result.errors) {
+                console.error('Validation errors:', result.errors);
+            }
         }
     } catch (error) {
         console.error('Error saving flow:', error);
@@ -441,45 +637,139 @@ async function saveCurrentFlow() {
 
 function validateCurrentFlow() {
     const exportData = state.editor.export();
-    const nodeCount = Object.keys(exportData.drawflow.Home.data).length;
+    const nodes = Object.values(exportData.drawflow.Home.data);
     
-    if (nodeCount === 0) {
+    if (nodes.length === 0) {
         showToast('Flow is empty', 'warning');
         return;
     }
     
-    showToast(`Flow is valid (${nodeCount} nodes)`, 'success');
+    // Check for http-in nodes
+    const httpInNodes = nodes.filter(n => n.name === 'http-in');
+    if (httpInNodes.length === 0) {
+        showToast('Warning: No HTTP trigger nodes found', 'warning');
+    }
+    
+    // Check for http-response nodes
+    const httpResponseNodes = nodes.filter(n => n.name === 'http-response');
+    if (httpResponseNodes.length === 0) {
+        showToast('Warning: No HTTP response nodes found', 'warning');
+    }
+    
+    // Check for disconnected nodes
+    const disconnectedNodes = nodes.filter(n => {
+        const hasInputs = n.inputs && Object.keys(n.inputs).length > 0;
+        const hasOutputs = n.outputs && Object.keys(n.outputs).length > 0;
+        const hasInputConnections = hasInputs && Object.values(n.inputs).some(i => i.connections.length > 0);
+        const hasOutputConnections = hasOutputs && Object.values(n.outputs).some(o => o.connections.length > 0);
+        
+        return !hasInputConnections && !hasOutputConnections && n.name !== 'http-in';
+    });
+    
+    if (disconnectedNodes.length > 0) {
+        showToast(`Warning: ${disconnectedNodes.length} disconnected node(s)`, 'warning');
+    }
+    
+    showToast(`Flow validated: ${nodes.length} nodes`, 'success');
 }
 
 // ===================================================================
-// Node Properties
+// Node Properties Panel
 // ===================================================================
 
 function showNodeProperties(nodeId) {
     const content = document.getElementById('propertiesContent');
-    const nodeData = state.editor.getNodeFromId(nodeId);
+    const nodeInfo = state.editor.getNodeFromId(nodeId);
+    const nodeData = nodeInfo.data || {};
+    const nodeDefinition = state.nodeDefinitions.get(nodeInfo.name);
     
-    content.innerHTML = `
+    if (!nodeDefinition) {
+        content.innerHTML = '<div class="properties-empty">Node definition not found</div>';
+        return;
+    }
+    
+    const defaults = nodeDefinition.defaults || {};
+    
+    let html = `
         <div class="property-group">
             <label class="property-label">Node ID</label>
             <input type="text" class="property-input" value="${nodeId}" readonly>
         </div>
         <div class="property-group">
             <label class="property-label">Node Type</label>
-            <input type="text" class="property-input" value="${escapeHtml(nodeData.name)}" readonly>
-        </div>
-        <div class="property-group">
-            <label class="property-label">Name</label>
-            <input type="text" class="property-input" id="nodeName" value="${escapeHtml(nodeData.data.name || '')}">
-        </div>
-        <div class="property-group">
-            <button class="btn-danger" onclick="deleteNode(${nodeId})">Delete Node</button>
+            <input type="text" class="property-input" value="${escapeHtml(nodeInfo.name)}" readonly>
         </div>
     `;
     
-    // Add event listener for name change
-    document.getElementById('nodeName')?.addEventListener('change', (e) => {
-        updateNodeData(nodeId, { name: e.target.value });
+    // Generate property fields based on node definition
+    Object.entries(defaults).forEach(([key, defaultValue]) => {
+        const currentValue = nodeData[key] !== undefined ? nodeData[key] : defaultValue;
+        const propertyType = typeof defaultValue;
+        
+        html += `<div class="property-group">`;
+        html += `<label class="property-label">${escapeHtml(key)}</label>`;
+        
+        if (propertyType === 'boolean') {
+            html += `
+                <div class="property-checkbox">
+                    <input type="checkbox" 
+                           id="prop_${key}" 
+                           ${currentValue ? 'checked' : ''}>
+                    <label for="prop_${key}">Enable</label>
+                </div>
+            `;
+        } else if (key === 'method' && nodeInfo.name === 'http-in') {
+            html += `
+                <select class="property-select" id="prop_${key}">
+                    <option value="get" ${currentValue === 'get' ? 'selected' : ''}>GET</option>
+                    <option value="post" ${currentValue === 'post' ? 'selected' : ''}>POST</option>
+                    <option value="put" ${currentValue === 'put' ? 'selected' : ''}>PUT</option>
+                    <option value="delete" ${currentValue === 'delete' ? 'selected' : ''}>DELETE</option>
+                    <option value="patch" ${currentValue === 'patch' ? 'selected' : ''}>PATCH</option>
+                </select>
+            `;
+        } else if (key === 'func' || key === 'code' || propertyType === 'string' && currentValue.length > 50) {
+            html += `
+                <textarea class="property-textarea" 
+                         id="prop_${key}" 
+                         placeholder="Enter ${key}">${escapeHtml(currentValue.toString())}</textarea>
+            `;
+        } else {
+            html += `
+                <input type="text" 
+                       class="property-input" 
+                       id="prop_${key}" 
+                       value="${escapeHtml(currentValue.toString())}" 
+                       placeholder="Enter ${key}">
+            `;
+        }
+        
+        html += `</div>`;
+    });
+    
+    html += `
+        <div class="property-group">
+            <button class="btn-danger" onclick="deleteSelectedNode()">Delete Node</button>
+        </div>
+    `;
+    
+    content.innerHTML = html;
+    
+    // Add event listeners for property changes
+    Object.keys(defaults).forEach(key => {
+        const element = document.getElementById(`prop_${key}`);
+        if (element) {
+            element.addEventListener('change', (e) => {
+                const value = element.type === 'checkbox' ? element.checked : element.value;
+                updateNodeData(nodeId, { [key]: value });
+                
+                // Update node display
+                const updatedData = state.editor.getNodeFromId(nodeId).data;
+                const updatedDefinition = state.nodeDefinitions.get(nodeInfo.name);
+                const newHTML = createNodeHTML(updatedData, updatedDefinition);
+                state.editor.updateNodeDataFromId(nodeId, updatedData);
+            });
+        }
     });
 }
 
@@ -489,13 +779,111 @@ function clearNodeProperties() {
 }
 
 function updateNodeData(nodeId, data) {
-    const nodeData = state.editor.getNodeFromId(nodeId);
-    state.editor.updateNodeDataFromId(nodeId, { ...nodeData.data, ...data });
+    const nodeInfo = state.editor.getNodeFromId(nodeId);
+    const updatedData = { ...nodeInfo.data, ...data };
+    state.editor.updateNodeDataFromId(nodeId, updatedData);
 }
 
-function deleteNode(nodeId) {
-    state.editor.removeNodeId(`node-${nodeId}`);
-    clearNodeProperties();
+function deleteSelectedNode() {
+    if (state.selectedNodeId) {
+        state.editor.removeNodeId(`node-${state.selectedNodeId}`);
+        clearNodeProperties();
+        showToast('Node deleted', 'info');
+    }
+}
+
+// ===================================================================
+// Drag and Drop
+// ===================================================================
+
+function handleDragStart(e) {
+    const nodeType = e.target.dataset.nodeType;
+    const nodeLabel = e.target.dataset.nodeLabel;
+    e.dataTransfer.setData('node-type', nodeType);
+    e.dataTransfer.setData('node-label', nodeLabel);
+}
+
+function handleDrop(e) {
+    const nodeType = e.dataTransfer.getData('node-type');
+    if (!nodeType) return;
+    
+    const nodeDefinition = state.nodeDefinitions.get(nodeType);
+    if (!nodeDefinition) {
+        showToast('Node type not found', 'error');
+        return;
+    }
+    
+    // Calculate position relative to canvas
+    const rect = e.target.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / state.zoom;
+    const y = (e.clientY - rect.top) / state.zoom;
+    
+    // Create node data with defaults
+    const nodeData = { ...nodeDefinition.defaults };
+    
+    const html = createNodeHTML(nodeData, nodeDefinition);
+    const inputCount = nodeDefinition.inputs || 1;
+    const outputCount = nodeDefinition.outputs || 1;
+    
+    const nodeId = state.editor.addNode(
+        nodeType,
+        inputCount,
+        outputCount,
+        x,
+        y,
+        nodeType,
+        nodeData,
+        html
+    );
+    
+    console.log('Node added:', nodeId, nodeType);
+    showToast(`Added ${nodeDefinition.ui.paletteLabel || nodeType}`, 'success');
+}
+
+// ===================================================================
+// Search and Filter
+// ===================================================================
+
+function filterPaletteNodes(searchTerm) {
+    const term = searchTerm.toLowerCase();
+    const categories = document.querySelectorAll('.palette-category');
+    
+    categories.forEach(category => {
+        const nodes = category.querySelectorAll('.palette-node');
+        let visibleCount = 0;
+        
+        nodes.forEach(node => {
+            const label = node.textContent.toLowerCase();
+            if (label.includes(term)) {
+                node.classList.remove('hidden');
+                visibleCount++;
+            } else {
+                node.classList.add('hidden');
+            }
+        });
+        
+        category.classList.toggle('hidden', visibleCount === 0);
+    });
+}
+
+function filterNodeCategories(searchTerm) {
+    const term = searchTerm.toLowerCase();
+    const categories = document.querySelectorAll('.node-category');
+    
+    categories.forEach(category => {
+        const categoryName = category.dataset.category.toLowerCase();
+        const nodes = category.querySelectorAll('.node-item');
+        let hasVisibleNodes = false;
+        
+        nodes.forEach(node => {
+            const label = node.querySelector('.node-label').textContent.toLowerCase();
+            if (label.includes(term) || categoryName.includes(term)) {
+                hasVisibleNodes = true;
+            }
+        });
+        
+        category.classList.toggle('hidden', !hasVisibleNodes);
+    });
 }
 
 // ===================================================================
@@ -527,16 +915,12 @@ async function duplicateFlow(flowId) {
         const flow = await response.json();
         
         const newFlow = {
-            ...flow,
             id: generateId(),
             name: `${flow.name} (Copy)`,
-            config: flow.config
+            description: flow.description,
+            nodes: flow.config.nodes,
+            connections: flow.config.connections
         };
-        
-        delete newFlow.created_at;
-        delete newFlow.updated_at;
-        delete newFlow.enabled;
-        delete newFlow.routes;
         
         const createResponse = await fetch(`${API_BASE}/admin/flows`, {
             method: 'POST',
@@ -583,14 +967,6 @@ async function deleteFlow(flowId) {
 }
 
 // ===================================================================
-// Drag and Drop
-// ===================================================================
-
-function handleDragStart(e) {
-    e.dataTransfer.setData('node-type', e.target.dataset.nodeType);
-}
-
-// ===================================================================
 // UI Helpers
 // ===================================================================
 
@@ -603,7 +979,8 @@ function showToast(message, type = 'info') {
     container.appendChild(toast);
     
     setTimeout(() => {
-        toast.remove();
+        toast.style.animation = 'slideIn 0.3s reverse';
+        setTimeout(() => toast.remove(), 300);
     }, 3000);
 }
 
@@ -633,8 +1010,9 @@ function closeConfirmModal() {
 // ===================================================================
 
 function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = text.toString();
     return div.innerHTML;
 }
 
@@ -645,16 +1023,18 @@ function formatDate(dateString) {
 }
 
 function generateId() {
-    return 'flow_' + Math.random().toString(36).substr(2, 9);
+    return 'flow_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
 }
 
 // ===================================================================
-// Export for debugging
+// Export for global access and debugging
 // ===================================================================
 
 window.RedNoxAdmin = {
     state,
     loadFlows,
     loadRoutes,
-    loadNodes
+    loadNodes,
+    openFlowEditor,
+    deleteSelectedNode
 };
