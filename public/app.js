@@ -24,6 +24,12 @@ const state = {
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('RedNox Admin UI initializing...');
     
+    // Wait for Drawflow library to load
+    if (typeof Drawflow === 'undefined') {
+        console.log('Waiting for Drawflow library...');
+        await waitForDrawflow();
+    }
+    
     // Setup navigation
     setupNavigation();
     
@@ -37,9 +43,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadNodes();
     await loadFlows();
     
-    // Setup Drawflow
-    setupDrawflow();
+    // Setup Drawflow (but don't initialize yet)
+    // Will be initialized when editor modal is opened
+    console.log('RedNox Admin UI ready');
 });
+
+// Wait for Drawflow library to be available
+function waitForDrawflow() {
+    return new Promise((resolve) => {
+        if (typeof Drawflow !== 'undefined') {
+            resolve();
+            return;
+        }
+        
+        const checkInterval = setInterval(() => {
+            if (typeof Drawflow !== 'undefined') {
+                clearInterval(checkInterval);
+                resolve();
+            }
+        }, 100);
+        
+        // Timeout after 5 seconds
+        setTimeout(() => {
+            clearInterval(checkInterval);
+            if (typeof Drawflow === 'undefined') {
+                console.error('Drawflow library failed to load');
+                showToast('Editor library failed to load. Please refresh the page.', 'error');
+            }
+            resolve();
+        }, 5000);
+    });
+}
 
 // ===================================================================
 // Navigation
@@ -99,7 +133,7 @@ function setupEventListeners() {
     });
     
     document.getElementById('clearFlowBtn').addEventListener('click', () => {
-        if (confirm('Clear all nodes from canvas?')) {
+        if (state.editor && confirm('Clear all nodes from canvas?')) {
             state.editor.clear();
             showToast('Canvas cleared', 'info');
         }
@@ -107,18 +141,24 @@ function setupEventListeners() {
     
     // Zoom controls
     document.getElementById('zoomInBtn').addEventListener('click', () => {
-        state.zoom = Math.min(state.zoom + 0.1, 2);
-        state.editor.zoom_in();
+        if (state.editor) {
+            state.zoom = Math.min(state.zoom + 0.1, 2);
+            state.editor.zoom_in();
+        }
     });
     
     document.getElementById('zoomOutBtn').addEventListener('click', () => {
-        state.zoom = Math.max(state.zoom - 0.1, 0.5);
-        state.editor.zoom_out();
+        if (state.editor) {
+            state.zoom = Math.max(state.zoom - 0.1, 0.5);
+            state.editor.zoom_out();
+        }
     });
     
     document.getElementById('zoomResetBtn').addEventListener('click', () => {
-        state.zoom = 1;
-        state.editor.zoom_reset();
+        if (state.editor) {
+            state.zoom = 1;
+            state.editor.zoom_reset();
+        }
     });
     
     // Properties panel close
@@ -346,55 +386,79 @@ function updateStats() {
 // ===================================================================
 
 function setupDrawflow() {
+    // Only initialize if not already initialized
+    if (state.editor) {
+        return;
+    }
+    
+    // Check if Drawflow is available
+    if (typeof Drawflow === 'undefined') {
+        console.error('Drawflow library not loaded');
+        showToast('Editor not available. Please refresh the page.', 'error');
+        return;
+    }
+    
     const container = document.getElementById('drawflow');
-    state.editor = new Drawflow(container);
-    state.editor.reroute = true;
-    state.editor.reroute_fix_curvature = true;
-    state.editor.force_first_input = false;
-    state.editor.start();
+    if (!container) {
+        console.error('Drawflow container not found');
+        return;
+    }
     
-    // Editor events
-    state.editor.on('nodeCreated', (nodeId) => {
-        console.log('Node created:', nodeId);
-    });
-    
-    state.editor.on('nodeSelected', (nodeId) => {
-        state.selectedNodeId = nodeId;
-        showNodeProperties(nodeId);
-        document.getElementById('propertiesPanel').classList.add('visible');
-    });
-    
-    state.editor.on('nodeUnselected', () => {
-        state.selectedNodeId = null;
-        clearNodeProperties();
-    });
-    
-    state.editor.on('nodeRemoved', (nodeId) => {
-        if (state.selectedNodeId === nodeId) {
+    try {
+        state.editor = new Drawflow(container);
+        state.editor.reroute = true;
+        state.editor.reroute_fix_curvature = true;
+        state.editor.force_first_input = false;
+        state.editor.start();
+        
+        console.log('Drawflow editor initialized successfully');
+        
+        // Editor events
+        state.editor.on('nodeCreated', (nodeId) => {
+            console.log('Node created:', nodeId);
+        });
+        
+        state.editor.on('nodeSelected', (nodeId) => {
+            state.selectedNodeId = nodeId;
+            showNodeProperties(nodeId);
+            document.getElementById('propertiesPanel').classList.add('visible');
+        });
+        
+        state.editor.on('nodeUnselected', () => {
             state.selectedNodeId = null;
             clearNodeProperties();
-        }
-    });
-    
-    state.editor.on('connectionCreated', (connection) => {
-        console.log('Connection created:', connection);
-    });
-    
-    state.editor.on('connectionRemoved', (connection) => {
-        console.log('Connection removed:', connection);
-    });
-    
-    // Setup drop zone for nodes
-    const dropZone = container;
-    
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-    });
-    
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        handleDrop(e);
-    });
+        });
+        
+        state.editor.on('nodeRemoved', (nodeId) => {
+            if (state.selectedNodeId === nodeId) {
+                state.selectedNodeId = null;
+                clearNodeProperties();
+            }
+        });
+        
+        state.editor.on('connectionCreated', (connection) => {
+            console.log('Connection created:', connection);
+        });
+        
+        state.editor.on('connectionRemoved', (connection) => {
+            console.log('Connection removed:', connection);
+        });
+        
+        // Setup drop zone for nodes
+        const dropZone = container;
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            handleDrop(e);
+        });
+    } catch (error) {
+        console.error('Error initializing Drawflow:', error);
+        showToast('Failed to initialize editor', 'error');
+    }
 }
 
 // ===================================================================
@@ -405,11 +469,30 @@ async function openFlowEditor(flowId) {
     const modal = document.getElementById('editorModal');
     modal.classList.add('active');
     
+    // Initialize Drawflow if not already initialized
+    if (!state.editor) {
+        setupDrawflow();
+    }
+    
+    // Wait a moment for modal to be visible
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Check if editor is initialized
+    if (!state.editor) {
+        showToast('Editor failed to initialize', 'error');
+        closeFlowEditor();
+        return;
+    }
+    
     // Clear editor first
-    state.editor.clear();
-    state.editor.zoom_reset();
-    state.zoom = 1;
-    clearNodeProperties();
+    try {
+        state.editor.clear();
+        state.editor.zoom_reset();
+        state.zoom = 1;
+        clearNodeProperties();
+    } catch (error) {
+        console.error('Error clearing editor:', error);
+    }
     
     if (flowId) {
         // Load existing flow
@@ -446,7 +529,15 @@ function closeFlowEditor() {
     const modal = document.getElementById('editorModal');
     modal.classList.remove('active');
     state.currentFlow = null;
-    state.editor.clear();
+    
+    if (state.editor) {
+        try {
+            state.editor.clear();
+        } catch (error) {
+            console.error('Error clearing editor:', error);
+        }
+    }
+    
     clearNodeProperties();
 }
 
@@ -455,6 +546,11 @@ function closeFlowEditor() {
 // ===================================================================
 
 function loadFlowIntoEditor(config) {
+    if (!state.editor) {
+        console.error('Editor not initialized');
+        return;
+    }
+    
     if (!config.nodes || config.nodes.length === 0) {
         return;
     }
@@ -539,7 +635,10 @@ function createNodeHTML(nodeData, nodeDefinition) {
 // ===================================================================
 
 async function saveCurrentFlow() {
-    if (!state.currentFlow) return;
+    if (!state.currentFlow || !state.editor) {
+        showToast('Editor not ready', 'error');
+        return;
+    }
     
     const flowName = document.getElementById('flowName').value.trim();
     const flowDescription = document.getElementById('flowDescription').value.trim();
@@ -549,53 +648,53 @@ async function saveCurrentFlow() {
         return;
     }
     
-    const exportData = state.editor.export();
-    const drawflowData = exportData.drawflow.Home.data;
-    
-    // Extract nodes
-    const nodes = Object.values(drawflowData).map(node => {
-        const nodeData = node.data || {};
-        return {
-            id: node.id.toString(),
-            type: node.name,
-            x: node.pos_x,
-            y: node.pos_y,
-            ...nodeData
-        };
-    });
-    
-    // Extract connections
-    const connections = [];
-    Object.values(drawflowData).forEach(node => {
-        if (node.outputs) {
-            Object.entries(node.outputs).forEach(([outputKey, outputData]) => {
-                if (outputData.connections) {
-                    outputData.connections.forEach(conn => {
-                        connections.push({
-                            source: {
-                                node: node.id.toString(),
-                                port: outputKey.replace('output_', '')
-                            },
-                            target: {
-                                node: conn.node,
-                                port: conn.output.replace('input_', '')
-                            }
-                        });
-                    });
-                }
-            });
-        }
-    });
-    
-    const flowData = {
-        id: state.currentFlow.id,
-        name: flowName,
-        description: flowDescription,
-        nodes: nodes,
-        connections: connections
-    };
-    
     try {
+        const exportData = state.editor.export();
+        const drawflowData = exportData.drawflow.Home.data;
+        
+        // Extract nodes
+        const nodes = Object.values(drawflowData).map(node => {
+            const nodeData = node.data || {};
+            return {
+                id: node.id.toString(),
+                type: node.name,
+                x: node.pos_x,
+                y: node.pos_y,
+                ...nodeData
+            };
+        });
+        
+        // Extract connections
+        const connections = [];
+        Object.values(drawflowData).forEach(node => {
+            if (node.outputs) {
+                Object.entries(node.outputs).forEach(([outputKey, outputData]) => {
+                    if (outputData.connections) {
+                        outputData.connections.forEach(conn => {
+                            connections.push({
+                                source: {
+                                    node: node.id.toString(),
+                                    port: outputKey.replace('output_', '')
+                                },
+                                target: {
+                                    node: conn.node,
+                                    port: conn.output.replace('input_', '')
+                                }
+                            });
+                        });
+                    }
+                });
+            }
+        });
+        
+        const flowData = {
+            id: state.currentFlow.id,
+            name: flowName,
+            description: flowDescription,
+            nodes: nodes,
+            connections: connections
+        };
+        
         const url = state.currentFlow.created_at
             ? `${API_BASE}/admin/flows/${state.currentFlow.id}`
             : `${API_BASE}/admin/flows`;
@@ -636,6 +735,11 @@ async function saveCurrentFlow() {
 }
 
 function validateCurrentFlow() {
+    if (!state.editor) {
+        showToast('Editor not ready', 'error');
+        return;
+    }
+    
     const exportData = state.editor.export();
     const nodes = Object.values(exportData.drawflow.Home.data);
     
@@ -678,8 +782,18 @@ function validateCurrentFlow() {
 // ===================================================================
 
 function showNodeProperties(nodeId) {
+    if (!state.editor) {
+        return;
+    }
+    
     const content = document.getElementById('propertiesContent');
     const nodeInfo = state.editor.getNodeFromId(nodeId);
+    
+    if (!nodeInfo) {
+        content.innerHTML = '<div class="properties-empty">Node not found</div>';
+        return;
+    }
+    
     const nodeData = nodeInfo.data || {};
     const nodeDefinition = state.nodeDefinitions.get(nodeInfo.name);
     
@@ -779,13 +893,19 @@ function clearNodeProperties() {
 }
 
 function updateNodeData(nodeId, data) {
+    if (!state.editor) {
+        return;
+    }
+    
     const nodeInfo = state.editor.getNodeFromId(nodeId);
-    const updatedData = { ...nodeInfo.data, ...data };
-    state.editor.updateNodeDataFromId(nodeId, updatedData);
+    if (nodeInfo) {
+        const updatedData = { ...nodeInfo.data, ...data };
+        state.editor.updateNodeDataFromId(nodeId, updatedData);
+    }
 }
 
 function deleteSelectedNode() {
-    if (state.selectedNodeId) {
+    if (state.selectedNodeId && state.editor) {
         state.editor.removeNodeId(`node-${state.selectedNodeId}`);
         clearNodeProperties();
         showToast('Node deleted', 'info');
@@ -804,6 +924,11 @@ function handleDragStart(e) {
 }
 
 function handleDrop(e) {
+    if (!state.editor) {
+        showToast('Editor not ready', 'error');
+        return;
+    }
+    
     const nodeType = e.dataTransfer.getData('node-type');
     if (!nodeType) return;
     
@@ -814,7 +939,7 @@ function handleDrop(e) {
     }
     
     // Calculate position relative to canvas
-    const rect = e.target.getBoundingClientRect();
+    const rect = e.target.closest('#drawflow').getBoundingClientRect();
     const x = (e.clientX - rect.left) / state.zoom;
     const y = (e.clientY - rect.top) / state.zoom;
     
@@ -825,19 +950,24 @@ function handleDrop(e) {
     const inputCount = nodeDefinition.inputs || 1;
     const outputCount = nodeDefinition.outputs || 1;
     
-    const nodeId = state.editor.addNode(
-        nodeType,
-        inputCount,
-        outputCount,
-        x,
-        y,
-        nodeType,
-        nodeData,
-        html
-    );
-    
-    console.log('Node added:', nodeId, nodeType);
-    showToast(`Added ${nodeDefinition.ui.paletteLabel || nodeType}`, 'success');
+    try {
+        const nodeId = state.editor.addNode(
+            nodeType,
+            inputCount,
+            outputCount,
+            x,
+            y,
+            nodeType,
+            nodeData,
+            html
+        );
+        
+        console.log('Node added:', nodeId, nodeType);
+        showToast(`Added ${nodeDefinition.ui.paletteLabel || nodeType}`, 'success');
+    } catch (error) {
+        console.error('Error adding node:', error);
+        showToast('Failed to add node', 'error');
+    }
 }
 
 // ===================================================================
