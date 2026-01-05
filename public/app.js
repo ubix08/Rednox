@@ -1,324 +1,549 @@
 
-// app.js
-const { createApp } = Vue;
+// adminHandler.ts
+// ===================================================================
+// adminHandler.ts - Flow Management + Node Discovery
+// ===================================================================
 
-createApp({
-  data() {
-    return {
-      currentView: 'dashboard',
-      currentFlow: null,
-      mobileMenuOpen: false,
-      contextMenu: { show: false, x: 0, y: 0 },
-      toasts: [],
-      apiConnected: true,
-      flows: [],
-      routes: [],
-      stats: { flows: 0, routes: 0, logs: 0, nodes: 0 },
-      loading: false,
-      saving: false,
-      showCreateFlowModal: false,
-      showImportModal: false,
-      showConfirmDelete: false,
-      confirmFlow: null,
-      newFlowName: '',
-      newFlowDesc: '',
-      flowSearch: '',
-      flowFilter: 'all',
-      nodePaletteSearch: '',
-      editor: null,
-      editorZoom: 1,
-      selectedNode: null,
-      nodeTypes: [],
-      apiBase: location.origin
-    };
-  },
-  computed: {
-    filteredFlows() {
-      let flows = this.flows;
-      if (this.flowSearch) {
-        flows = flows.filter(f => f.name.toLowerCase().includes(this.flowSearch.toLowerCase()));
-      }
-      if (this.flowFilter === 'enabled') {
-        flows = flows.filter(f => f.enabled);
-      } else if (this.flowFilter === 'disabled') {
-        flows = flows.filter(f => !f.enabled);
-      }
-      return flows;
-    },
-    filteredNodeCategories() {
-      const categories = new Set(this.nodeTypes
-        .filter(n => n.ui.paletteLabel.toLowerCase().includes(this.nodePaletteSearch.toLowerCase()))
-        .map(n => n.category)
-      );
-      return Array.from(categories);
-    }
-  },
-  methods: {
-    navigateTo(view) {
-      this.currentView = view;
-      this.mobileMenuOpen = false;
-      if (view === 'dashboard') this.loadDashboard();
-      if (view === 'flows') this.loadFlows();
-      if (view === 'routes') this.loadRoutes();
-    },
-    loadDashboard() {
-      this.loading = true;
-      Promise.all([
-        fetch('/admin/stats').then(r => r.json()).then(d => this.stats = d),
-        this.loadFlows()
-      ]).finally(() => this.loading = false);
-    },
-    loadFlows() {
-      fetch('/admin/flows').then(r => r.json()).then(d => this.flows = d.flows);
-    },
-    loadRoutes() {
-      fetch('/admin/routes').then(r => r.json()).then(d => this.routes = d.routes);
-    },
-    initializeDatabase() {
-      this.loading = true;
-      fetch('/admin/init', { method: 'POST' }).then(r => r.json()).then(d => {
-        this.addToast('success', 'Database initialized');
-        this.loadDashboard();
-      }).catch(e => this.addToast('error', 'Initialization failed', e.message)).finally(() => this.loading = false);
-    },
-    refreshAll() {
-      this.loadDashboard();
-    },
-    formatDate(date) {
-      return new Date(date).toLocaleString();
-    },
-    getFlowNodeCount(flow) {
-      return flow.nodes ? flow.nodes.length : 0;
-    },
-    editFlow(flow) {
-      this.currentFlow = { ...flow };
-      this.loadFlowEditor(flow.id);
-    },
-    loadFlowEditor(flowId) {
-      this.loading = true;
-      fetch(`/admin/flows/${flowId}`).then(r => r.json()).then(d => {
-        this.currentFlow = d;
-        this.initEditor();
-        this.editor.import(d.config);
-      }).finally(() => this.loading = false);
-    },
-    closeEditor() {
-      this.currentFlow = null;
-      this.selectedNode = null;
-      this.editor = null;
-    },
-    initEditor() {
-      const container = document.getElementById('drawflow');
-      if (!container) return;
-      this.editor = new Drawflow(container);
-      this.editor.reroute = true;
-      this.editor.reroute_fix_curvature = true;
-      this.editor.force_first_input = false;
-      this.editor.zoom_max = 2;
-      this.editor.zoom_min = 0.5;
-      this.editor.on('nodeSelected', id => {
-        this.selectedNode = this.editor.getNodeFromId(id);
-      });
-      this.editor.on('nodeUnselected', () => {
-        this.selectedNode = null;
-      });
-      this.editor.on('zoom', zoom => {
-        this.editorZoom = zoom;
-      });
-      this.editor.start();
-    },
-    addNodeToCanvas(node) {
-      const html = this.getNodeHtml(node);
-      const pos_x = (this.editor.precanvas.clientWidth / 2) - this.editor.container.getBoundingClientRect().x;
-      const pos_y = (this.editor.precanvas.clientHeight / 2) - this.editor.container.getBoundingClientRect().y;
-      const data = { ...node.defaults };
-      this.editor.addNode(node.type, node.inputs, node.outputs, pos_x, pos_y, '', data, html, false);
-    },
-    getNodeHtml(node) {
-      return `
-        <div class="node-content">
-          <div class="node-header">${node.category}</div>
-          <div class="node-title">
-            <span class="node-icon">${node.ui.icon}</span>
-            ${node.ui.paletteLabel}
-          </div>
-          <div class="node-subtitle">${node.ui.info || ''}</div>
-        </div>
-      `;
-    },
-    getNodeIcon(type) {
-      // Assume emoji based on type, or from nodeTypes
-      return '📦'; // Default
-    },
-    saveFlow() {
-      this.saving = true;
-      const exportData = this.editor.export();
-      const data = {
-        name: this.currentFlow.name,
-        description: this.currentFlow.description,
-        nodes: Object.values(exportData.drawflow.Home.data)
-      };
-      fetch(`/admin/flows/${this.currentFlow.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      }).then(r => r.json()).then(d => {
-        this.addToast('success', 'Flow saved');
-      }).catch(e => this.addToast('error', 'Save failed', e.message)).finally(() => this.saving = false);
-    },
-    exportFlow() {
-      const exportData = this.editor.export();
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${this.currentFlow.name}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    },
-    handleImportFile(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = ev => {
-        try {
-          const data = JSON.parse(ev.target.result);
-          this.editor.import(data);
-          this.addToast('success', 'Flow imported');
-        } catch (err) {
-          this.addToast('error', 'Import failed', err.message);
-        }
-        this.showImportModal = false;
-      };
-      reader.readAsText(file);
-    },
-    validateCurrentFlow() {
-      // Since backend validates on save, simulate or call a validate endpoint if added
-      this.addToast('info', 'Validation', 'Flow is valid (client-side check)');
-    },
-    zoomIn() {
-      this.editor.zoom_in();
-      this.editorZoom = this.editor.zoom;
-    },
-    zoomOut() {
-      this.editor.zoom_out();
-      this.editorZoom = this.editor.zoom;
-    },
-    zoomReset() {
-      this.editor.zoom_reset();
-      this.editorZoom = 1;
-    },
-    fitToScreen() {
-      // Simple fit: reset and adjust
-      this.editor.zoom_reset();
-    },
-    showContextMenu(e) {
-      e.preventDefault();
-      this.contextMenu = { show: true, x: e.clientX, y: e.clientY };
-    },
-    pasteNode() {
-      // Implement paste logic if clipboard available
-      this.addToast('info', 'Paste', 'Paste not implemented');
-    },
-    clearCanvas() {
-      this.editor.clear();
-    },
-    getConnectionCount() {
-      if (!this.editor) return 0;
-      return Object.values(this.editor.drawflow.drawflow.Home.data).reduce((acc, node) => {
-        return acc + Object.values(node.outputs).reduce((a, o) => a + o.connections.length, 0);
-      }, 0);
-    },
-    deleteSelectedNode() {
-      if (this.selectedNode) {
-        this.editor.removeNodeId(this.selectedNode.id);
-        this.selectedNode = null;
-      }
-    },
-    addToast(type, title, message = '') {
-      const id = Date.now();
-      this.toasts.push({ id, type, title, message });
-      setTimeout(() => this.removeToast(id), 5000);
-    },
-    removeToast(id) {
-      this.toasts = this.toasts.filter(t => t.id !== id);
-    },
-    getToastIcon(type) {
-      return { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' }[type] || 'ℹ️';
-    },
-    createFlow() {
-      if (!this.newFlowName) return;
-      this.loading = true;
-      fetch('/admin/flows', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: this.newFlowName, description: this.newFlowDesc, nodes: [] })
-      }).then(r => r.json()).then(d => {
-        this.flows.push(d);
-        this.showCreateFlowModal = false;
-        this.editFlow(d);
-        this.newFlowName = '';
-        this.newFlowDesc = '';
-        this.addToast('success', 'Flow created');
-      }).catch(e => this.addToast('error', 'Creation failed', e.message)).finally(() => this.loading = false);
-    },
-    duplicateFlow(flow) {
-      this.loading = true;
-      fetch(`/admin/flows/${flow.id}`).then(r => r.json()).then(full => {
-        full.name += ' Copy';
-        delete full.id;
-        fetch('/admin/flows', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(full)
-        }).then(r => r.json()).then(d => {
-          this.flows.push(d);
-          this.addToast('success', 'Flow duplicated');
-        });
-      }).finally(() => this.loading = false);
-    },
-    toggleFlowStatus(flow) {
-      const action = flow.enabled ? 'disable' : 'enable';
-      fetch(`/admin/flows/\( {flow.id}/ \){action}`, { method: 'POST' }).then(r => r.json()).then(d => {
-        flow.enabled = !flow.enabled;
-        this.addToast('success', `Flow ${action}d`);
-      }).catch(e => this.addToast('error', 'Toggle failed', e.message));
-    },
-    confirmDeleteFlow(flow) {
-      this.confirmFlow = flow;
-      this.showConfirmDelete = true;
-    },
-    deleteFlow(flow) {
-      fetch(`/admin/flows/${flow.id}`, { method: 'DELETE' }).then(r => {
-        if (r.ok) {
-          this.flows = this.flows.filter(f => f.id !== flow.id);
-          this.addToast('success', 'Flow deleted');
-        }
-      }).catch(e => this.addToast('error', 'Delete failed', e.message)).finally(() => this.showConfirmDelete = false);
-    },
-    loadNodeTypes() {
-      fetch('/admin/nodes').then(r => r.json()).then(d => this.nodeTypes = d);
-    },
-    getNodesByCategory(category) {
-      return this.nodeTypes.filter(n => n.category === category && n.ui.paletteLabel.toLowerCase().includes(this.nodePaletteSearch.toLowerCase()));
-    },
-    addRule() {
-      if (!this.selectedNode.rules) this.selectedNode.rules = [];
-      this.selectedNode.rules.push({ t: 'eq', v: '' });
-    },
-    removeRule(index) {
-      this.selectedNode.rules.splice(index, 1);
-    },
-    addChangeRule() {
-      if (!this.selectedNode.rules) this.selectedNode.rules = [];
-      this.selectedNode.rules.push({ t: 'set', p: '', to: '' });
-    },
-    removeChangeRule(index) {
-      this.selectedNode.rules.splice(index, 1);
-    }
-  },
-  mounted() {
-    this.loadNodeTypes();
-    this.loadDashboard();
+import { Env, FlowConfig, D1_SCHEMA_STATEMENTS } from '../types/core';
+import { jsonResponse, validateFlow } from '../utils';
+import { registry } from '../core/NodeRegistry';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+export async function handleAdmin(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const path = url.pathname;
+  
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
-}).mount('#app');
+  
+  try {
+    // ===================================================================
+    // NODE DISCOVERY API
+    // ===================================================================
+    
+    if (path === '/admin/nodes' && request.method === 'GET') {
+      const discovery = registry.exportForUI();
+      return jsonResponse(discovery, corsHeaders);
+    }
+    
+    if (path === '/admin/nodes/categories' && request.method === 'GET') {
+      const byCategory = registry.getByCategory();
+      const categories = Array.from(byCategory.entries()).map(([name, nodes]) => ({
+        name,
+        count: nodes.length,
+        nodes: nodes.map(n => ({
+          type: n.type,
+          label: n.ui.paletteLabel,
+          icon: n.ui.icon
+        }))
+      }));
+      return jsonResponse({ categories, total: registry.list().length }, corsHeaders);
+    }
+    
+    if (path.match(/^\/admin\/nodes\/[^/]+$/) && request.method === 'GET') {
+      const nodeType = path.split('/').pop()!;
+      const definition = registry.get(nodeType);
+      
+      if (!definition) {
+        return jsonResponse({ error: 'Node type not found' }, corsHeaders, 404);
+      }
+      
+      return jsonResponse({
+        type: definition.type,
+        category: definition.category,
+        inputs: definition.inputs,
+        outputs: definition.outputs,
+        defaults: definition.defaults,
+        ui: definition.ui
+      }, corsHeaders);
+    }
+    
+    // ===================================================================
+    // DATABASE & FLOW MANAGEMENT
+    // ===================================================================
+    
+    if (!env.DB) {
+      return jsonResponse({ 
+        error: 'Database not configured',
+        hint: 'Make sure D1 database is bound in wrangler.toml'
+      }, corsHeaders, 500);
+    }
+    
+    // Database Initialization
+    if (path === '/admin/init' && request.method === 'POST') {
+      return await initializeDatabase(env);
+    }
+    
+    // Flow Management
+    if (path === '/admin/flows' && request.method === 'GET') {
+      return await listFlows(env);
+    }
+    
+    if (path.match(/^\/admin\/flows\/[^/]+$/) && request.method === 'GET') {
+      const flowId = path.split('/').pop()!;
+      return await getFlow(env, flowId, url.origin);
+    }
+    
+    if (path === '/admin/flows' && request.method === 'POST') {
+      return await createFlow(env, request, url.origin);
+    }
+    
+    if (path.match(/^\/admin\/flows\/[^/]+$/) && request.method === 'PUT') {
+      const flowId = path.split('/').pop()!;
+      return await updateFlow(env, request, flowId, url.origin);
+    }
+    
+    if (path.match(/^\/admin\/flows\/[^/]+$/) && request.method === 'DELETE') {
+      const flowId = path.split('/').pop()!;
+      return await deleteFlow(env, flowId);
+    }
+    
+    if (path.match(/^\/admin\/flows\/[^/]+\/(enable|disable)$/) && request.method === 'POST') {
+      const parts = path.split('/');
+      const flowId = parts[parts.length - 2];
+      const action = parts[parts.length - 1];
+      return await toggleFlow(env, flowId, action === 'enable');
+    }
+    
+    // Routes
+    if (path === '/admin/routes' && request.method === 'GET') {
+      return await listRoutes(env, url.origin);
+    }
+    
+    // Logs
+    if (path.match(/^\/admin\/flows\/[^/]+\/logs$/) && request.method === 'GET') {
+      const flowId = path.split('/')[3];
+      const limit = parseInt(url.searchParams.get('limit') || '50');
+      return await getFlowLogs(env, flowId, limit);
+    }
+    
+    // Stats
+    if (path === '/admin/stats' && request.method === 'GET') {
+      return await getStats(env);
+    }
+    
+    return jsonResponse({ error: 'Not found' }, corsHeaders, 404);
+    
+  } catch (err: any) {
+    console.error('Admin error:', err);
+    return jsonResponse({ 
+      error: 'Internal server error',
+      details: err.message,
+      stack: err.stack
+    }, corsHeaders, 500);
+  }
+}
+
+// ===================================================================
+// Database Operations
+// ===================================================================
+
+async function initializeDatabase(env: Env): Promise<Response> {
+  try {
+    console.log('Starting database initialization...');
+    
+    const results = [];
+    for (const statement of D1_SCHEMA_STATEMENTS) {
+      try {
+        console.log('Executing:', statement.substring(0, 50) + '...');
+        const result = await env.DB.prepare(statement).run();
+        results.push({ 
+          statement: statement.substring(0, 50),
+          success: true,
+          meta: result.meta 
+        });
+      } catch (stmtErr: any) {
+        console.error('Statement error:', stmtErr);
+        results.push({ 
+          statement: statement.substring(0, 50),
+          success: false,
+          error: stmtErr.message 
+        });
+      }
+    }
+    
+    const failed = results.filter(r => !r.success);
+    
+    if (failed.length > 0) {
+      return jsonResponse({ 
+        error: 'Database initialization partially failed',
+        results,
+        failed: failed.length,
+        details: failed.map(f => f.error).join('; ')
+      }, corsHeaders, 500);
+    }
+    
+    return jsonResponse({ 
+      success: true, 
+      message: 'Database initialized successfully',
+      statements: results.length
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Database initialization error:', err);
+    return jsonResponse({ 
+      error: 'Database initialization failed',
+      details: err.message,
+      stack: err.stack
+    }, corsHeaders, 500);
+  }
+}
+
+// ===================================================================
+// Flow CRUD Operations
+// ===================================================================
+
+async function listFlows(env: Env): Promise<Response> {
+  try {
+    const flows = await env.DB.prepare(
+      'SELECT id, name, description, enabled, created_at, updated_at FROM flows ORDER BY created_at DESC'
+    ).all();
+    
+    return jsonResponse({ 
+      flows: flows.results || [], 
+      count: flows.results?.length || 0 
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error fetching flows:', err);
+    return jsonResponse({ 
+      error: 'Failed to fetch flows',
+      details: err.message,
+      hint: 'Database might not be initialized. Call POST /admin/init first'
+    }, corsHeaders, 500);
+  }
+}
+
+async function getFlow(env: Env, flowId: string, origin: string): Promise<Response> {
+  try {
+    const flow = await env.DB.prepare('SELECT * FROM flows WHERE id = ?').bind(flowId).first();
+    
+    if (!flow) {
+      return jsonResponse({ error: 'Flow not found' }, corsHeaders, 404);
+    }
+    
+    const routes = await env.DB.prepare(
+      'SELECT * FROM http_routes WHERE flow_id = ?'
+    ).bind(flowId).all();
+    
+    const routesWithUrls = (routes.results || []).map(route => ({
+      ...route,
+      fullUrl: `\( {origin}/api \){route.path}`
+    }));
+    
+    return jsonResponse({
+      ...flow,
+      config: JSON.parse(flow.config as string),
+      routes: routesWithUrls
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error fetching flow:', err);
+    return jsonResponse({ 
+      error: 'Failed to fetch flow',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function createFlow(env: Env, request: Request, origin: string): Promise<Response> {
+  try {
+    const requestData = await request.json();
+    
+    const flowConfig: FlowConfig = {
+      id: requestData.id || crypto.randomUUID(),
+      name: requestData.name || 'Unnamed Flow',
+      description: requestData.description,
+      version: requestData.version,
+      nodes: requestData.nodes || []
+    };
+    
+    const validation = validateFlow(flowConfig);
+    if (!validation.valid) {
+      return jsonResponse({
+        error: 'Flow validation failed',
+        errors: validation.errors,
+        warnings: validation.warnings
+      }, corsHeaders, 400);
+    }
+    
+    const httpTriggers = extractHttpTriggers(flowConfig, flowConfig.id);
+    
+    const statements = [
+      env.DB.prepare(`
+        INSERT INTO flows (id, name, description, config, enabled)
+        VALUES (?, ?, ?, ?, 1)
+      `).bind(
+        flowConfig.id,
+        flowConfig.name,
+        flowConfig.description || '',
+        JSON.stringify(flowConfig)
+      ),
+      ...httpTriggers.map(trigger => 
+        env.DB.prepare(`
+          INSERT INTO http_routes (id, flow_id, node_id, path, method, enabled)
+          VALUES (?, ?, ?, ?, ?, 1)
+        `).bind(
+          crypto.randomUUID(),
+          flowConfig.id,
+          trigger.nodeId,
+          trigger.path,
+          trigger.method
+        )
+      )
+    ];
+    
+    await env.DB.batch(statements);
+    
+    return jsonResponse({ 
+      success: true, 
+      flowId: flowConfig.id,
+      httpTriggers: httpTriggers.length,
+      endpoints: httpTriggers.map(t => ({
+        method: t.method,
+        path: t.path,
+        url: `\( {origin}/api \){t.path}`,
+        nodeId: t.nodeId
+      })),
+      message: 'Flow created successfully',
+      warnings: validation.warnings
+    }, corsHeaders, 201);
+  } catch (err: any) {
+    console.error('Error creating flow:', err);
+    return jsonResponse({ 
+      error: 'Failed to create flow',
+      details: err.message,
+      stack: err.stack
+    }, corsHeaders, 500);
+  }
+}
+
+async function updateFlow(env: Env, request: Request, flowId: string, origin: string): Promise<Response> {
+  try {
+    const requestData = await request.json();
+    
+    const flowConfig: FlowConfig = {
+      id: flowId,
+      name: requestData.name || 'Unnamed Flow',
+      description: requestData.description,
+      version: requestData.version,
+      nodes: requestData.nodes || []
+    };
+    
+    const validation = validateFlow(flowConfig);
+    if (!validation.valid) {
+      return jsonResponse({
+        error: 'Flow validation failed',
+        errors: validation.errors,
+        warnings: validation.warnings
+      }, corsHeaders, 400);
+    }
+    
+    const httpTriggers = extractHttpTriggers(flowConfig, flowId);
+    
+    const statements = [
+      env.DB.prepare(`
+        UPDATE flows 
+        SET name = ?, description = ?, config = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).bind(
+        flowConfig.name,
+        flowConfig.description || '',
+        JSON.stringify(flowConfig),
+        flowId
+      ),
+      env.DB.prepare('DELETE FROM http_routes WHERE flow_id = ?').bind(flowId),
+      ...httpTriggers.map(trigger => 
+        env.DB.prepare(`
+          INSERT INTO http_routes (id, flow_id, node_id, path, method, enabled)
+          VALUES (?, ?, ?, ?, ?, 1)
+        `).bind(
+          crypto.randomUUID(),
+          flowId,
+          trigger.nodeId,
+          trigger.path,
+          trigger.method
+        )
+      )
+    ];
+    
+    const results = await env.DB.batch(statements);
+    
+    if (results[0].meta.changes === 0) {
+      return jsonResponse({ error: 'Flow not found' }, corsHeaders, 404);
+    }
+    
+    return jsonResponse({ 
+      success: true, 
+      message: 'Flow updated successfully',
+      endpoints: httpTriggers.map(t => ({
+        method: t.method,
+        path: t.path,
+        url: `\( {origin}/api \){t.path}`,
+        nodeId: t.nodeId
+      })),
+      warnings: validation.warnings
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error updating flow:', err);
+    return jsonResponse({ 
+      error: 'Failed to update flow',
+      details: err.message,
+      stack: err.stack
+    }, corsHeaders, 500);
+  }
+}
+
+async function deleteFlow(env: Env, flowId: string): Promise<Response> {
+  try {
+    const result = await env.DB.prepare('DELETE FROM flows WHERE id = ?').bind(flowId).run();
+    
+    if (result.meta.changes === 0) {
+      return jsonResponse({ error: 'Flow not found' }, corsHeaders, 404);
+    }
+    
+    return jsonResponse({ 
+      success: true, 
+      message: 'Flow deleted successfully' 
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error deleting flow:', err);
+    return jsonResponse({ 
+      error: 'Failed to delete flow',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function toggleFlow(env: Env, flowId: string, enable: boolean): Promise<Response> {
+  try {
+    const enabled = enable ? 1 : 0;
+    
+    const statements = [
+      env.DB.prepare(
+        'UPDATE flows SET enabled = ?, updated_at = datetime(\'now\') WHERE id = ?'
+      ).bind(enabled, flowId),
+      env.DB.prepare(
+        'UPDATE http_routes SET enabled = ? WHERE flow_id = ?'
+      ).bind(enabled, flowId)
+    ];
+    
+    await env.DB.batch(statements);
+    
+    return jsonResponse({ 
+      success: true, 
+      enabled: enable,
+      message: `Flow ${enable ? 'enabled' : 'disabled'} successfully`
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error(`Error toggling flow:`, err);
+    return jsonResponse({ 
+      error: `Failed to ${enable ? 'enable' : 'disable'} flow`,
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+// ===================================================================
+// Routes & Stats
+// ===================================================================
+
+async function listRoutes(env: Env, origin: string): Promise<Response> {
+  try {
+    const routes = await env.DB.prepare(`
+      SELECT r.*, f.name as flow_name 
+      FROM http_routes r
+      JOIN flows f ON f.id = r.flow_id
+      WHERE r.enabled = 1
+      ORDER BY r.path, r.method
+    `).all();
+    
+    const routesWithUrls = (routes.results || []).map(route => ({
+      ...route,
+      fullUrl: `\( {origin}/api \){route.path}`
+    }));
+    
+    return jsonResponse({ 
+      routes: routesWithUrls, 
+      count: routesWithUrls.length 
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error fetching routes:', err);
+    return jsonResponse({ 
+      error: 'Failed to fetch routes',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function getFlowLogs(env: Env, flowId: string, limit: number): Promise<Response> {
+  try {
+    const logs = await env.DB.prepare(
+      'SELECT * FROM flow_logs WHERE flow_id = ? ORDER BY executed_at DESC LIMIT ?'
+    ).bind(flowId, limit).all();
+    
+    return jsonResponse({ logs: logs.results || [] }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error fetching logs:', err);
+    return jsonResponse({ 
+      error: 'Failed to fetch logs',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function getStats(env: Env): Promise<Response> {
+  try {
+    const [flowCount, routeCount, logCount] = await Promise.all([
+      env.DB.prepare('SELECT COUNT(*) as count FROM flows').first(),
+      env.DB.prepare('SELECT COUNT(*) as count FROM http_routes WHERE enabled = 1').first(),
+      env.DB.prepare('SELECT COUNT(*) as count FROM flow_logs').first()
+    ]);
+    
+    return jsonResponse({
+      flows: flowCount?.count || 0,
+      routes: routeCount?.count || 0,
+      logs: logCount?.count || 0,
+      nodes: registry.list().length
+    }, corsHeaders);
+  } catch (err: any) {
+    return jsonResponse({
+      error: 'Failed to fetch stats',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+// ===================================================================
+// Helper Functions
+// ===================================================================
+
+function extractHttpTriggers(flowData: FlowConfig, flowId: string): Array<{
+  nodeId: string;
+  path: string;
+  method: string;
+}> {
+  const triggers: Array<{ nodeId: string; path: string; method: string }> = [];
+  
+  for (const node of flowData.nodes) {
+    if (node.type === 'http-in' && node.url) {
+      let nodePath = node.url;
+      if (!nodePath.startsWith('/')) {
+        nodePath = '/' + nodePath;
+      }
+      
+      const fullPath = `/\( {flowId} \){nodePath}`;
+      
+      triggers.push({
+        nodeId: node.id,
+        path: fullPath,
+        method: (node.method || 'post').toUpperCase()
+      });
+    }
+  }
+  
+  return triggers;
+}
