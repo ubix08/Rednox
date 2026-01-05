@@ -1,3 +1,4 @@
+
 // ===================================================================
 // Complete Standard Node-RED Compatible Nodes with Full UI Metadata
 // ===================================================================
@@ -60,26 +61,16 @@ registry.register('http-in', {
         ],
         default: 'post',
         required: true,
-        description: 'Property to set with template result'
+        description: 'HTTP method for this endpoint'
       },
       {
-        name: 'fieldType',
-        label: 'Property Type',
-        type: 'select',
-        options: [
-          { value: 'msg', label: 'msg.' }
-        ],
-        default: 'msg'
-      },
-      {
-        name: 'output',
-        label: 'Output as',
-        type: 'select',
-        options: [
-          { value: 'str', label: 'Plain text' },
-          { value: 'json', label: 'Parsed JSON' }
-        ],
-        default: 'str'
+        name: 'url',
+        label: 'URL',
+        type: 'text',
+        default: '/',
+        required: true,
+        placeholder: '/endpoint',
+        description: 'URL path for this endpoint (without flow-id prefix)'
       },
       {
         name: 'name',
@@ -1004,6 +995,13 @@ registry.register('context', {
         default: 'flow'
       },
       {
+        name: 'value',
+        label: 'Value',
+        type: 'text',
+        default: '',
+        description: 'Value to set (for set action)'
+      },
+      {
         name: 'valueType',
         label: 'Value Type',
         type: 'select',
@@ -1012,16 +1010,9 @@ registry.register('context', {
           { value: 'str', label: 'string' },
           { value: 'num', label: 'number' },
           { value: 'bool', label: 'boolean' },
-          { 'HTTP method for this endpoint'
-      },
-      {
-        name: 'url',
-        label: 'URL',
-        type: 'text',
-        default: '/',
-        required: true,
-        placeholder: '/endpoint',
-        description: 'URL path for this endpoint (without flow-id prefix)'
+          { value: 'json', label: 'JSON' }
+        ],
+        default: 'str'
       },
       {
         name: 'name',
