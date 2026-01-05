@@ -4,1893 +4,299 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="RedNox - Visual Flow Builder for Node-RED compatible workflows">
+  <meta name="theme-color" content="#6366f1">
   <title>RedNox - Flow Builder</title>
+  
+  <!-- External Dependencies -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    :root {
-      --primary: #6366f1;
-      --primary-dark: #4f46e5;
-      --primary-light: #818cf8;
-      --success: #10b981;
-      --danger: #ef4444;
-      --warning: #f59e0b;
-      --bg: #0f172a;
-      --bg-light: #1e293b;
-      --bg-lighter: #334155;
-      --surface: #1e293b;
-      --text: #f1f5f9;
-      --text-muted: #94a3b8;
-      --border: #334155;
-      --shadow: rgba(0, 0, 0, 0.3);
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      overflow: hidden;
-      height: 100vh;
-    }
-
-    .app {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-    }
-
-    /* Header */
-    .header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 1rem 1.25rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      z-index: 1000;
-    }
-
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      flex: 1;
-      min-width: 0;
-    }
-
-    .back-btn {
-      background: var(--bg-lighter);
-      border: none;
-      color: var(--text);
-      font-size: 1.25rem;
-      cursor: pointer;
-      padding: 0.5rem;
-      border-radius: 10px;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s;
-      line-height: 1;
-      width: 40px;
-      height: 40px;
-    }
-
-    .back-btn:hover {
-      background: var(--primary);
-      transform: scale(1.05);
-    }
-
-    .back-btn.visible {
-      display: flex;
-    }
-
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      font-weight: 600;
-      font-size: 1.25rem;
-      color: var(--text);
-    }
-
-    .logo-icon {
-      width: 40px;
-      height: 40px;
-      background: linear-gradient(135deg, var(--primary), var(--primary-light));
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.25rem;
-      font-weight: bold;
-      flex-shrink: 0;
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-
-    .flow-title {
-      font-size: 1rem;
-      color: var(--text);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-weight: 500;
-    }
-
-    .btn {
-      padding: 0.65rem 1.25rem;
-      border: none;
-      border-radius: 10px;
-      font-size: 0.9375rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      white-space: nowrap;
-    }
-
-    .btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(0,0,0,0.3);
-    }
-
-    .btn:active {
-      transform: scale(0.97);
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, var(--primary), var(--primary-light));
-      color: white;
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-
-    .btn-success {
-      background: linear-gradient(135deg, var(--success), #059669);
-      color: white;
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-    }
-
-    /* Main Layout */
-    .main {
-      flex: 1;
-      display: flex;
-      overflow: hidden;
-      position: relative;
-    }
-
-    /* Flow List View */
-    .flows-view {
-      width: 100%;
-      height: 100%;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      display: none;
-    }
-
-    .flows-view.active {
-      display: block;
-    }
-
-    .flows-container {
-      padding: 1.5rem;
-      max-width: 1600px;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .flow-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 1.5rem;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      display: flex;
-      align-items: center;
-      gap: 1.5rem;
-    }
-
-    .flow-card:hover {
-      border-color: var(--primary);
-      box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
-      transform: translateY(-2px);
-    }
-
-    .flow-info {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .flow-name {
-      font-size: 1.125rem;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-    }
-
-    .flow-desc {
-      font-size: 0.875rem;
-      color: var(--text-muted);
-      line-height: 1.5;
-      margin-bottom: 0.75rem;
-    }
-
-    .flow-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-    }
-
-    .badge {
-      padding: 0.375rem 0.75rem;
-      border-radius: 8px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.375rem;
-      text-transform: uppercase;
-      letter-spacing: 0.025em;
-    }
-
-    .badge-success {
-      background: rgba(16, 185, 129, 0.15);
-      color: var(--success);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-    }
-
-    .badge-danger {
-      background: rgba(239, 68, 68, 0.15);
-      color: var(--danger);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-    }
-
-    .flow-actions {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      flex-shrink: 0;
-    }
-
-    .action-btn {
-      padding: 0;
-      width: 40px;
-      height: 40px;
-      background: var(--bg-lighter);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 1.125rem;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .action-btn:hover {
-      background: var(--bg-light);
-      border-color: var(--primary);
-      transform: translateY(-2px) scale(1.05);
-    }
-
-    .action-btn:active {
-      transform: scale(0.95);
-    }
-
-    .action-btn.primary {
-      background: linear-gradient(135deg, var(--primary), var(--primary-light));
-      border-color: var(--primary);
-      color: white;
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-
-    .action-btn.danger {
-      background: transparent;
-      border-color: var(--danger);
-      color: var(--danger);
-    }
-
-    .action-btn.danger:hover {
-      background: var(--danger);
-      color: white;
-    }
-
-    .empty-state {
-      padding: 4rem 1.5rem;
-      text-align: center;
-      color: var(--text-muted);
-    }
-
-    .empty-icon {
-      font-size: 4rem;
-      margin-bottom: 1.25rem;
-      opacity: 0.4;
-    }
-
-    /* Canvas View */
-    .canvas-view {
-      width: 100%;
-      height: 100%;
-      display: none;
-      position: relative;
-    }
-
-    .canvas-view.active {
-      display: flex;
-    }
-
-    #drawflow {
-      width: 100%;
-      height: 100%;
-      background: var(--bg);
-      background-image: 
-        radial-gradient(circle, var(--border) 1px, transparent 1px);
-      background-size: 24px 24px;
-      touch-action: none;
-    }
-
-    .drawflow .drawflow-node {
-      background: transparent;
-      border: none;
-      box-shadow: none;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      cursor: move;
-      width: 100px;
-      min-height: 100px;
-    }
-
-    .drawflow .drawflow-node.selected .node-content {
-      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.5), 0 8px 24px rgba(0,0,0,0.4);
-      transform: scale(1.05);
-    }
-
-    .drawflow .drawflow-node .node-content {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-      width: 100%;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .drawflow .drawflow-node:hover .node-content {
-      transform: scale(1.08);
-    }
-
-    .drawflow .drawflow-node .node-icon-wrapper {
-      width: 64px;
-      height: 64px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.3), 0 0 0 3px rgba(255,255,255,0.1);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
-      background: linear-gradient(135deg, var(--node-color, #6366f1), var(--node-color-light, #818cf8));
-    }
-
-    .drawflow .drawflow-node:hover .node-icon-wrapper {
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4), 0 0 0 4px rgba(255,255,255,0.15);
-    }
-
-    .drawflow .drawflow-node .node-icon {
-      font-size: 2rem;
-      color: white;
-      line-height: 1;
-      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-    }
-
-    .drawflow .drawflow-node .node-name {
-      font-size: 0.8125rem;
-      font-weight: 600;
-      text-align: center;
-      max-width: 95px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      background: var(--surface);
-      padding: 0.375rem 0.75rem;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      line-height: 1.2;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    }
-
-    .drawflow .drawflow-node .input,
-    .drawflow .drawflow-node .output {
-      width: 16px;
-      height: 16px;
-      background: white;
-      border: 3px solid var(--primary);
-      border-radius: 50%;
-      position: absolute;
-      cursor: crosshair;
-      z-index: 10;
-      transition: all 0.2s;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    }
-
-    .drawflow .drawflow-node .input:hover,
-    .drawflow .drawflow-node .output:hover {
-      background: var(--primary-light);
-      transform: scale(1.4);
-      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.3), 0 4px 12px rgba(0,0,0,0.4);
-    }
-
-    .drawflow .drawflow-node .input {
-      left: -8px;
-      top: 50%;
-      transform: translateY(-50%);
-    }
-
-    .drawflow .drawflow-node .output {
-      right: -8px;
-      top: 50%;
-      transform: translateY(-50%);
-    }
-
-    .drawflow .drawflow-node .outputs {
-      position: absolute;
-      right: -8px;
-      top: 50%;
-      transform: translateY(-50%);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .drawflow .drawflow-node .outputs .output {
-      position: relative;
-      right: 0;
-      top: 0;
-      transform: none;
-    }
-
-    .drawflow .connection .main-path {
-      stroke: var(--primary);
-      stroke-width: 3px;
-      fill: none;
-      stroke-linecap: round;
-      transition: all 0.2s;
-      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
-    }
-
-    .drawflow .connection:hover .main-path {
-      stroke: var(--primary-light);
-      stroke-width: 4px;
-      filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.6));
-    }
-
-    .drawflow .connection.selected .main-path {
-      stroke: var(--primary-light);
-      stroke-width: 4px;
-      filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.8));
-    }
-
-    .drawflow .connection .main-path {
-      stroke-dasharray: 8, 8;
-      animation: dash 25s linear infinite;
-    }
-
-    @keyframes dash {
-      to {
-        stroke-dashoffset: -200;
-      }
-    }
-
-    /* Canvas Toolbar */
-    .canvas-toolbar {
-      position: absolute;
-      top: 1.25rem;
-      left: 1.25rem;
-      display: flex;
-      gap: 0.625rem;
-      z-index: 100;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 0.625rem;
-      box-shadow: 0 6px 20px var(--shadow);
-    }
-
-    .toolbar-btn {
-      width: 44px;
-      height: 44px;
-      background: transparent;
-      border: none;
-      border-radius: 10px;
-      color: var(--text);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s;
-      font-size: 1.25rem;
-    }
-
-    .toolbar-btn:hover {
-      background: var(--bg-lighter);
-      color: var(--primary-light);
-      transform: scale(1.08);
-    }
-
-    .toolbar-btn:active {
-      transform: scale(0.95);
-    }
-
-    .toolbar-btn.primary {
-      background: linear-gradient(135deg, var(--primary), var(--primary-light));
-      color: white;
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-    }
-
-    .toolbar-btn.primary:hover {
-      transform: scale(1.08);
-      box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
-    }
-
-    /* Node Palette */
-    .node-palette {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      border-top-left-radius: 24px;
-      border-top-right-radius: 24px;
-      box-shadow: 0 -6px 30px var(--shadow);
-      transform: translateY(100%);
-      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      z-index: 2000;
-      max-height: 70vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .node-palette.active {
-      transform: translateY(0);
-    }
-
-    .palette-handle {
-      width: 48px;
-      height: 5px;
-      background: var(--border);
-      border-radius: 3px;
-      margin: 1rem auto;
-    }
-
-    .palette-header {
-      padding: 0 1.5rem 1.25rem;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .palette-title {
-      font-size: 1.25rem;
-      font-weight: 600;
-    }
-
-    .close-btn {
-      background: var(--bg-lighter);
-      border: none;
-      color: var(--text);
-      font-size: 1.5rem;
-      cursor: pointer;
-      width: 40px;
-      height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 10px;
-      transition: all 0.2s;
-    }
-
-    .close-btn:hover {
-      background: var(--danger);
-      color: white;
-      transform: scale(1.05);
-    }
-
-    .palette-content {
-      flex: 1;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      padding: 1.5rem;
-    }
-
-    .node-category {
-      margin-bottom: 2rem;
-    }
-
-    .category-title {
-      padding: 0.5rem 0 1rem;
-      font-size: 0.75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      letter-spacing: 0.1em;
-    }
-
-    .node-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-      gap: 1rem;
-    }
-
-    .node-item {
-      padding: 1.25rem 0.875rem;
-      background: var(--bg-light);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      cursor: pointer;
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.75rem;
-      text-align: center;
-    }
-
-    .node-item:hover {
-      border-color: var(--primary);
-      background: var(--bg-lighter);
-      transform: translateY(-4px);
-      box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-    }
-
-    .node-item:active {
-      transform: scale(0.95);
-    }
-
-    .node-item-icon {
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.75rem;
-      flex-shrink: 0;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-      background: linear-gradient(135deg, var(--item-color, #6366f1), var(--item-color-light, #818cf8));
-    }
-
-    .node-item-name {
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    /* Properties Panel */
-    .properties-panel {
-      position: fixed;
-      right: 0;
-      top: 0;
-      bottom: 0;
-      width: 100%;
-      max-width: 400px;
-      background: var(--surface);
-      border-left: 1px solid var(--border);
-      box-shadow: -6px 0 30px var(--shadow);
-      transform: translateX(100%);
-      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      z-index: 1500;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .properties-panel.active {
-      transform: translateX(0);
-    }
-
-    .properties-header {
-      padding: 1.25rem 1.5rem;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .properties-title {
-      font-size: 1.125rem;
-      font-weight: 600;
-    }
-
-    .properties-content {
-      flex: 1;
-      overflow-y: auto;
-      padding: 1.5rem;
-    }
-
-    .form-group {
-      margin-bottom: 1.5rem;
-    }
-
-    .form-label {
-      display: block;
-      font-size: 0.875rem;
-      font-weight: 600;
-      margin-bottom: 0.625rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.025em;
-    }
-
-    .form-input,
-    .form-select,
-    .form-textarea {
-      width: 100%;
-      padding: 0.875rem;
-      background: var(--bg-light);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 0.9375rem;
-      font-family: inherit;
-      transition: all 0.2s;
-    }
-
-    .form-input:focus,
-    .form-select:focus,
-    .form-textarea:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-    }
-
-    .form-textarea {
-      resize: vertical;
-      min-height: 140px;
-      font-family: 'Courier New', monospace;
-      font-size: 0.875rem;
-    }
-
-    .form-checkbox {
-      width: auto;
-      margin-right: 0.5rem;
-    }
-
-    .field-description {
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-      margin-top: 0.375rem;
-      line-height: 1.4;
-    }
-
-    /* Modal */
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.85);
-      z-index: 3000;
-      padding: 1rem;
-      overflow-y: auto;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .modal.active {
-      display: flex;
-    }
-
-    .modal-content {
-      background: var(--surface);
-      border-radius: 20px;
-      padding: 2rem;
-      width: 100%;
-      max-width: 540px;
-      box-shadow: 0 24px 48px rgba(0,0,0,0.5);
-    }
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 2rem;
-    }
-
-    .modal-title {
-      font-size: 1.5rem;
-      font-weight: 600;
-    }
-
-    /* Toast */
-    .toast {
-      position: fixed;
-      bottom: 1.5rem;
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 1.125rem 1.5rem;
-      box-shadow: 0 10px 30px var(--shadow);
-      z-index: 4000;
-      animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      display: flex;
-      align-items: center;
-      gap: 0.875rem;
-      min-width: 300px;
-      max-width: 90vw;
-    }
-
-    @keyframes slideUp {
-      from {
-        transform: translate(-50%, 100px);
-        opacity: 0;
-      }
-      to {
-        transform: translate(-50%, 0);
-        opacity: 1;
-      }
-    }
-
-    .toast-icon {
-      font-size: 1.375rem;
-      flex-shrink: 0;
-    }
-
-    .toast-message {
-      flex: 1;
-      font-size: 0.9375rem;
-      font-weight: 500;
-    }
-
-    .toast.success {
-      border-left: 4px solid var(--success);
-    }
-
-    .toast.error {
-      border-left: 4px solid var(--danger);
-    }
-
-    .toast.info {
-      border-left: 4px solid var(--primary);
-    }
-
-    /* Loading */
-    .loading {
-      display: inline-block;
-      width: 28px;
-      height: 28px;
-      border: 3px solid var(--border);
-      border-top-color: var(--primary);
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar {
-      width: 10px;
-      height: 10px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: var(--bg-light);
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: var(--border);
-      border-radius: 5px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: var(--bg-lighter);
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .properties-panel {
-        top: 0;
-        max-width: 100%;
-        border-left: none;
-        border-top-left-radius: 24px;
-        border-top-right-radius: 24px;
-      }
-
-      .node-palette {
-        max-height: 75vh;
-      }
-
-      .flow-card {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .flow-actions {
-        justify-content: stretch;
-      }
-
-      .action-btn {
-        flex: 1;
-      }
-
-      .logo span {
-        display: none;
-      }
-
-      .canvas-toolbar {
-        top: 1rem;
-        left: 1rem;
-        padding: 0.5rem;
-      }
-
-      .toolbar-btn {
-        width: 40px;
-        height: 40px;
-        font-size: 1.125rem;
-      }
-    }
-
-    @media (min-width: 768px) {
-      .node-grid {
-        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-      }
-
-      .flows-container {
-        padding: 2rem;
-      }
-
-      .properties-panel {
-        top: 61px;
-      }
-    }
-  </style>
+  
+  <!-- Application Styles -->
+  <link rel="stylesheet" href="styles/variables.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/canvas.css">
+  <link rel="stylesheet" href="styles/mobile.css">
 </head>
 <body>
-  <div class="app">
+  <div class="app" id="app">
+    <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <button class="back-btn" id="backBtn" onclick="showFlowsList()">←</button>
+        <button class="back-btn" id="backBtn" aria-label="Back to flows">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </button>
         <div class="logo">
           <div class="logo-icon">R</div>
-          <span>RedNox</span>
+          <span class="logo-text">RedNox</span>
         </div>
         <div class="flow-title" id="flowTitle"></div>
       </div>
-      <div id="headerActions">
-        <button class="btn btn-primary" onclick="showNewFlowModal()">
-          <span>+</span>
+      <div class="header-right" id="headerActions">
+        <button class="btn btn-primary" id="newFlowBtn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
           <span>New Flow</span>
         </button>
       </div>
     </header>
 
+    <!-- Main Content -->
     <main class="main">
+      <!-- Flows List View -->
       <div class="flows-view active" id="flowsView">
+        <div class="flows-header">
+          <div class="search-box">
+            <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input type="text" class="search-input" id="flowSearch" placeholder="Search flows...">
+          </div>
+          <div class="flows-stats" id="flowsStats">
+            <span class="stat-item">
+              <span class="stat-value">0</span>
+              <span class="stat-label">Flows</span>
+            </span>
+            <span class="stat-item">
+              <span class="stat-value">0</span>
+              <span class="stat-label">Active</span>
+            </span>
+          </div>
+        </div>
         <div class="flows-container" id="flowsContainer">
-          <div class="empty-state">
-            <div class="loading"></div>
-            <p style="margin-top: 1rem;">Loading flows...</p>
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading flows...</p>
           </div>
         </div>
       </div>
 
+      <!-- Canvas View -->
       <div class="canvas-view" id="canvasView">
         <div id="drawflow"></div>
         
+        <!-- Canvas Toolbar -->
         <div class="canvas-toolbar">
-          <button class="toolbar-btn primary" onclick="showNodePalette()" title="Add Node">+</button>
-          <button class="toolbar-btn" onclick="editor.zoom_in()" title="Zoom In">🔍+</button>
-          <button class="toolbar-btn" onclick="editor.zoom_out()" title="Zoom Out">🔍−</button>
-          <button class="toolbar-btn" onclick="editor.zoom_reset()" title="Reset">⊙</button>
-          <button class="toolbar-btn" onclick="saveFlow()" title="Save">💾</button>
+          <button class="toolbar-btn toolbar-btn-primary" id="addNodeBtn" title="Add Node (N)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </button>
+          <div class="toolbar-divider"></div>
+          <button class="toolbar-btn" id="zoomInBtn" title="Zoom In (+)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M11 8v6M8 11h6"/>
+            </svg>
+          </button>
+          <button class="toolbar-btn" id="zoomOutBtn" title="Zoom Out (-)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M8 11h6"/>
+            </svg>
+          </button>
+          <button class="toolbar-btn" id="zoomResetBtn" title="Reset View (0)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/>
+            </svg>
+          </button>
+          <div class="toolbar-divider"></div>
+          <button class="toolbar-btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 7v6h6M21 17a9 9 0 00-9-9 9 9 0 00-9 9"/>
+            </svg>
+          </button>
+          <button class="toolbar-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 7v6h-6M3 17a9 9 0 019-9 9 9 0 019 9"/>
+            </svg>
+          </button>
+          <div class="toolbar-divider"></div>
+          <button class="toolbar-btn" id="validateBtn" title="Validate Flow (V)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </button>
+          <button class="toolbar-btn" id="helpBtn" title="Help (?)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>
+            </svg>
+          </button>
         </div>
+
+        <!-- Zoom Level Indicator -->
+        <div class="zoom-indicator" id="zoomIndicator">100%</div>
       </div>
     </main>
   </div>
 
+  <!-- Node Palette -->
   <div class="node-palette" id="nodePalette">
     <div class="palette-handle"></div>
     <div class="palette-header">
       <h3 class="palette-title">Add Node</h3>
-      <button class="close-btn" onclick="closeNodePalette()">×</button>
+      <div class="palette-search">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" class="search-input" id="nodeSearch" placeholder="Search nodes...">
+      </div>
+      <button class="close-btn" id="closePaletteBtn" aria-label="Close">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
     </div>
     <div class="palette-content" id="nodePaletteContent">
-      <div class="empty-state">
-        <div class="loading"></div>
-        <p style="margin-top: 1rem;">Loading nodes...</p>
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading nodes...</p>
       </div>
     </div>
   </div>
 
+  <!-- Properties Panel -->
   <div class="properties-panel" id="propertiesPanel">
     <div class="properties-header">
       <h3 class="properties-title">Properties</h3>
-      <button class="close-btn" onclick="closeProperties()">×</button>
+      <button class="close-btn" id="closePropertiesBtn" aria-label="Close">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
     </div>
     <div class="properties-content" id="propertiesContent">
-      <p style="color: var(--text-muted); text-align: center; padding: 2rem;">
-        Select a node to edit properties
-      </p>
+      <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>
+        </svg>
+        <p>Select a node to edit properties</p>
+      </div>
     </div>
   </div>
 
+  <!-- Modals -->
   <div class="modal" id="newFlowModal">
+    <div class="modal-overlay"></div>
     <div class="modal-content">
       <div class="modal-header">
         <h3 class="modal-title">Create New Flow</h3>
-        <button class="close-btn" onclick="closeModal('newFlowModal')">×</button>
+        <button class="close-btn" id="closeNewFlowModal" aria-label="Close">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
       </div>
-      <div class="form-group">
-        <label class="form-label">Flow ID *</label>
-        <input type="text" class="form-input" id="newFlowId" placeholder="my-flow">
+      <form id="newFlowForm" class="modal-form">
+        <div class="form-group">
+          <label class="form-label" for="newFlowId">Flow ID *</label>
+          <input type="text" class="form-input" id="newFlowId" placeholder="my-flow" pattern="[a-z0-9-]+" required>
+          <div class="field-description">Lowercase letters, numbers, and hyphens only</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newFlowName">Flow Name *</label>
+          <input type="text" class="form-input" id="newFlowName" placeholder="My Flow" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newFlowDesc">Description</label>
+          <textarea class="form-textarea" id="newFlowDesc" placeholder="What does this flow do?" rows="3"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="cancelNewFlowBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Flow</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Help Modal -->
+  <div class="modal" id="helpModal">
+    <div class="modal-overlay"></div>
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h3 class="modal-title">Keyboard Shortcuts</h3>
+        <button class="close-btn" id="closeHelpModal" aria-label="Close">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
       </div>
-      <div class="form-group">
-        <label class="form-label">Flow Name *</label>
-        <input type="text" class="form-input" id="newFlowName" placeholder="My Flow">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Description</label>
-        <textarea class="form-textarea" id="newFlowDesc" placeholder="What does this flow do?" style="min-height: 100px;"></textarea>
-      </div>
-      <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
-        <button class="btn" style="flex: 1; background: var(--bg-lighter); color: var(--text);" onclick="closeModal('newFlowModal')">Cancel</button>
-        <button class="btn btn-primary" style="flex: 1;" onclick="createNewFlow()">Create</button>
+      <div class="shortcuts-grid">
+        <div class="shortcut-item">
+          <kbd>N</kbd>
+          <span>Add Node</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>Ctrl</kbd> + <kbd>S</kbd>
+          <span>Save Flow</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>Ctrl</kbd> + <kbd>Z</kbd>
+          <span>Undo</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>Ctrl</kbd> + <kbd>Y</kbd>
+          <span>Redo</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>Delete</kbd>
+          <span>Delete Node</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>+</kbd>
+          <span>Zoom In</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>-</kbd>
+          <span>Zoom Out</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>0</kbd>
+          <span>Reset Zoom</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>V</kbd>
+          <span>Validate Flow</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>?</kbd>
+          <span>Show Help</span>
+        </div>
       </div>
     </div>
   </div>
 
+  <!-- Validation Panel -->
+  <div class="validation-panel" id="validationPanel">
+    <div class="validation-header">
+      <h4>Flow Validation</h4>
+      <button class="close-btn" id="closeValidationBtn" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="validation-content" id="validationContent"></div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- External Dependencies -->
   <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
-  <script>
-    const API_BASE = window.location.origin;
-    let editor;
-    let currentFlow = null;
-    let flows = [];
-    let nodeDefinitions = {}; // Dynamically loaded node definitions
-
-    // ===================================================================
-    // INITIALIZATION
-    // ===================================================================
-
-    document.addEventListener('DOMContentLoaded', async () => {
-      await loadNodeDefinitions();
-      await loadFlows();
-    });
-
-    // ===================================================================
-    // DYNAMIC NODE DISCOVERY
-    // ===================================================================
-
-    async function loadNodeDefinitions() {
-      try {
-        const response = await fetch(`${API_BASE}/admin/nodes`);
-        const data = await response.json();
-        
-        if (data.nodes) {
-          // Convert array to object keyed by type
-          data.nodes.forEach(node => {
-            nodeDefinitions[node.type] = node;
-          });
-          
-          console.log(`[RedNox] Loaded ${data.nodes.length} node definitions`);
-          renderNodePalette();
-        }
-      } catch (err) {
-        console.error('Failed to load node definitions:', err);
-        showToast('Failed to load node definitions', 'error');
-      }
-    }
-
-    function renderNodePalette() {
-      const palette = document.getElementById('nodePaletteContent');
-      
-      if (Object.keys(nodeDefinitions).length === 0) {
-        palette.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-icon">⚠️</div>
-            <p>No nodes available</p>
-          </div>
-        `;
-        return;
-      }
-      
-      // Group by category
-      const categories = {};
-      for (const [type, node] of Object.entries(nodeDefinitions)) {
-        if (!categories[node.category]) {
-          categories[node.category] = [];
-        }
-        categories[node.category].push({ type, ...node });
-      }
-
-      let html = '';
-      for (const [category, nodes] of Object.entries(categories)) {
-        html += `<div class="node-category">`;
-        html += `<div class="category-title">${category}</div>`;
-        html += `<div class="node-grid">`;
-        
-        for (const node of nodes) {
-          const icon = node.ui?.icon || '⚙️';
-          const color = node.ui?.color || '#dddddd';
-          const colorLight = node.ui?.colorLight || '#eeeeee';
-          const label = node.ui?.paletteLabel || node.type;
-          
-          html += `
-            <div class="node-item" 
-                 onclick="addNodeToCanvas('${node.type}')" 
-                 style="--item-color: ${color}; --item-color-light: ${colorLight}"
-                 title="${node.ui?.info ? node.ui.info.substring(0, 100) : ''}">
-              <div class="node-item-icon">${icon}</div>
-              <div class="node-item-name">${label}</div>
-            </div>
-          `;
-        }
-        
-        html += `</div></div>`;
-      }
-
-      palette.innerHTML = html;
-    }
-
-    // ===================================================================
-    // NODE OPERATIONS
-    // ===================================================================
-
-    function getNodeHTML(type, data) {
-      const definition = nodeDefinitions[type];
-      if (!definition) return '';
-
-      const icon = definition.ui?.icon || '⚙️';
-      const color = definition.ui?.color || '#dddddd';
-      const colorLight = definition.ui?.colorLight || '#eeeeee';
-      
-      // Get label
-      let label = data.name;
-      if (!label && definition.ui?.label) {
-        if (typeof definition.ui.label === 'string') {
-          label = definition.ui.label;
-        } else {
-          // Try to evaluate label function (simplified)
-          label = definition.ui.paletteLabel || type;
-        }
-      }
-      if (!label) {
-        label = definition.ui?.paletteLabel || type;
-      }
-
-      return `
-        <div class="node-content">
-          <div class="node-icon-wrapper" style="--node-color: ${color}; --node-color-light: ${colorLight}; background: linear-gradient(135deg, ${color}, ${colorLight})">
-            <div class="node-icon">${icon}</div>
-          </div>
-          <div class="node-name">${label}</div>
-        </div>
-      `;
-    }
-
-    function addNodeToCanvas(type) {
-      const definition = nodeDefinitions[type];
-      if (!definition) {
-        showToast('Node type not found', 'error');
-        return;
-      }
-
-      // Get default values from definition
-      const config = {};
-      if (definition.defaults) {
-        for (const [key, defaultDef] of Object.entries(definition.defaults)) {
-          config[key] = defaultDef.value;
-        }
-      }
-
-      const data = {
-        type,
-        name: '',
-        config
-      };
-
-      const html = getNodeHTML(type, data);
-
-      const centerX = window.innerWidth / 2;
-      const centerY = window.innerHeight / 2;
-      const pos_x = centerX - 50 + (Math.random() * 100 - 50);
-      const pos_y = centerY - 50 + (Math.random() * 100 - 50);
-
-      const nodeId = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      editor.addNode(
-        nodeId, 
-        definition.inputs, 
-        definition.outputs, 
-        pos_x, 
-        pos_y, 
-        '', 
-        data, 
-        html,
-        false
-      );
-      
-      closeNodePalette();
-      showToast(`${definition.ui?.paletteLabel || type} added`, 'success');
-    }
-
-    // ===================================================================
-    // PROPERTY EDITOR - DYNAMIC RENDERING
-    // ===================================================================
-
-    function showNodeProperties(id) {
-      const panel = document.getElementById('propertiesPanel');
-      const content = document.getElementById('propertiesContent');
-      
-      const node = editor.getNodeFromId(id);
-      if (!node) return;
-
-      const definition = nodeDefinitions[node.data.type];
-      if (!definition) return;
-
-      panel.classList.add('active');
-      
-      let html = `
-        <div class="form-group">
-          <label class="form-label">Node Name</label>
-          <input type="text" 
-                 class="form-input" 
-                 id="nodeName" 
-                 value="${node.data.name || ''}" 
-                 onchange="updateNodeProperty('${id}', 'name', this.value)"
-                 placeholder="Optional display name">
-        </div>
-      `;
-
-      // Render properties from UI metadata
-      if (definition.ui?.properties) {
-        for (const prop of definition.ui.properties) {
-          html += renderPropertyField(prop, node.data.config, id);
-        }
-      }
-      
-      html += `
-        <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
-          <button class="btn btn-danger" style="width: 100%; background: var(--danger); color: white;" onclick="deleteNode('${id}')">
-            🗑 Delete Node
-          </button>
-        </div>
-      `;
-
-      content.innerHTML = html;
-    }
-
-    function renderPropertyField(prop, config, nodeId) {
-      const value = config[prop.name] ?? prop.default ?? '';
-      let html = '<div class="form-group">';
-      html += `<label class="form-label">${prop.label}${prop.required ? ' *' : ''}</label>`;
-
-      switch (prop.type) {
-        case 'text':
-        case 'url':
-        case 'email':
-          html += `
-            <input type="${prop.type}" 
-                   class="form-input" 
-                   value="${escapeHtml(value)}" 
-                   placeholder="${prop.placeholder || ''}"
-                   ${prop.required ? 'required' : ''}
-                   ${prop.pattern ? `pattern="${prop.pattern}"` : ''}
-                   onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.value)">
-          `;
-          break;
-
-        case 'number':
-          html += `
-            <input type="number" 
-                   class="form-input" 
-                   value="${value}" 
-                   ${prop.min !== undefined ? `min="${prop.min}"` : ''}
-                   ${prop.max !== undefined ? `max="${prop.max}"` : ''}
-                   ${prop.step !== undefined ? `step="${prop.step}"` : ''}
-                   placeholder="${prop.placeholder || ''}"
-                   ${prop.required ? 'required' : ''}
-                   onchange="updateNodeConfig('${nodeId}', '${prop.name}', parseFloat(this.value))">
-          `;
-          break;
-
-        case 'checkbox':
-          html += `
-            <label style="display: flex; align-items: center; cursor: pointer;">
-              <input type="checkbox" 
-                     class="form-checkbox" 
-                     ${value ? 'checked' : ''}
-                     onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.checked)">
-              <span>${prop.description || 'Enable'}</span>
-            </label>
-          `;
-          break;
-
-        case 'select':
-          html += `<select class="form-select" onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.value)">`;
-          
-          const options = prop.options || [];
-          for (const opt of options) {
-            const optValue = typeof opt === 'string' ? opt : opt.value;
-            const optLabel = typeof opt === 'string' ? opt : opt.label;
-            html += `<option value="${escapeHtml(optValue)}" ${value === optValue ? 'selected' : ''}>${escapeHtml(optLabel)}</option>`;
-          }
-          
-          html += `</select>`;
-          break;
-
-        case 'textarea':
-          html += `
-            <textarea class="form-textarea" 
-                      ${prop.rows ? `rows="${prop.rows}"` : 'style="min-height: 100px"'}
-                      placeholder="${prop.placeholder || ''}"
-                      ${prop.required ? 'required' : ''}
-                      onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.value)">${escapeHtml(value)}</textarea>
-          `;
-          break;
-
-        case 'code':
-          html += `
-            <textarea class="form-textarea" 
-                      ${prop.rows ? `rows="${prop.rows}"` : 'style="min-height: 200px; font-family: \'Courier New\', monospace; font-size: 0.875rem;"'}
-                      placeholder="${prop.placeholder || ''}"
-                      ${prop.required ? 'required' : ''}
-                      onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.value)">${escapeHtml(value)}</textarea>
-          `;
-          break;
-
-        case 'json':
-          const jsonValue = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-          html += `
-            <textarea class="form-textarea" 
-                      style="min-height: 150px; font-family: 'Courier New', monospace; font-size: 0.875rem;"
-                      placeholder="${prop.placeholder || '{}'}"
-                      onchange="updateNodeConfigJSON('${nodeId}', '${prop.name}', this.value)">${escapeHtml(jsonValue)}</textarea>
-          `;
-          break;
-
-        case 'color':
-          html += `
-            <input type="color" 
-                   class="form-input" 
-                   value="${value || '#000000'}" 
-                   onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.value)">
-          `;
-          break;
-
-        default:
-          html += `
-            <input type="text" 
-                   class="form-input" 
-                   value="${escapeHtml(value)}" 
-                   onchange="updateNodeConfig('${nodeId}', '${prop.name}', this.value)">
-          `;
-      }
-
-      if (prop.description && prop.type !== 'checkbox') {
-        html += `<div class="field-description">${prop.description}</div>`;
-      }
-
-      html += '</div>';
-      return html;
-    }
-
-    function updateNodeConfigJSON(id, key, value) {
-      try {
-        const parsed = JSON.parse(value);
-        updateNodeConfig(id, key, parsed);
-      } catch (err) {
-        showToast('Invalid JSON', 'error');
-      }
-    }
-
-    function escapeHtml(text) {
-      const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-      };
-      return String(text).replace(/[&<>"']/g, m => map[m]);
-    }
-
-    // ===================================================================
-    // NODE UPDATE FUNCTIONS
-    // ===================================================================
-
-    function updateNodeProperty(id, key, value) {
-      const node = editor.getNodeFromId(id);
-      if (!node) return;
-      
-      node.data[key] = value;
-      editor.updateNodeDataFromId(id, node.data);
-      updateNodeUI(id);
-    }
-
-    function updateNodeConfig(id, key, value) {
-      const node = editor.getNodeFromId(id);
-      if (!node) return;
-      
-      if (!node.data.config) node.data.config = {};
-      node.data.config[key] = value;
-      editor.updateNodeDataFromId(id, node.data);
-      updateNodeUI(id);
-    }
-
-    function updateNodeUI(id) {
-      const nodeInfo = editor.drawflow.drawflow.Home.data[id];
-      if (!nodeInfo) return;
-
-      const data = nodeInfo.data;
-      const type = data.type;
-      const html = getNodeHTML(type, data);
-
-      const nodeElement = document.getElementById(`node-${id}`);
-      if (nodeElement) {
-        const contentDiv = nodeElement.querySelector('.drawflow_content_node');
-        if (contentDiv) {
-          contentDiv.innerHTML = html;
-        }
-      }
-
-      editor.updateNodeDataFromId(id, data);
-    }
-
-    function deleteNode(id) {
-      if (!confirm('Delete this node?')) return;
-      editor.removeNodeId(id);
-      closeProperties();
-      showToast('Node deleted', 'success');
-    }
-
-    function closeProperties() {
-      document.getElementById('propertiesPanel').classList.remove('active');
-    }
-
-    // ===================================================================
-    // FLOW MANAGEMENT
-    // ===================================================================
-
-    async function loadFlows() {
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows`);
-        const data = await response.json();
-        flows = data.flows || [];
-        renderFlowsList();
-      } catch (err) {
-        console.error('Load error:', err);
-        document.getElementById('flowsContainer').innerHTML = `
-          <div class="empty-state">
-            <div class="empty-icon">⚠️</div>
-            <h3>Failed to load flows</h3>
-            <p style="margin-top: 0.5rem; font-size: 0.875rem;">${err.message}</p>
-          </div>
-        `;
-      }
-    }
-
-    function renderFlowsList() {
-      const container = document.getElementById('flowsContainer');
-      
-      if (flows.length === 0) {
-        container.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-icon">📦</div>
-            <h3>No flows yet</h3>
-            <p style="margin-top: 0.5rem; font-size: 0.875rem;">Create your first flow to get started</p>
-          </div>
-        `;
-        return;
-      }
-
-      container.innerHTML = flows.map(flow => {
-        const config = typeof flow.config === 'string' ? JSON.parse(flow.config) : flow.config;
-        const nodeCount = config?.nodes?.length || 0;
-        
-        return `
-          <div class="flow-card">
-            <div class="flow-info">
-              <div class="flow-name">
-                <span>${flow.name}</span>
-                <span class="badge ${flow.enabled ? 'badge-success' : 'badge-danger'}">
-                  ${flow.enabled ? '● Active' : '○ Disabled'}
-                </span>
-              </div>
-              ${flow.description ? `<div class="flow-desc">${flow.description}</div>` : ''}
-              <div class="flow-meta">
-                <span>🔷 ${nodeCount} nodes</span>
-                <span>🆔 ${flow.id}</span>
-              </div>
-            </div>
-            <div class="flow-actions">
-              <button class="action-btn primary" onclick="openFlowCanvas('${flow.id}')" title="Open">
-                📊
-              </button>
-              <button class="action-btn" onclick="duplicateFlow('${flow.id}')" title="Duplicate">
-                📋
-              </button>
-              <button class="action-btn ${flow.enabled ? '' : 'primary'}" onclick="toggleFlowEnabled('${flow.id}', ${!flow.enabled})" title="${flow.enabled ? 'Disable' : 'Enable'}">
-                ${flow.enabled ? '⏸' : '▶'}
-              </button>
-              <button class="action-btn danger" onclick="deleteFlow('${flow.id}')" title="Delete">
-                🗑
-              </button>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    function showFlowsList() {
-      document.getElementById('flowsView').classList.add('active');
-      document.getElementById('canvasView').classList.remove('active');
-      document.getElementById('backBtn').classList.remove('visible');
-      document.getElementById('flowTitle').textContent = '';
-      document.getElementById('headerActions').innerHTML = `
-        <button class="btn btn-primary" onclick="showNewFlowModal()">
-          <span>+</span>
-          <span>New Flow</span>
-        </button>
-      `;
-      closeProperties();
-      closeNodePalette();
-      currentFlow = null;
-    }
-
-    async function openFlowCanvas(flowId) {
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
-        const data = await response.json();
-        
-        currentFlow = data;
-        document.getElementById('flowsView').classList.remove('active');
-        document.getElementById('canvasView').classList.add('active');
-        document.getElementById('backBtn').classList.add('visible');
-        document.getElementById('flowTitle').textContent = data.name;
-        document.getElementById('headerActions').innerHTML = `
-          <button class="btn btn-success" onclick="saveFlow()">
-            <span>💾</span>
-            <span>Save</span>
-          </button>
-        `;
-        
-        if (!editor) {
-          initDrawflow();
-        }
-        
-        importFlow(data);
-      } catch (err) {
-        console.error('Load flow error:', err);
-        showToast('Failed to load flow', 'error');
-      }
-    }
-
-    function initDrawflow() {
-      const container = document.getElementById('drawflow');
-      editor = new Drawflow(container);
-      editor.reroute = true;
-      editor.start();
-
-      editor.on('nodeSelected', (id) => {
-        showNodeProperties(id);
-      });
-
-      editor.on('nodeUnselected', () => {
-        closeProperties();
-      });
-    }
-
-    function exportFlow() {
-      const drawflowData = editor.export();
-      const nodes = [];
-
-      for (const [id, node] of Object.entries(drawflowData.drawflow.Home.data)) {
-        const definition = nodeDefinitions[node.data.type];
-        const nodeData = {
-          id: id,
-          type: node.data.type,
-          name: node.data.name || (definition?.ui?.paletteLabel || node.data.type),
-          ...node.data.config,
-          x: node.pos_x,
-          y: node.pos_y,
-          wires: []
-        };
-
-        const outputCount = definition ? definition.outputs : 1;
-        const wires = Array(outputCount).fill(null).map(() => []);
-
-        for (const [outputKey, output] of Object.entries(node.outputs || {})) {
-          const outputIndex = parseInt(outputKey.replace('output_', '')) - 1;
-          if (outputIndex >= 0 && outputIndex < wires.length) {
-            wires[outputIndex] = output.connections.map(conn => conn.node);
-          }
-        }
-
-        nodeData.wires = wires;
-        nodes.push(nodeData);
-      }
-
-      return {
-        id: currentFlow?.id || 'new-flow',
-        name: currentFlow?.name || 'New Flow',
-        description: currentFlow?.description || '',
-        version: '1.0.0',
-        nodes
-      };
-    }
-
-    function importFlow(flow) {
-      if (!editor) return;
-      
-      editor.clear();
-
-      const config = typeof flow.config === 'string' ? JSON.parse(flow.config) : flow.config;
-      
-      if (!config.nodes || config.nodes.length === 0) {
-        showToast('Flow loaded (empty)', 'info');
-        return;
-      }
-
-      config.nodes.forEach(node => {
-        const definition = nodeDefinitions[node.type];
-        if (!definition) {
-          console.warn(`Unknown node type: ${node.type}`);
-          return;
-        }
-
-        const data = {
-          type: node.type,
-          name: node.name || (definition.ui?.paletteLabel || node.type),
-          config: { ...node }
-        };
-
-        const html = getNodeHTML(node.type, data);
-
-        const posX = node.x || 100;
-        const posY = node.y || 100;
-
-        editor.addNode(
-          node.id, 
-          definition.inputs, 
-          definition.outputs, 
-          posX, 
-          posY, 
-          '', 
-          data, 
-          html,
-          false
-        );
-      });
-
-      config.nodes.forEach(node => {
-        if (!node.wires || !Array.isArray(node.wires)) return;
-
-        node.wires.forEach((wireGroup, outputIndex) => {
-          if (!Array.isArray(wireGroup)) return;
-          
-          wireGroup.forEach(targetId => {
-            const targetNode = editor.getNodeFromId(targetId);
-            if (targetNode) {
-              try {
-                editor.addConnection(
-                  node.id, 
-                  targetId, 
-                  `output_${outputIndex + 1}`, 
-                  'input_1'
-                );
-              } catch (err) {
-                console.warn(`Failed to create connection from ${node.id} to ${targetId}:`, err);
-              }
-            }
-          });
-        });
-      });
-
-      showToast(`Flow loaded: ${config.nodes.length} nodes`, 'success');
-    }
-
-    async function saveFlow() {
-      const flowData = exportFlow();
-
-      if (!flowData.id || !flowData.name) {
-        showToast('Set flow ID and name first', 'error');
-        return;
-      }
-
-      try {
-        const method = currentFlow ? 'PUT' : 'POST';
-        const url = currentFlow 
-          ? `${API_BASE}/admin/flows/${currentFlow.id}`
-          : `${API_BASE}/admin/flows`;
-
-        const response = await fetch(url, {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(flowData)
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          currentFlow = flowData;
-          showToast('Flow saved successfully', 'success');
-        } else {
-          showToast(data.error || 'Save failed', 'error');
-        }
-      } catch (err) {
-        console.error('Save error:', err);
-        showToast('Error saving flow', 'error');
-      }
-    }
-
-    // ===================================================================
-    // FLOW ACTIONS
-    // ===================================================================
-
-    function showNewFlowModal() {
-      document.getElementById('newFlowModal').classList.add('active');
-    }
-
-    async function createNewFlow() {
-      const id = document.getElementById('newFlowId').value.trim();
-      const name = document.getElementById('newFlowName').value.trim();
-      const description = document.getElementById('newFlowDesc').value.trim();
-      
-      if (!id || !name) {
-        showToast('ID and Name required', 'error');
-        return;
-      }
-      
-      const flowConfig = { id, name, description, nodes: [] };
-      
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(flowConfig)
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          closeModal('newFlowModal');
-          showToast('Flow created', 'success');
-          await loadFlows();
-          openFlowCanvas(id);
-        } else {
-          showToast(data.error || 'Failed', 'error');
-        }
-      } catch (err) {
-        showToast('Error creating flow', 'error');
-      }
-    }
-
-    async function duplicateFlow(flowId) {
-      const flow = flows.find(f => f.id === flowId);
-      if (!flow) return;
-      
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
-        const data = await response.json();
-        
-        const newId = flow.id + '-copy-' + Date.now();
-        const newFlow = {
-          ...data,
-          id: newId,
-          name: flow.name + ' (Copy)'
-        };
-        
-        const createResponse = await fetch(`${API_BASE}/admin/flows`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newFlow)
-        });
-        
-        if (createResponse.ok) {
-          showToast('Flow duplicated', 'success');
-          loadFlows();
-        }
-      } catch (err) {
-        showToast('Duplication failed', 'error');
-      }
-    }
-
-    async function toggleFlowEnabled(flowId, enable) {
-      try {
-        const action = enable ? 'enable' : 'disable';
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}/${action}`, {
-          method: 'POST'
-        });
-        
-        if (response.ok) {
-          showToast(`Flow ${action}d`, 'success');
-          loadFlows();
-        }
-      } catch (err) {
-        showToast('Toggle failed', 'error');
-      }
-    }
-
-    async function deleteFlow(flowId) {
-      const flow = flows.find(f => f.id === flowId);
-      if (!confirm(`Delete "${flow?.name}"?`)) return;
-      
-      try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`, {
-          method: 'DELETE'
-        });
-        
-        if (response.ok) {
-          showToast('Flow deleted', 'success');
-          loadFlows();
-        }
-      } catch (err) {
-        showToast('Delete failed', 'error');
-      }
-    }
-
-    // ===================================================================
-    // UI HELPERS
-    // ===================================================================
-
-    function showNodePalette() {
-      document.getElementById('nodePalette').classList.add('active');
-    }
-
-    function closeNodePalette() {
-      document.getElementById('nodePalette').classList.remove('active');
-    }
-
-    function closeModal(id) {
-      document.getElementById(id).classList.remove('active');
-    }
-
-    function showToast(message, type = 'info') {
-      const existing = document.querySelector('.toast');
-      if (existing) existing.remove();
-
-      const icons = { success: '✓', error: '✕', info: 'ℹ' };
-
-      const toast = document.createElement('div');
-      toast.className = `toast ${type}`;
-      toast.innerHTML = `
-        <div class="toast-icon">${icons[type] || 'ℹ'}</div>
-        <div class="toast-message">${message}</div>
-      `;
-
-      document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), 3000);
-    }
-
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's' && currentFlow) {
-        e.preventDefault();
-        saveFlow();
-      }
-    });
-  </script>
+  
+  <!-- Application Scripts -->
+  <script src="js/config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/nodes.js"></script>
+  <script src="js/canvas.js"></script>
+  <script src="js/flows.js"></script>
+  <script src="js/validation.js"></script>
+  <script src="js/shortcuts.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
