@@ -1,375 +1,660 @@
 
-// app.js
-const API_BASE_URL = 'https://rednox.ubixsnow08.workers.dev';  // Worker address for backend communication
+// ===================================================================
+// RedNox Admin UI - Main Application
+// ===================================================================
 
-const { createApp } = Vue;
+const API_BASE = window.location.origin;
 
-createApp({
-  data() {
-    return {
-      currentView: 'dashboard',
-      currentFlow: null,
-      mobileMenuOpen: false,
-      contextMenu: { show: false, x: 0, y: 0 },
-      toasts: [],
-      apiConnected: true,
-      flows: [],
-      routes: [],
-      stats: { flows: 0, routes: 0, logs: 0, nodes: 0 },
-      loading: false,
-      saving: false,
-      showCreateFlowModal: false,
-      showImportModal: false,
-      showConfirmDelete: false,
-      confirmFlow: null,
-      newFlowName: '',
-      newFlowDesc: '',
-      flowSearch: '',
-      flowFilter: 'all',
-      nodePaletteSearch: '',
-      editor: null,
-      editorZoom: 1,
-      selectedNode: null,
-      nodeTypes: [],
-      apiBase: API_BASE_URL
-    };
-  },
-  computed: {
-    filteredFlows() {
-      let flows = this.flows;
-      if (this.flowSearch) {
-        flows = flows.filter(f => f.name.toLowerCase().includes(this.flowSearch.toLowerCase()));
-      }
-      if (this.flowFilter === 'enabled') {
-        flows = flows.filter(f => f.enabled);
-      } else if (this.flowFilter === 'disabled') {
-        flows = flows.filter(f => !f.enabled);
-      }
-      return flows;
-    },
-    filteredNodeCategories() {
-      const categories = new Set(this.nodeTypes
-        .filter(n => n.ui.paletteLabel.toLowerCase().includes(this.nodePaletteSearch.toLowerCase()))
-        .map(n => n.category)
-      );
-      return Array.from(categories);
-    }
-  },
-  methods: {
-    navigateTo(view) {
-      this.currentView = view;
-      this.mobileMenuOpen = false;
-      if (view === 'dashboard') this.loadDashboard();
-      if (view === 'flows') this.loadFlows();
-      if (view === 'routes') this.loadRoutes();
-    },
-    loadDashboard() {
-      this.loading = true;
-      Promise.all([
-        fetch(API_BASE_URL + '/admin/stats').then(r => r.json()).then(d => this.stats = d),
-        this.loadFlows()
-      ]).finally(() => this.loading = false);
-    },
-    loadFlows() {
-      fetch(API_BASE_URL + '/admin/flows').then(r => r.json()).then(d => this.flows = d.flows);
-    },
-    loadRoutes() {
-      fetch(API_BASE_URL + '/admin/routes').then(r => r.json()).then(d => this.routes = d.routes);
-    },
-    initializeDatabase() {
-      this.loading = true;
-      fetch(API_BASE_URL + '/admin/init', { method: 'POST' }).then(r => r.json()).then(d => {
-        this.addToast('success', 'Database initialized');
-        this.loadDashboard();
-      }).catch(e => this.addToast('error', 'Initialization failed', e.message)).finally(() => this.loading = false);
-    },
-    refreshAll() {
-      this.loadDashboard();
-    },
-    formatDate(date) {
-      return new Date(date).toLocaleString();
-    },
-    getFlowNodeCount(flow) {
-      return flow.nodes ? flow.nodes.length : 0;
-    },
-    editFlow(flow) {
-      this.currentFlow = { ...flow };
-      this.loadFlowEditor(flow.id);
-    },
-    loadFlowEditor(flowId) {
-      this.loading = true;
-      fetch(API_BASE_URL + `/admin/flows/${flowId}`).then(r => r.json()).then(d => {
-        this.currentFlow = d;
-        this.initEditor();
-        // Fix: Convert backend config (object with nodes array) to Drawflow format
-        const drawflowData = {
-          drawflow: {
-            Home: {
-              data: d.nodes.reduce((acc, node) => {
-                acc[node.id] = {
-                  id: node.id,
-                  name: node.type, // Drawflow uses 'name' for type
-                  data: node, // Store full node data
-                  class: '',
-                  html: this.getNodeHtml(this.nodeTypes.find(nt => nt.type === node.type) || {}),
-                  typenode: false,
-                  inputs: Object.fromEntries(Array.from({ length: node.inputs || 0 }, (_, i) => [`input_${i+1}`, { connections: [] }])),
-                  outputs: Object.fromEntries(Array.from({ length: node.outputs || 0 }, (_, i) => [`output_${i+1}`, { connections: [] }])),
-                  pos_x: node.x || 0,
-                  pos_y: node.y || 0
-                };
-                return acc;
-              }, {})
+// State
+const state = {
+    flows: [],
+    routes: [],
+    nodes: [],
+    categories: [],
+    currentFlow: null,
+    editor: null,
+    selectedNode: null
+};
+
+// ===================================================================
+// Initialization
+// ===================================================================
+
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('RedNox Admin UI initializing...');
+    
+    // Setup navigation
+    setupNavigation();
+    
+    // Setup event listeners
+    setupEventListeners();
+    
+    // Initialize database
+    await initializeDatabase();
+    
+    // Load initial data
+    await loadFlows();
+    await loadNodes();
+    
+    // Setup Drawflow
+    setupDrawflow();
+});
+
+// ===================================================================
+// Navigation
+// ===================================================================
+
+function setupNavigation() {
+    const navBtns = document.querySelectorAll('.nav-btn');
+    const views = document.querySelectorAll('.view');
+    
+    navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const viewId = btn.dataset.view + 'View';
+            
+            // Update nav buttons
+            navBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            // Update views
+            views.forEach(v => v.classList.remove('active'));
+            document.getElementById(viewId)?.classList.add('active');
+            
+            // Load data for view
+            if (btn.dataset.view === 'routes') {
+                loadRoutes();
             }
-          }
-        };
-        // Restore connections (assuming backend nodes have 'wires' or similar; adjust based on actual data)
-        Object.values(drawflowData.drawflow.Home.data).forEach(node => {
-          // If backend node has 'wires' array for outputs (e.g., node.wires = [[targetId], ...] for multi-output)
-          if (node.data.wires) {
-            node.data.wires.forEach((outConns, outIdx) => {
-              if (outConns) {
-                node.outputs[`output_${outIdx + 1}`].connections = outConns.map(targetId => ({
-                  node: targetId,
-                  output: 'input_1'  // Assume single input; adjust if multi-input
-                }));
-              }
+        });
+    });
+}
+
+// ===================================================================
+// Event Listeners
+// ===================================================================
+
+function setupEventListeners() {
+    // New flow button
+    document.getElementById('newFlowBtn').addEventListener('click', () => {
+        openFlowEditor(null);
+    });
+    
+    // Refresh button
+    document.getElementById('refreshBtn').addEventListener('click', async () => {
+        await loadFlows();
+        showToast('Data refreshed', 'success');
+    });
+    
+    // Editor close button
+    document.getElementById('closeEditorBtn').addEventListener('click', () => {
+        closeFlowEditor();
+    });
+    
+    // Save flow button
+    document.getElementById('saveFlowBtn').addEventListener('click', async () => {
+        await saveCurrentFlow();
+    });
+    
+    // Validate button
+    document.getElementById('validateBtn').addEventListener('click', () => {
+        validateCurrentFlow();
+    });
+    
+    // Confirm modal
+    document.getElementById('confirmCancelBtn').addEventListener('click', () => {
+        closeConfirmModal();
+    });
+}
+
+// ===================================================================
+// Database Initialization
+// ===================================================================
+
+async function initializeDatabase() {
+    try {
+        // Check if database is initialized by trying to fetch flows
+        const response = await fetch(`${API_BASE}/admin/flows`);
+        
+        if (!response.ok) {
+            // Database might not be initialized, try to initialize
+            console.log('Database not initialized, attempting initialization...');
+            
+            const initResponse = await fetch(`${API_BASE}/admin/init`, {
+                method: 'POST'
             });
-          }
-        });
-        this.editor.import(drawflowData);
-      }).finally(() => this.loading = false);
-    },
-    closeEditor() {
-      this.currentFlow = null;
-      this.selectedNode = null;
-      this.editor = null;
-    },
-    initEditor() {
-      const container = document.getElementById('drawflow');
-      if (!container) return;
-      this.editor = new Drawflow(container);
-      this.editor.reroute = true;
-      this.editor.reroute_fix_curvature = true;
-      this.editor.force_first_input = false;
-      this.editor.zoom_max = 2;
-      this.editor.zoom_min = 0.5;
-      this.editor.on('nodeSelected', id => {
-        this.selectedNode = this.editor.getNodeFromId(id).data; // Access full data
-      });
-      this.editor.on('nodeUnselected', () => {
-        this.selectedNode = null;
-      });
-      this.editor.on('zoom', zoom => {
-        this.editorZoom = zoom;
-      });
-      this.editor.start();
-    },
-    addNodeToCanvas(node) {
-      const html = this.getNodeHtml(node);
-      const pos_x = (this.editor.precanvas.clientWidth / 2) - this.editor.container.getBoundingClientRect().x;
-      const pos_y = (this.editor.precanvas.clientHeight / 2) - this.editor.container.getBoundingClientRect().y;
-      const data = { ...node.defaults };
-      const nodeId = this.editor.addNode(node.type, node.inputs, node.outputs, pos_x, pos_y, '', data, html, false);
-      // Update pos in data for save
-      const addedNode = this.editor.getNodeFromId(nodeId);
-      addedNode.data.x = addedNode.pos_x;
-      addedNode.data.y = addedNode.pos_y;
-    },
-    getNodeHtml(node) {
-      return `
-        <div class="node-content">
-          <div class="node-header">${node.category}</div>
-          <div class="node-title">
-            <span class="node-icon">${node.ui.icon}</span>
-            ${node.ui.paletteLabel}
-          </div>
-          <div class="node-subtitle">${node.ui.info || ''}</div>
-        </div>
-      `;
-    },
-    getNodeIcon(type) {
-      return '📦'; // Default
-    },
-    saveFlow() {
-      this.saving = true;
-      const exportData = this.editor.export();
-      // Fix: Convert Drawflow export to backend format (nodes array)
-      const nodes = Object.values(exportData.drawflow.Home.data).map(node => {
-        const backendNode = { ...node.data }; // Full node data
-        backendNode.id = node.id;
-        backendNode.type = node.name; // Type from Drawflow 'name'
-        backendNode.x = node.pos_x;
-        backendNode.y = node.pos_y;
-        backendNode.inputs = Object.keys(node.inputs).length;
-        backendNode.outputs = Object.keys(node.outputs).length;
-        // Save connections (e.g., as 'wires' array for outputs)
-        backendNode.wires = Object.values(node.outputs).map(out => out.connections.map(conn => conn.node));
-        return backendNode;
-      });
-      const data = {
-        name: this.currentFlow.name,
-        description: this.currentFlow.description,
-        nodes: nodes
-      };
-      fetch(API_BASE_URL + `/admin/flows/${this.currentFlow.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      }).then(r => r.json()).then(d => {
-        this.addToast('success', 'Flow saved');
-      }).catch(e => this.addToast('error', 'Save failed', e.message)).finally(() => this.saving = false);
-    },
-    exportFlow() {
-      const exportData = this.editor.export();
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${this.currentFlow.name}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    },
-    handleImportFile(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = ev => {
-        try {
-          const data = JSON.parse(ev.target.result);
-          this.editor.import(data); // Assumes Drawflow format
-          this.addToast('success', 'Flow imported');
-        } catch (err) {
-          this.addToast('error', 'Import failed', err.message);
+            
+            if (initResponse.ok) {
+                showToast('Database initialized successfully', 'success');
+            } else {
+                const error = await initResponse.json();
+                showToast(`Database initialization failed: ${error.error}`, 'error');
+            }
         }
-        this.showImportModal = false;
-      };
-      reader.readAsText(file);
-    },
-    validateCurrentFlow() {
-      this.addToast('info', 'Validation', 'Flow is valid (client-side check)');
-    },
-    zoomIn() {
-      this.editor.zoom_in();
-      this.editorZoom = this.editor.zoom;
-    },
-    zoomOut() {
-      this.editor.zoom_out();
-      this.editorZoom = this.editor.zoom;
-    },
-    zoomReset() {
-      this.editor.zoom_reset();
-      this.editorZoom = 1;
-    },
-    fitToScreen() {
-      this.editor.zoom_reset();
-    },
-    showContextMenu(e) {
-      e.preventDefault();
-      this.contextMenu = { show: true, x: e.clientX, y: e.clientY };
-    },
-    pasteNode() {
-      this.addToast('info', 'Paste', 'Paste not implemented');
-    },
-    clearCanvas() {
-      this.editor.clear();
-    },
-    getConnectionCount() {
-      if (!this.editor) return 0;
-      return Object.values(this.editor.drawflow.drawflow.Home.data).reduce((acc, node) => {
-        return acc + Object.values(node.outputs).reduce((a, o) => a + o.connections.length, 0);
-      }, 0);
-    },
-    deleteSelectedNode() {
-      if (this.selectedNode) {
-        this.editor.removeNodeId(`node_${this.selectedNode.id}`);
-        this.selectedNode = null;
-      }
-    },
-    addToast(type, title, message = '') {
-      const id = Date.now();
-      this.toasts.push({ id, type, title, message });
-      setTimeout(() => this.removeToast(id), 5000);
-    },
-    removeToast(id) {
-      this.toasts = this.toasts.filter(t => t.id !== id);
-    },
-    getToastIcon(type) {
-      return { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' }[type] || 'ℹ️';
-    },
-    createFlow() {
-      if (!this.newFlowName) return;
-      this.loading = true;
-      fetch(API_BASE_URL + '/admin/flows', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: this.newFlowName, description: this.newFlowDesc, nodes: [] })
-      }).then(r => r.json()).then(d => {
-        this.flows.push(d);
-        this.showCreateFlowModal = false;
-        this.editFlow(d);
-        this.newFlowName = '';
-        this.newFlowDesc = '';
-        this.addToast('success', 'Flow created');
-      }).catch(e => this.addToast('error', 'Creation failed', e.message)).finally(() => this.loading = false);
-    },
-    duplicateFlow(flow) {
-      this.loading = true;
-      fetch(API_BASE_URL + `/admin/flows/${flow.id}`).then(r => r.json()).then(full => {
-        full.name += ' Copy';
-        delete full.id;
-        fetch(API_BASE_URL + '/admin/flows', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(full)
-        }).then(r => r.json()).then(d => {
-          this.flows.push(d);
-          this.addToast('success', 'Flow duplicated');
-        });
-      }).finally(() => this.loading = false);
-    },
-    toggleFlowStatus(flow) {
-      const action = flow.enabled ? 'disable' : 'enable';
-      fetch(API_BASE_URL + `/admin/flows/\( {flow.id}/ \){action}`, { method: 'POST' }).then(r => r.json()).then(d => {
-        flow.enabled = !flow.enabled;
-        this.addToast('success', `Flow ${action}d`);
-      }).catch(e => this.addToast('error', 'Toggle failed', e.message));
-    },
-    confirmDeleteFlow(flow) {
-      this.confirmFlow = flow;
-      this.showConfirmDelete = true;
-    },
-    deleteFlow(flow) {
-      fetch(API_BASE_URL + `/admin/flows/${flow.id}`, { method: 'DELETE' }).then(r => {
-        if (r.ok) {
-          this.flows = this.flows.filter(f => f.id !== flow.id);
-          this.addToast('success', 'Flow deleted');
-        }
-      }).catch(e => this.addToast('error', 'Delete failed', e.message)).finally(() => this.showConfirmDelete = false);
-    },
-    loadNodeTypes() {
-      fetch(API_BASE_URL + '/admin/nodes').then(r => r.json()).then(d => this.nodeTypes = d);
-    },
-    getNodesByCategory(category) {
-      return this.nodeTypes.filter(n => n.category === category && n.ui.paletteLabel.toLowerCase().includes(this.nodePaletteSearch.toLowerCase()));
-    },
-    addRule() {
-      if (!this.selectedNode.rules) this.selectedNode.rules = [];
-      this.selectedNode.rules.push({ t: 'eq', v: '' });
-    },
-    removeRule(index) {
-      this.selectedNode.rules.splice(index, 1);
-    },
-    addChangeRule() {
-      if (!this.selectedNode.rules) this.selectedNode.rules = [];
-      this.selectedNode.rules.push({ t: 'set', p: '', to: '' });
-    },
-    removeChangeRule(index) {
-      this.selectedNode.rules.splice(index, 1);
+    } catch (error) {
+        console.error('Error checking database:', error);
+        showToast('Error connecting to server', 'error');
     }
-  },
-  mounted() {
-    this.loadNodeTypes();
-    this.loadDashboard();
-  }
-}).mount('#app');
+}
+
+// ===================================================================
+// Data Loading
+// ===================================================================
+
+async function loadFlows() {
+    try {
+        const response = await fetch(`${API_BASE}/admin/flows`);
+        const data = await response.json();
+        
+        state.flows = data.flows || [];
+        renderFlows();
+        updateStats();
+    } catch (error) {
+        console.error('Error loading flows:', error);
+        showToast('Error loading flows', 'error');
+    }
+}
+
+async function loadRoutes() {
+    try {
+        const response = await fetch(`${API_BASE}/admin/routes`);
+        const data = await response.json();
+        
+        state.routes = data.routes || [];
+        renderRoutes();
+    } catch (error) {
+        console.error('Error loading routes:', error);
+        showToast('Error loading routes', 'error');
+    }
+}
+
+async function loadNodes() {
+    try {
+        const response = await fetch(`${API_BASE}/admin/nodes/categories`);
+        const data = await response.json();
+        
+        state.categories = data.categories || [];
+        renderNodes();
+        renderNodePalette();
+    } catch (error) {
+        console.error('Error loading nodes:', error);
+        showToast('Error loading nodes', 'error');
+    }
+}
+
+// ===================================================================
+// Rendering
+// ===================================================================
+
+function renderFlows() {
+    const grid = document.getElementById('flowsGrid');
+    
+    if (state.flows.length === 0) {
+        grid.innerHTML = '<div class="loading">No flows yet. Create your first flow!</div>';
+        return;
+    }
+    
+    grid.innerHTML = state.flows.map(flow => `
+        <div class="flow-card" onclick="openFlowEditor('${flow.id}')">
+            <div class="flow-card-header">
+                <div>
+                    <div class="flow-card-title">${escapeHtml(flow.name)}</div>
+                    <div class="flow-card-description">${escapeHtml(flow.description || 'No description')}</div>
+                </div>
+                <span class="flow-badge ${flow.enabled ? 'enabled' : 'disabled'}">
+                    ${flow.enabled ? 'Active' : 'Inactive'}
+                </span>
+            </div>
+            <div class="flow-card-meta">
+                <span>Created: ${formatDate(flow.created_at)}</span>
+            </div>
+            <div class="flow-card-actions" onclick="event.stopPropagation()">
+                <button class="btn-secondary" onclick="toggleFlow('${flow.id}', ${!flow.enabled})">
+                    ${flow.enabled ? 'Disable' : 'Enable'}
+                </button>
+                <button class="btn-secondary" onclick="duplicateFlow('${flow.id}')">Duplicate</button>
+                <button class="btn-danger" onclick="confirmDeleteFlow('${flow.id}')">Delete</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderRoutes() {
+    const list = document.getElementById('routesList');
+    
+    if (state.routes.length === 0) {
+        list.innerHTML = '<div class="loading">No routes configured</div>';
+        return;
+    }
+    
+    list.innerHTML = state.routes.map(route => `
+        <div class="route-card">
+            <div class="route-header">
+                <span class="route-method ${route.method}">${route.method}</span>
+                <code class="route-path">${escapeHtml(route.fullUrl)}</code>
+            </div>
+            <div class="route-flow">Flow: ${escapeHtml(route.flow_name)}</div>
+        </div>
+    `).join('');
+}
+
+function renderNodes() {
+    const container = document.getElementById('nodesCategories');
+    
+    if (state.categories.length === 0) {
+        container.innerHTML = '<div class="loading">No nodes available</div>';
+        return;
+    }
+    
+    container.innerHTML = state.categories.map(category => `
+        <div class="node-category">
+            <div class="node-category-title">
+                ${escapeHtml(category.name)}
+                <span class="node-count">${category.count}</span>
+            </div>
+            <div class="nodes-grid">
+                ${category.nodes.map(node => `
+                    <div class="node-item">
+                        <div class="node-icon">${node.icon || '📦'}</div>
+                        <div class="node-label">${escapeHtml(node.label)}</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderNodePalette() {
+    const palette = document.getElementById('paletteNodes');
+    
+    palette.innerHTML = state.categories.map(category => `
+        <div class="palette-category">
+            <div class="palette-category-title">${escapeHtml(category.name)}</div>
+            ${category.nodes.map(node => `
+                <div class="palette-node" draggable="true" data-node-type="${node.type}">
+                    ${node.icon || '📦'} ${escapeHtml(node.label)}
+                </div>
+            `).join('')}
+        </div>
+    `).join('');
+    
+    // Add drag event listeners
+    document.querySelectorAll('.palette-node').forEach(node => {
+        node.addEventListener('dragstart', handleDragStart);
+    });
+}
+
+function updateStats() {
+    const total = state.flows.length;
+    const active = state.flows.filter(f => f.enabled).length;
+    
+    const stats = document.getElementById('flowStats');
+    const statValues = stats.querySelectorAll('.stat-value');
+    statValues[0].textContent = total;
+    statValues[1].textContent = active;
+}
+
+// ===================================================================
+// Flow Editor
+// ===================================================================
+
+function setupDrawflow() {
+    const container = document.getElementById('drawflow');
+    state.editor = new Drawflow(container);
+    state.editor.reroute = true;
+    state.editor.start();
+    
+    // Editor events
+    state.editor.on('nodeSelected', (nodeId) => {
+        state.selectedNode = nodeId;
+        showNodeProperties(nodeId);
+    });
+    
+    state.editor.on('nodeUnselected', () => {
+        state.selectedNode = null;
+        clearNodeProperties();
+    });
+}
+
+async function openFlowEditor(flowId) {
+    const modal = document.getElementById('editorModal');
+    modal.classList.add('active');
+    
+    if (flowId) {
+        // Load existing flow
+        try {
+            const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+            const flow = await response.json();
+            
+            state.currentFlow = flow;
+            document.getElementById('flowName').value = flow.name;
+            
+            // Load flow into editor
+            if (flow.config && flow.config.nodes) {
+                loadFlowIntoEditor(flow.config);
+            }
+        } catch (error) {
+            console.error('Error loading flow:', error);
+            showToast('Error loading flow', 'error');
+        }
+    } else {
+        // New flow
+        state.currentFlow = {
+            id: generateId(),
+            name: 'New Flow',
+            nodes: []
+        };
+        document.getElementById('flowName').value = state.currentFlow.name;
+        state.editor.clear();
+    }
+}
+
+function closeFlowEditor() {
+    const modal = document.getElementById('editorModal');
+    modal.classList.remove('active');
+    state.currentFlow = null;
+    state.editor.clear();
+}
+
+function loadFlowIntoEditor(config) {
+    state.editor.clear();
+    
+    if (!config.nodes || config.nodes.length === 0) {
+        return;
+    }
+    
+    // Add nodes to editor
+    config.nodes.forEach(node => {
+        const html = createNodeHTML(node);
+        const inputs = node.inputs || 1;
+        const outputs = node.outputs || 1;
+        const x = node.x || 100;
+        const y = node.y || 100;
+        
+        state.editor.addNode(
+            node.type,
+            inputs,
+            outputs,
+            x,
+            y,
+            node.type,
+            node,
+            html
+        );
+    });
+}
+
+function createNodeHTML(node) {
+    return `
+        <div class="node-content">
+            <div class="node-header">${escapeHtml(node.type)}</div>
+            <div class="node-body">
+                ${node.name ? `<div>${escapeHtml(node.name)}</div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+async function saveCurrentFlow() {
+    if (!state.currentFlow) return;
+    
+    const flowName = document.getElementById('flowName').value;
+    const exportData = state.editor.export();
+    
+    const flowData = {
+        id: state.currentFlow.id,
+        name: flowName,
+        description: state.currentFlow.description || '',
+        nodes: Object.values(exportData.drawflow.Home.data).map(node => ({
+            id: node.id,
+            type: node.name,
+            x: node.pos_x,
+            y: node.pos_y,
+            ...node.data
+        }))
+    };
+    
+    try {
+        const url = state.currentFlow.created_at
+            ? `${API_BASE}/admin/flows/${state.currentFlow.id}`
+            : `${API_BASE}/admin/flows`;
+        
+        const method = state.currentFlow.created_at ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(flowData)
+        });
+        
+        if (response.ok) {
+            showToast('Flow saved successfully', 'success');
+            await loadFlows();
+            closeFlowEditor();
+        } else {
+            const error = await response.json();
+            showToast(`Error: ${error.error}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error saving flow:', error);
+        showToast('Error saving flow', 'error');
+    }
+}
+
+function validateCurrentFlow() {
+    const exportData = state.editor.export();
+    const nodeCount = Object.keys(exportData.drawflow.Home.data).length;
+    
+    if (nodeCount === 0) {
+        showToast('Flow is empty', 'warning');
+        return;
+    }
+    
+    showToast(`Flow is valid (${nodeCount} nodes)`, 'success');
+}
+
+// ===================================================================
+// Node Properties
+// ===================================================================
+
+function showNodeProperties(nodeId) {
+    const content = document.getElementById('propertiesContent');
+    const nodeData = state.editor.getNodeFromId(nodeId);
+    
+    content.innerHTML = `
+        <div class="property-group">
+            <label class="property-label">Node ID</label>
+            <input type="text" class="property-input" value="${nodeId}" readonly>
+        </div>
+        <div class="property-group">
+            <label class="property-label">Node Type</label>
+            <input type="text" class="property-input" value="${escapeHtml(nodeData.name)}" readonly>
+        </div>
+        <div class="property-group">
+            <label class="property-label">Name</label>
+            <input type="text" class="property-input" id="nodeName" value="${escapeHtml(nodeData.data.name || '')}">
+        </div>
+        <div class="property-group">
+            <button class="btn-danger" onclick="deleteNode(${nodeId})">Delete Node</button>
+        </div>
+    `;
+    
+    // Add event listener for name change
+    document.getElementById('nodeName')?.addEventListener('change', (e) => {
+        updateNodeData(nodeId, { name: e.target.value });
+    });
+}
+
+function clearNodeProperties() {
+    const content = document.getElementById('propertiesContent');
+    content.innerHTML = '<div class="properties-empty">Select a node to edit properties</div>';
+}
+
+function updateNodeData(nodeId, data) {
+    const nodeData = state.editor.getNodeFromId(nodeId);
+    state.editor.updateNodeDataFromId(nodeId, { ...nodeData.data, ...data });
+}
+
+function deleteNode(nodeId) {
+    state.editor.removeNodeId(`node-${nodeId}`);
+    clearNodeProperties();
+}
+
+// ===================================================================
+// Flow Actions
+// ===================================================================
+
+async function toggleFlow(flowId, enable) {
+    try {
+        const action = enable ? 'enable' : 'disable';
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}/${action}`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            showToast(`Flow ${action}d successfully`, 'success');
+            await loadFlows();
+        } else {
+            showToast(`Error ${action}ing flow`, 'error');
+        }
+    } catch (error) {
+        console.error('Error toggling flow:', error);
+        showToast('Error toggling flow', 'error');
+    }
+}
+
+async function duplicateFlow(flowId) {
+    try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        const flow = await response.json();
+        
+        const newFlow = {
+            ...flow,
+            id: generateId(),
+            name: `${flow.name} (Copy)`,
+            config: flow.config
+        };
+        
+        delete newFlow.created_at;
+        delete newFlow.updated_at;
+        delete newFlow.enabled;
+        delete newFlow.routes;
+        
+        const createResponse = await fetch(`${API_BASE}/admin/flows`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newFlow)
+        });
+        
+        if (createResponse.ok) {
+            showToast('Flow duplicated successfully', 'success');
+            await loadFlows();
+        } else {
+            showToast('Error duplicating flow', 'error');
+        }
+    } catch (error) {
+        console.error('Error duplicating flow:', error);
+        showToast('Error duplicating flow', 'error');
+    }
+}
+
+function confirmDeleteFlow(flowId) {
+    showConfirmModal(
+        'Delete Flow',
+        'Are you sure you want to delete this flow? This action cannot be undone.',
+        () => deleteFlow(flowId)
+    );
+}
+
+async function deleteFlow(flowId) {
+    try {
+        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showToast('Flow deleted successfully', 'success');
+            await loadFlows();
+        } else {
+            showToast('Error deleting flow', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting flow:', error);
+        showToast('Error deleting flow', 'error');
+    }
+}
+
+// ===================================================================
+// Drag and Drop
+// ===================================================================
+
+function handleDragStart(e) {
+    e.dataTransfer.setData('node-type', e.target.dataset.nodeType);
+}
+
+// ===================================================================
+// UI Helpers
+// ===================================================================
+
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
+function showConfirmModal(title, message, onConfirm) {
+    const modal = document.getElementById('confirmModal');
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMessage').textContent = message;
+    
+    const okBtn = document.getElementById('confirmOkBtn');
+    const newOkBtn = okBtn.cloneNode(true);
+    okBtn.parentNode.replaceChild(newOkBtn, okBtn);
+    
+    newOkBtn.addEventListener('click', () => {
+        onConfirm();
+        closeConfirmModal();
+    });
+    
+    modal.classList.add('active');
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirmModal').classList.remove('active');
+}
+
+// ===================================================================
+// Utility Functions
+// ===================================================================
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+}
+
+function generateId() {
+    return 'flow_' + Math.random().toString(36).substr(2, 9);
+}
+
+// ===================================================================
+// Export for debugging
+// ===================================================================
+
+window.RedNoxAdmin = {
+    state,
+    loadFlows,
+    loadRoutes,
+    loadNodes
+};
