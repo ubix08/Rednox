@@ -2,10 +2,12 @@
 :root {
     --primary: #0066cc;
     --primary-dark: #0052a3;
+    --primary-light: #3385d6;
     --secondary: #6c757d;
     --success: #28a745;
     --danger: #dc3545;
     --warning: #ffc107;
+    --info: #17a2b8;
     --bg: #f5f7fa;
     --surface: #ffffff;
     --border: #e1e4e8;
@@ -15,6 +17,7 @@
     --shadow-lg: 0 4px 16px rgba(0,0,0,0.15);
     --radius: 8px;
     --header-height: 64px;
+    --transition: all 0.2s ease;
 }
 
 * {
@@ -28,6 +31,7 @@ body {
     background: var(--bg);
     color: var(--text);
     line-height: 1.5;
+    overflow-x: hidden;
 }
 
 /* Header */
@@ -79,7 +83,7 @@ body {
     cursor: pointer;
     font-size: 0.875rem;
     font-weight: 500;
-    transition: all 0.2s;
+    transition: var(--transition);
 }
 
 .nav-btn:hover {
@@ -108,7 +112,7 @@ body {
     font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: var(--transition);
 }
 
 .btn-primary {
@@ -118,6 +122,11 @@ body {
 
 .btn-primary:hover {
     background: var(--primary-dark);
+}
+
+.btn-primary:disabled {
+    background: var(--secondary);
+    cursor: not-allowed;
 }
 
 .btn-secondary {
@@ -150,6 +159,10 @@ body {
     color: var(--text);
 }
 
+.btn-small {
+    padding: 0.25rem;
+}
+
 /* Main Content */
 .main {
     margin-top: var(--header-height);
@@ -172,11 +185,26 @@ body {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
 }
 
 .view-header h2 {
     font-size: 1.75rem;
     font-weight: 600;
+}
+
+.search-input {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    min-width: 250px;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--primary);
 }
 
 /* Stats */
@@ -215,13 +243,14 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 1.5rem;
-    transition: all 0.2s;
+    transition: var(--transition);
     cursor: pointer;
 }
 
 .flow-card:hover {
     box-shadow: var(--shadow-lg);
     transform: translateY(-2px);
+    border-color: var(--primary-light);
 }
 
 .flow-card-header {
@@ -235,6 +264,7 @@ body {
     font-size: 1.125rem;
     font-weight: 600;
     margin-bottom: 0.25rem;
+    word-break: break-word;
 }
 
 .flow-card-description {
@@ -245,6 +275,7 @@ body {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    min-height: 2.6em;
 }
 
 .flow-badge {
@@ -254,6 +285,7 @@ body {
     font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
+    white-space: nowrap;
 }
 
 .flow-badge.enabled {
@@ -277,12 +309,14 @@ body {
 .flow-card-actions {
     display: flex;
     gap: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .flow-card-actions button {
     flex: 1;
     padding: 0.5rem;
     font-size: 0.875rem;
+    min-width: 80px;
 }
 
 /* Routes List */
@@ -304,6 +338,7 @@ body {
     align-items: center;
     gap: 1rem;
     margin-bottom: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .route-method {
@@ -334,9 +369,10 @@ body {
 }
 
 .route-path {
-    font-family: monospace;
+    font-family: 'Courier New', monospace;
     font-size: 0.875rem;
     color: var(--text);
+    word-break: break-all;
 }
 
 .route-flow {
@@ -356,6 +392,10 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 1.5rem;
+}
+
+.node-category.hidden {
+    display: none;
 }
 
 .node-category-title {
@@ -386,7 +426,7 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     text-align: center;
-    transition: all 0.2s;
+    transition: var(--transition);
 }
 
 .node-item:hover {
@@ -452,6 +492,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 1rem;
 }
 
 .modal-header h3 {
@@ -464,22 +505,36 @@ body {
     align-items: center;
     gap: 1rem;
     flex: 1;
+    flex-wrap: wrap;
+}
+
+.flow-name-input, .flow-desc-input {
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0.25rem 0.5rem;
+    background: var(--bg);
+    color: var(--text);
+    transition: var(--transition);
+    border-radius: 4px;
 }
 
 .flow-name-input {
     font-size: 1.25rem;
-    font-weight: 600;
-    border: none;
-    border-bottom: 2px solid transparent;
-    padding: 0.25rem;
-    background: transparent;
-    color: var(--text);
-    transition: border-color 0.2s;
+    min-width: 200px;
 }
 
-.flow-name-input:focus {
+.flow-desc-input {
+    font-size: 0.875rem;
+    font-weight: 400;
+    min-width: 300px;
+}
+
+.flow-name-input:focus, .flow-desc-input:focus {
     outline: none;
     border-bottom-color: var(--primary);
+    background: white;
 }
 
 .flow-status {
@@ -541,6 +596,11 @@ body {
     font-size: 0.875rem;
 }
 
+.palette-search input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
 .palette-nodes {
     flex: 1;
     overflow-y: auto;
@@ -549,6 +609,10 @@ body {
 
 .palette-category {
     margin-bottom: 1.5rem;
+}
+
+.palette-category.hidden {
+    display: none;
 }
 
 .palette-category-title {
@@ -567,25 +631,124 @@ body {
     border-radius: var(--radius);
     cursor: move;
     font-size: 0.875rem;
-    transition: all 0.2s;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .palette-node:hover {
     border-color: var(--primary);
     box-shadow: var(--shadow);
+    transform: translateX(4px);
+}
+
+.palette-node.hidden {
+    display: none;
 }
 
 .canvas-container {
     flex: 1;
     position: relative;
     overflow: hidden;
+    background: var(--bg);
+}
+
+.canvas-toolbar {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    z-index: 10;
+    display: flex;
+    gap: 0.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.5rem;
+    box-shadow: var(--shadow);
+}
+
+.toolbar-btn {
+    padding: 0.5rem;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: var(--transition);
+}
+
+.toolbar-btn:hover {
+    background: var(--bg);
+    color: var(--primary);
 }
 
 #drawflow {
     width: 100%;
     height: 100%;
-    background: var(--bg);
+    background: 
+        linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px),
+        linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-position: -1px -1px;
     position: relative;
+}
+
+/* Drawflow Custom Styles */
+.drawflow .drawflow-node {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    min-width: 180px;
+    padding: 0;
+}
+
+.drawflow .drawflow-node.selected {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.2);
+}
+
+.drawflow .drawflow-node .node-content {
+    padding: 1rem;
+}
+
+.drawflow .drawflow-node .node-header {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--primary);
+    font-size: 0.875rem;
+}
+
+.drawflow .drawflow-node .node-body {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.drawflow .drawflow-node .input,
+.drawflow .drawflow-node .output {
+    background: var(--primary);
+    border: 2px solid var(--surface);
+}
+
+.drawflow .drawflow-node .input:hover,
+.drawflow .drawflow-node .output:hover {
+    background: var(--primary-dark);
+}
+
+.drawflow .connection .main-path {
+    stroke: var(--primary);
+    stroke-width: 3px;
+}
+
+.drawflow .connection .main-path:hover {
+    stroke: var(--primary-dark);
+    stroke-width: 4px;
+}
+
+.drawflow .connection .point {
+    fill: var(--primary);
+    stroke: var(--surface);
 }
 
 .properties-panel {
@@ -601,6 +764,9 @@ body {
     padding: 1rem;
     font-weight: 600;
     border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .properties-content {
@@ -624,19 +790,45 @@ body {
     font-size: 0.875rem;
     font-weight: 500;
     margin-bottom: 0.5rem;
+    color: var(--text);
 }
 
-.property-input {
+.property-input, .property-textarea, .property-select {
     width: 100%;
     padding: 0.5rem;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     font-size: 0.875rem;
+    font-family: inherit;
 }
 
-.property-input:focus {
+.property-textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.property-input:focus, .property-textarea:focus, .property-select:focus {
     outline: none;
     border-color: var(--primary);
+}
+
+.property-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.property-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.property-hint {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
 }
 
 /* Toast */
@@ -648,6 +840,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    pointer-events: none;
 }
 
 .toast {
@@ -657,7 +850,8 @@ body {
     padding: 1rem;
     box-shadow: var(--shadow-lg);
     min-width: 300px;
-    animation: slideIn 0.3s;
+    animation: slideIn 0.3s ease;
+    pointer-events: auto;
 }
 
 .toast.success {
@@ -670,6 +864,10 @@ body {
 
 .toast.warning {
     border-left: 4px solid var(--warning);
+}
+
+.toast.info {
+    border-left: 4px solid var(--info);
 }
 
 @keyframes slideIn {
@@ -691,9 +889,24 @@ body {
 }
 
 /* Responsive */
+@media (max-width: 1024px) {
+    .properties-panel {
+        width: 250px;
+    }
+    
+    .node-palette {
+        width: 220px;
+    }
+}
+
 @media (max-width: 768px) {
     .header-content {
         gap: 1rem;
+        padding: 0 0.5rem;
+    }
+    
+    .logo h1 {
+        font-size: 1rem;
     }
     
     .nav {
@@ -702,6 +915,7 @@ body {
     
     .nav-btn {
         flex-shrink: 0;
+        padding: 0.5rem 0.75rem;
     }
     
     .stats {
@@ -717,11 +931,26 @@ body {
     }
     
     .properties-panel {
-        width: 250px;
+        position: absolute;
+        right: 0;
+        top: 0;
+        height: 100%;
+        z-index: 100;
+        box-shadow: var(--shadow-lg);
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+    }
+    
+    .properties-panel.visible {
+        transform: translateX(0);
     }
     
     .toast {
         min-width: 250px;
+    }
+    
+    .flow-name-input, .flow-desc-input {
+        min-width: 150px;
     }
 }
 
@@ -736,12 +965,29 @@ body {
         gap: 1rem;
     }
     
-    .header-actions button span {
+    .header-actions button span,
+    .nav-btn span {
         display: none;
     }
     
-    .node-palette,
-    .properties-panel {
-        display: none;
+    .node-palette {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        z-index: 100;
+        box-shadow: var(--shadow-lg);
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+    
+    .node-palette.visible {
+        transform: translateX(0);
+    }
+    
+    .canvas-toolbar {
+        top: 0.5rem;
+        right: 0.5rem;
+        padding: 0.25rem;
     }
 }
