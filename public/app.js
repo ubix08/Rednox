@@ -1,6 +1,7 @@
 
+// app.js
 // ===================================================================
-// RedNox Admin UI - Enhanced Implementation
+// RedNox Admin UI - Fixed Implementation
 // ===================================================================
 
 const API_BASE = window.location.origin;
@@ -26,22 +27,18 @@ const state = {
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('🚀 RedNox Admin UI initializing...');
     
-    // Wait for Drawflow library
     const drawflowLoaded = await waitForDrawflow();
     if (!drawflowLoaded) {
         showToast('Failed to load editor. Please refresh.', 'error');
         return;
     }
     
-    // Setup all components
     setupNavigation();
     setupEventListeners();
     setupKeyboardShortcuts();
     
-    // Initialize database
     await initializeDatabase();
     
-    // Load initial data
     await Promise.all([
         loadNodes(),
         loadFlows()
@@ -110,7 +107,6 @@ function setupNavigation() {
 // ===================================================================
 
 function setupEventListeners() {
-    // Header buttons
     document.getElementById('newFlowBtn').addEventListener('click', () => {
         openFlowEditor(null);
     });
@@ -120,7 +116,6 @@ function setupEventListeners() {
         showToast('Data refreshed', 'success');
     });
     
-    // Editor controls
     document.getElementById('closeEditorBtn').addEventListener('click', () => {
         if (state.isModified) {
             showConfirmModal(
@@ -167,13 +162,11 @@ function setupEventListeners() {
         openImportModal();
     });
     
-    // Palette toggle
     document.getElementById('togglePaletteBtn').addEventListener('click', () => {
         const palette = document.getElementById('nodePalette');
         palette.classList.toggle('hidden');
     });
     
-    // Zoom controls
     document.getElementById('zoomInBtn').addEventListener('click', () => {
         if (state.editor) {
             state.zoom = Math.min(state.zoom + 0.1, 2);
@@ -196,16 +189,13 @@ function setupEventListeners() {
     });
     
     document.getElementById('fitViewBtn').addEventListener('click', () => {
-        // Fit view implementation
         showToast('Fit view', 'info');
     });
     
-    // Properties panel
     document.getElementById('closePropsBtn').addEventListener('click', () => {
         document.getElementById('propertiesPanel').classList.remove('visible');
     });
     
-    // Debug panel
     document.getElementById('toggleDebugBtn').addEventListener('click', () => {
         const panel = document.getElementById('debugPanel');
         panel.classList.toggle('collapsed');
@@ -220,26 +210,21 @@ function setupEventListeners() {
         clearDebugOutput();
     });
     
-    // Confirm modal
     document.getElementById('confirmCancelBtn').addEventListener('click', () => {
         closeConfirmModal();
     });
     
-    // Palette search
     document.getElementById('paletteSearch').addEventListener('input', (e) => {
         filterPaletteNodes(e.target.value);
     });
     
-    // Node search
     document.getElementById('nodeSearchInput')?.addEventListener('input', (e) => {
         filterNodeCategories(e.target.value);
     });
     
-    // Import modal
     document.getElementById('importFile').addEventListener('change', handleFileImport);
     document.getElementById('importFlowBtn').addEventListener('click', importFlow);
     
-    // Flow name/description auto-save
     document.getElementById('flowName').addEventListener('input', () => {
         state.isModified = true;
         scheduleAutoSave();
@@ -253,7 +238,6 @@ function setupEventListeners() {
 
 function setupKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
-        // Ctrl/Cmd + S to save
         if ((e.ctrlKey || e.metaKey) && e.key === 's') {
             e.preventDefault();
             if (state.currentFlow) {
@@ -261,12 +245,10 @@ function setupKeyboardShortcuts() {
             }
         }
         
-        // Delete key to delete selected node
         if (e.key === 'Delete' && state.selectedNodeId && state.editor) {
             deleteSelectedNode();
         }
         
-        // Escape to close modals
         if (e.key === 'Escape') {
             const editorModal = document.getElementById('editorModal');
             const importModal = document.getElementById('importModal');
@@ -399,7 +381,7 @@ function renderFlows() {
                 ${flow.updated_at ? `<span>✏️ ${formatDate(flow.updated_at)}</span>` : ''}
             </div>
             <div class="flow-card-actions" onclick="event.stopPropagation()">
-                <button class="btn-secondary btn-small" onclick="toggleFlow('${flow.id}', ${!flow.enabled})" title="${flow.enabled ? 'Disable' : 'Enable'}">
+                <button class="btn-secondary btn-small" onclick="toggleFlow('${flow.id}', \( {!flow.enabled})" title=" \){flow.enabled ? 'Disable' : 'Enable'}">
                     ${flow.enabled ? '⏸' : '▶️'}
                 </button>
                 <button class="btn-secondary btn-small" onclick="duplicateFlow('${flow.id}')" title="Duplicate">
@@ -427,7 +409,7 @@ function renderRoutes() {
     list.innerHTML = state.routes.map(route => `
         <div class="route-card">
             <div class="route-header">
-                <span class="route-method ${route.method}">${route.method}</span>
+                <span class="route-method \( {route.method}"> \){route.method}</span>
                 <code class="route-path">${escapeHtml(route.fullUrl)}</code>
             </div>
             <div class="route-flow">
@@ -481,7 +463,6 @@ function renderNodePalette() {
         </div>
     `).join('');
     
-    // Add drag handlers
     document.querySelectorAll('.palette-node').forEach(node => {
         node.addEventListener('dragstart', handleDragStart);
     });
@@ -497,9 +478,8 @@ function updateStats() {
     statValues[1].textContent = active;
 }
 
-// Continue in next artifact...
 // ===================================================================
-// Flow Editor - Drawflow Setup & Management
+// Flow Editor - Drawflow Setup
 // ===================================================================
 
 function setupDrawflow() {
@@ -526,10 +506,7 @@ function setupDrawflow() {
         state.editor.force_first_input = false;
         state.editor.start();
         
-        // Setup editor events
         setupEditorEvents();
-        
-        // Setup drop zone
         setupDropZone(container);
         
         console.log('✓ Drawflow editor initialized');
@@ -580,7 +557,7 @@ function setupEditorEvents() {
         state.isModified = true;
     });
     
-    // Double-click to edit properties
+    const container = document.getElementById('drawflow');
     container.addEventListener('dblclick', (e) => {
         if (state.selectedNodeId) {
             showNodeProperties(state.selectedNodeId);
@@ -637,8 +614,7 @@ async function openFlowEditor(flowId) {
             id: generateId(),
             name: 'New Flow',
             description: '',
-            nodes: [],
-            connections: []
+            nodes: []
         };
         document.getElementById('flowName').value = state.currentFlow.name;
         document.getElementById('flowDescription').value = '';
@@ -665,7 +641,7 @@ function closeFlowEditor() {
 
 async function loadFlowIntoEditor(flowId) {
     try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        const response = await fetch(`\( {API_BASE}/admin/flows/ \){flowId}`);
         const flow = await response.json();
         
         state.currentFlow = flow;
@@ -680,6 +656,10 @@ async function loadFlowIntoEditor(flowId) {
         showToast('Error loading flow', 'error');
     }
 }
+
+// ===================================================================
+// FIXED: Load Flow Data - Use wires array
+// ===================================================================
 
 function loadFlowData(config) {
     if (!state.editor || !config.nodes || config.nodes.length === 0) {
@@ -716,26 +696,33 @@ function loadFlowData(config) {
         idMap.set(node.id, newNodeId);
     });
     
-    // Second pass: Add connections
-    if (config.connections) {
-        config.connections.forEach(conn => {
-            const outputNodeId = idMap.get(conn.source.node);
-            const inputNodeId = idMap.get(conn.target.node);
-            
-            if (outputNodeId && inputNodeId) {
-                try {
-                    state.editor.addConnection(
-                        outputNodeId,
-                        inputNodeId,
-                        `output_${conn.source.port || 1}`,
-                        `input_${conn.target.port || 1}`
-                    );
-                } catch (error) {
-                    console.warn('Could not create connection:', error);
+    // Second pass: Add connections FROM WIRES (Node-RED format)
+    config.nodes.forEach(node => {
+        const sourceNodeId = idMap.get(node.id);
+        
+        if (node.wires && Array.isArray(node.wires) && sourceNodeId) {
+            node.wires.forEach((wireGroup, outputIndex) => {
+                if (Array.isArray(wireGroup)) {
+                    wireGroup.forEach(targetId => {
+                        const targetNodeId = idMap.get(targetId);
+                        
+                        if (targetNodeId) {
+                            try {
+                                state.editor.addConnection(
+                                    sourceNodeId,
+                                    targetNodeId,
+                                    `output_${outputIndex + 1}`,
+                                    `input_1`
+                                );
+                            } catch (error) {
+                                console.warn('Could not create connection:', error);
+                            }
+                        }
+                    });
                 }
-            }
-        });
-    }
+            });
+        }
+    });
     
     state.isModified = false;
 }
@@ -770,7 +757,7 @@ function createNodeHTML(nodeData, nodeDefinition) {
 }
 
 // ===================================================================
-// Flow Editor - Saving
+// FIXED: Save Flow - Build wires array from Drawflow outputs
 // ===================================================================
 
 async function saveCurrentFlow() {
@@ -791,49 +778,47 @@ async function saveCurrentFlow() {
         const exportData = state.editor.export();
         const drawflowData = exportData.drawflow.Home.data;
         
+        // Build nodes with wires array (Node-RED format)
         const nodes = Object.values(drawflowData).map(node => {
             const nodeData = node.data || {};
+            
+            // BUILD WIRES ARRAY FROM DRAWFLOW OUTPUTS
+            const wires = [];
+            if (node.outputs) {
+                Object.entries(node.outputs).forEach(([outputKey, outputData]) => {
+                    const outputIndex = parseInt(outputKey.replace('output_', '')) - 1;
+                    wires[outputIndex] = outputData.connections?.map(conn => conn.node) || [];
+                });
+            }
+            
+            // Fill empty wire slots
+            const nodeDefinition = state.nodeDefinitions.get(node.name);
+            const outputCount = nodeDefinition?.outputs || 1;
+            for (let i = 0; i < outputCount; i++) {
+                if (!wires[i]) {
+                    wires[i] = [];
+                }
+            }
+            
             return {
                 id: node.id.toString(),
                 type: node.name,
+                wires: wires,
                 x: node.pos_x,
                 y: node.pos_y,
                 ...nodeData
             };
         });
         
-        const connections = [];
-        Object.values(drawflowData).forEach(node => {
-            if (node.outputs) {
-                Object.entries(node.outputs).forEach(([outputKey, outputData]) => {
-                    if (outputData.connections) {
-                        outputData.connections.forEach(conn => {
-                            connections.push({
-                                source: {
-                                    node: node.id.toString(),
-                                    port: outputKey.replace('output_', '')
-                                },
-                                target: {
-                                    node: conn.node,
-                                    port: conn.output.replace('input_', '')
-                                }
-                            });
-                        });
-                    }
-                });
-            }
-        });
-        
         const flowData = {
             id: state.currentFlow.id,
             name: flowName,
             description: flowDescription,
-            nodes: nodes,
-            connections: connections
+            nodes: nodes
         };
         
         const url = state.currentFlow.created_at
-            ? `${API_BASE}/admin/flows/${state.currentFlow.id}`
+            ? `\( {API_BASE}/admin/flows/ \){state.currentFlow.id}`
             : `${API_BASE}/admin/flows`;
         
         const method = state.currentFlow.created_at ? 'PUT' : 'POST';
@@ -933,10 +918,9 @@ function scheduleAutoSave() {
         if (state.isModified && state.currentFlow && state.currentFlow.created_at) {
             saveCurrentFlow();
         }
-    }, 30000); // Auto-save after 30 seconds of inactivity
+    }, 30000);
 }
 
-// Continue in part 3...
 // ===================================================================
 // Node Properties Panel
 // ===================================================================
@@ -1003,7 +987,7 @@ function showNodeProperties(nodeId) {
             html += `
                 <textarea class="property-textarea" 
                          id="prop_${key}" 
-                         placeholder="Enter ${key}">${escapeHtml(currentValue.toString())}</textarea>
+                         placeholder="Enter \( {key}"> \){escapeHtml(currentValue.toString())}</textarea>
             `;
         } else {
             html += `
@@ -1155,7 +1139,7 @@ function handleDrop(e) {
 }
 
 // ===================================================================
-// Flow Execution
+// FIXED: Flow Execution with Timeout
 // ===================================================================
 
 async function executeCurrentFlow() {
@@ -1176,19 +1160,26 @@ async function executeCurrentFlow() {
     clearDebugOutput();
     addDebugMessage('info', `⚙️ Executing flow: ${state.currentFlow.name}`);
     
-    try {
-        for (const node of httpInNodes) {
-            const nodeId = node.id.toString();
-            addDebugMessage('info', `▶️ Triggering node ${nodeId} (${node.data.url || '/'})`);
-            
-            const response = await fetch(`${API_BASE}/admin/flows/${state.currentFlow.id}/execute`, {
+    for (const node of httpInNodes) {
+        const nodeId = node.id.toString();
+        addDebugMessage('info', `▶️ Triggering node \( {nodeId} ( \){node.data.url || '/'})`);
+        
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
+        try {
+            const response = await fetch(`\( {API_BASE}/admin/flows/ \){state.currentFlow.id}/execute`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     nodeId: nodeId,
                     payload: { test: true }
-                })
+                }),
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             
             const result = await response.json();
             
@@ -1200,11 +1191,18 @@ async function executeCurrentFlow() {
             } else {
                 addDebugMessage('error', `✗ Execution failed: ${result.error}`);
             }
+        } catch (error) {
+            clearTimeout(timeoutId);
+            
+            if (error.name === 'AbortError') {
+                addDebugMessage('error', `✗ Execution timeout (30s)`);
+                showToast('Execution timeout', 'error');
+            } else {
+                console.error('Execution error:', error);
+                addDebugMessage('error', `✗ Error: ${error.message}`);
+                showToast('Execution failed', 'error');
+            }
         }
-    } catch (error) {
-        console.error('Execution error:', error);
-        addDebugMessage('error', `✗ Error: ${error.message}`);
-        showToast('Execution failed', 'error');
     }
 }
 
@@ -1219,7 +1217,7 @@ async function exportCurrentFlow() {
     }
     
     try {
-        const response = await fetch(`${API_BASE}/admin/flows/${state.currentFlow.id}/export`);
+        const response = await fetch(`\( {API_BASE}/admin/flows/ \){state.currentFlow.id}/export`);
         const data = await response.json();
         
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1239,7 +1237,7 @@ async function exportCurrentFlow() {
 
 async function exportFlow(flowId) {
     try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}/export`);
+        const response = await fetch(`\( {API_BASE}/admin/flows/ \){flowId}/export`);
         const data = await response.json();
         
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1319,7 +1317,7 @@ async function importFlow() {
 async function toggleFlow(flowId, enable) {
     try {
         const action = enable ? 'enable' : 'disable';
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}/${action}`, {
+        const response = await fetch(`\( {API_BASE}/admin/flows/ \){flowId}/${action}`, {
             method: 'POST'
         });
         
@@ -1337,15 +1335,14 @@ async function toggleFlow(flowId, enable) {
 
 async function duplicateFlow(flowId) {
     try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`);
+        const response = await fetch(`\( {API_BASE}/admin/flows/ \){flowId}`);
         const flow = await response.json();
         
         const newFlow = {
             id: generateId(),
             name: `${flow.name} (Copy)`,
             description: flow.description,
-            nodes: flow.config.nodes,
-            connections: flow.config.connections
+            nodes: flow.config.nodes
         };
         
         const createResponse = await fetch(`${API_BASE}/admin/flows`, {
@@ -1376,7 +1373,7 @@ function confirmDeleteFlow(flowId) {
 
 async function deleteFlow(flowId) {
     try {
-        const response = await fetch(`${API_BASE}/admin/flows/${flowId}`, {
+        const response = await fetch(`\( {API_BASE}/admin/flows/ \){flowId}`, {
             method: 'DELETE'
         });
         
@@ -1392,7 +1389,6 @@ async function deleteFlow(flowId) {
     }
 }
 
-// Continue in part 4...
 // ===================================================================
 // Search and Filter
 // ===================================================================
@@ -1461,7 +1457,6 @@ function addDebugMessage(type, message) {
     content.appendChild(messageDiv);
     content.scrollTop = content.scrollHeight;
     
-    // Expand panel if collapsed
     const panel = document.getElementById('debugPanel');
     if (panel.classList.contains('collapsed')) {
         panel.classList.remove('collapsed');
@@ -1529,30 +1524,25 @@ function formatDate(dateString) {
     const now = new Date();
     const diff = now - date;
     
-    // Less than 1 minute
     if (diff < 60000) {
         return 'Just now';
     }
     
-    // Less than 1 hour
     if (diff < 3600000) {
         const minutes = Math.floor(diff / 60000);
-        return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+        return `\( {minutes} minute \){minutes > 1 ? 's' : ''} ago`;
     }
     
-    // Less than 1 day
     if (diff < 86400000) {
         const hours = Math.floor(diff / 3600000);
-        return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        return `\( {hours} hour \){hours > 1 ? 's' : ''} ago`;
     }
     
-    // Less than 1 week
     if (diff < 604800000) {
         const days = Math.floor(diff / 86400000);
-        return `${days} day${days > 1 ? 's' : ''} ago`;
+        return `\( {days} day \){days > 1 ? 's' : ''} ago`;
     }
     
-    // Default format
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { 
         hour: '2-digit', 
         minute: '2-digit' 
@@ -1564,7 +1554,7 @@ function generateId() {
 }
 
 // ===================================================================
-// Export for Global Access & Debugging
+// Export for Global Access
 // ===================================================================
 
 window.RedNoxAdmin = {
@@ -1582,11 +1572,6 @@ window.RedNoxAdmin = {
     addDebugMessage
 };
 
-// ===================================================================
-// Version Info
-// ===================================================================
-
 console.log('%cRedNox Admin UI', 'font-size: 20px; font-weight: bold; color: #0066cc;');
-console.log('%cVersion 2.0 - Enhanced Edition', 'font-size: 12px; color: #666;');
-console.log('Features: Full CRUD, Visual Editor, Import/Export, Execution, Debug');
+console.log('%cVersion 2.0 - Fixed Edition', 'font-size: 12px; color: #666;');
 console.log('API:', window.RedNoxAdmin);
