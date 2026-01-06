@@ -1,5 +1,6 @@
+
 // ===================================================================
-// adminHandler.ts - Flow Management + Node Discovery
+// adminHandler.ts - Complete Flow Management System
 // ===================================================================
 
 import { Env, FlowConfig, D1_SCHEMA_STATEMENTS } from '../types/core';
@@ -38,10 +39,14 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         nodes: nodes.map(n => ({
           type: n.type,
           label: n.ui.paletteLabel,
-          icon: n.ui.icon
+          icon: n.ui.icon,
+          color: n.ui.color
         }))
       }));
-      return jsonResponse({ categories, total: registry.list().length }, corsHeaders);
+      return jsonResponse({ 
+        categories, 
+        total: registry.list().length 
+      }, corsHeaders);
     }
     
     if (path.match(/^\/admin\/nodes\/[^/]+$/) && request.method === 'GET') {
@@ -63,7 +68,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
     
     // ===================================================================
-    // DATABASE & FLOW MANAGEMENT
+    // DATABASE & INITIALIZATION
     // ===================================================================
     
     if (!env.DB) {
@@ -73,12 +78,14 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       }, corsHeaders, 500);
     }
     
-    // Database Initialization
     if (path === '/admin/init' && request.method === 'POST') {
       return await initializeDatabase(env);
     }
     
-    // Flow Management
+    // ===================================================================
+    // FLOW MANAGEMENT
+    // ===================================================================
+    
     if (path === '/admin/flows' && request.method === 'GET') {
       return await listFlows(env);
     }
@@ -109,19 +116,52 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       return await toggleFlow(env, flowId, action === 'enable');
     }
     
-    // Routes
-    if (path === '/admin/routes' && request.method === 'GET') {
-      return await listRoutes(env, url.origin);
+    // ===================================================================
+    // IMPORT/EXPORT
+    // ===================================================================
+    
+    if (path.match(/^\/admin\/flows\/[^/]+\/export$/) && request.method === 'GET') {
+      const flowId = path.split('/')[3];
+      return await exportFlow(env, flowId);
     }
     
-    // Logs
+    if (path === '/admin/flows/import' && request.method === 'POST') {
+      return await importFlow(env, request, url.origin);
+    }
+    
+    // ===================================================================
+    // FLOW EXECUTION
+    // ===================================================================
+    
+    if (path.match(/^\/admin\/flows\/[^/]+\/execute$/) && request.method === 'POST') {
+      const flowId = path.split('/')[3];
+      return await executeFlowManually(env, flowId, request);
+    }
+    
+    // ===================================================================
+    // DEBUG & MONITORING
+    // ===================================================================
+    
+    if (path.match(/^\/admin\/flows\/[^/]+\/debug$/) && request.method === 'GET') {
+      const flowId = path.split('/')[3];
+      const limit = parseInt(url.searchParams.get('limit') || '50');
+      return await getDebugOutput(env, flowId, limit);
+    }
+    
     if (path.match(/^\/admin\/flows\/[^/]+\/logs$/) && request.method === 'GET') {
       const flowId = path.split('/')[3];
       const limit = parseInt(url.searchParams.get('limit') || '50');
       return await getFlowLogs(env, flowId, limit);
     }
     
-    // Stats
+    // ===================================================================
+    // ROUTES & STATS
+    // ===================================================================
+    
+    if (path === '/admin/routes' && request.method === 'GET') {
+      return await listRoutes(env, url.origin);
+    }
+    
     if (path === '/admin/stats' && request.method === 'GET') {
       return await getStats(env);
     }
@@ -139,12 +179,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 }
 
 // ===================================================================
-// Database Operations
+// DATABASE INITIALIZATION
 // ===================================================================
 
 async function initializeDatabase(env: Env): Promise<Response> {
   try {
-    console.log('Starting database initialization...');
+    console.log('🔧 Starting database initialization...');
     
     const results = [];
     for (const statement of D1_SCHEMA_STATEMENTS) {
@@ -164,6 +204,30 @@ async function initializeDatabase(env: Env): Promise<Response> {
           error: stmtErr.message 
         });
       }
+    }
+    
+    // Create debug_output table
+    try {
+      await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS debug_output (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          flow_id TEXT NOT NULL,
+          node_id TEXT NOT NULL,
+          message TEXT NOT NULL,
+          type TEXT DEFAULT 'info',
+          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE
+        )
+      `).run();
+      
+      await env.DB.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_debug_flow_time ON debug_output(flow_id, timestamp DESC)'
+      ).run();
+      
+      results.push({ statement: 'debug_output table', success: true });
+    } catch (err: any) {
+      console.error('Debug table error:', err);
+      results.push({ statement: 'debug_output table', success: false, error: err.message });
     }
     
     const failed = results.filter(r => !r.success);
@@ -193,13 +257,13 @@ async function initializeDatabase(env: Env): Promise<Response> {
 }
 
 // ===================================================================
-// Flow CRUD Operations
+// FLOW CRUD OPERATIONS
 // ===================================================================
 
 async function listFlows(env: Env): Promise<Response> {
   try {
     const flows = await env.DB.prepare(
-      'SELECT id, name, description, enabled, created_at, updated_at FROM flows ORDER BY created_at DESC'
+      'SELECT id, name, description, enabled, created_at, updated_at FROM flows ORDER BY updated_at DESC, created_at DESC'
     ).all();
     
     return jsonResponse({ 
@@ -255,7 +319,7 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
       id: requestData.id || crypto.randomUUID(),
       name: requestData.name || 'Unnamed Flow',
       description: requestData.description,
-      version: requestData.version,
+      version: requestData.version || '1.0.0',
       nodes: requestData.nodes || []
     };
     
@@ -272,8 +336,8 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
     
     const statements = [
       env.DB.prepare(`
-        INSERT INTO flows (id, name, description, config, enabled)
-        VALUES (?, ?, ?, ?, 1)
+        INSERT INTO flows (id, name, description, config, enabled, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 1, datetime('now'), datetime('now'))
       `).bind(
         flowConfig.id,
         flowConfig.name,
@@ -327,7 +391,7 @@ async function updateFlow(env: Env, request: Request, flowId: string, origin: st
       id: flowId,
       name: requestData.name || 'Unnamed Flow',
       description: requestData.description,
-      version: requestData.version,
+      version: requestData.version || '1.0.0',
       nodes: requestData.nodes || []
     };
     
@@ -445,8 +509,210 @@ async function toggleFlow(env: Env, flowId: string, enable: boolean): Promise<Re
   }
 }
 
+// Continue to part 2...
 // ===================================================================
-// Routes & Stats
+// IMPORT/EXPORT OPERATIONS
+// ===================================================================
+
+async function exportFlow(env: Env, flowId: string): Promise<Response> {
+  try {
+    const flow = await env.DB.prepare('SELECT * FROM flows WHERE id = ?').bind(flowId).first();
+    
+    if (!flow) {
+      return jsonResponse({ error: 'Flow not found' }, corsHeaders, 404);
+    }
+    
+    const config = JSON.parse(flow.config as string);
+    
+    const exportData = {
+      id: flow.id,
+      name: flow.name,
+      description: flow.description,
+      version: config.version || '1.0.0',
+      nodes: config.nodes,
+      connections: config.connections,
+      exported_at: new Date().toISOString(),
+      exported_from: 'RedNox v2.0'
+    };
+    
+    return new Response(JSON.stringify(exportData, null, 2), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Disposition': `attachment; filename="${flow.name}.json"`,
+        ...corsHeaders
+      }
+    });
+  } catch (err: any) {
+    console.error('Error exporting flow:', err);
+    return jsonResponse({ 
+      error: 'Failed to export flow',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function importFlow(env: Env, request: Request, origin: string): Promise<Response> {
+  try {
+    const importData = await request.json();
+    
+    // Validate import data
+    if (!importData.name || !importData.nodes) {
+      return jsonResponse({
+        error: 'Invalid import data',
+        hint: 'Flow must have a name and nodes array'
+      }, corsHeaders, 400);
+    }
+    
+    // Generate new ID for imported flow
+    const newFlowId = crypto.randomUUID();
+    
+    const flowConfig: FlowConfig = {
+      id: newFlowId,
+      name: `${importData.name} (Imported)`,
+      description: importData.description || '',
+      version: importData.version || '1.0.0',
+      nodes: importData.nodes || []
+    };
+    
+    // Use the create flow function
+    const createRequest = new Request(request.url, {
+      method: 'POST',
+      headers: request.headers,
+      body: JSON.stringify(flowConfig)
+    });
+    
+    return await createFlow(env, createRequest, origin);
+  } catch (err: any) {
+    console.error('Error importing flow:', err);
+    return jsonResponse({ 
+      error: 'Failed to import flow',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+// ===================================================================
+// FLOW EXECUTION
+// ===================================================================
+
+async function executeFlowManually(env: Env, flowId: string, request: Request): Promise<Response> {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const nodeId = body.nodeId;
+    
+    if (!nodeId) {
+      return jsonResponse({ 
+        error: 'nodeId is required for manual execution'
+      }, corsHeaders, 400);
+    }
+    
+    // Log execution attempt
+    await env.DB.prepare(`
+      INSERT INTO debug_output (flow_id, node_id, message, type, timestamp)
+      VALUES (?, ?, ?, 'info', datetime('now'))
+    `).bind(flowId, nodeId, 'Manual execution triggered').run();
+    
+    // Get DO instance
+    if (!env.FLOW_EXECUTOR) {
+      return jsonResponse({ 
+        error: 'Flow executor not configured'
+      }, corsHeaders, 500);
+    }
+    
+    const doId = env.FLOW_EXECUTOR.idFromName(`flow:${flowId}`);
+    const doStub = env.FLOW_EXECUTOR.get(doId);
+    
+    // Execute the flow
+    const execRequest = new Request(`https://internal/internal/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nodeId,
+        payload: body.payload || {}
+      })
+    });
+    
+    const response = await doStub.fetch(execRequest);
+    const result = await response.json();
+    
+    // Log execution result
+    const logType = response.ok ? 'success' : 'error';
+    const logMessage = response.ok ? 'Execution completed' : `Execution failed: ${result.error || 'Unknown error'}`;
+    
+    await env.DB.prepare(`
+      INSERT INTO debug_output (flow_id, node_id, message, type, timestamp)
+      VALUES (?, ?, ?, ?, datetime('now'))
+    `).bind(flowId, nodeId, logMessage, logType).run();
+    
+    return jsonResponse({
+      success: response.ok,
+      output: result,
+      executionTime: new Date().toISOString()
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error executing flow:', err);
+    
+    // Log error
+    try {
+      await env.DB.prepare(`
+        INSERT INTO debug_output (flow_id, node_id, message, type, timestamp)
+        VALUES (?, ?, ?, 'error', datetime('now'))
+      `).bind(flowId, 'system', `Execution error: ${err.message}`).run();
+    } catch (logErr) {
+      console.error('Failed to log error:', logErr);
+    }
+    
+    return jsonResponse({ 
+      error: 'Failed to execute flow',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+// ===================================================================
+// DEBUG & MONITORING
+// ===================================================================
+
+async function getDebugOutput(env: Env, flowId: string, limit: number): Promise<Response> {
+  try {
+    const output = await env.DB.prepare(
+      'SELECT * FROM debug_output WHERE flow_id = ? ORDER BY timestamp DESC LIMIT ?'
+    ).bind(flowId, limit).all();
+    
+    return jsonResponse({ 
+      output: output.results || [],
+      count: output.results?.length || 0
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error fetching debug output:', err);
+    return jsonResponse({ 
+      error: 'Failed to fetch debug output',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function getFlowLogs(env: Env, flowId: string, limit: number): Promise<Response> {
+  try {
+    const logs = await env.DB.prepare(
+      'SELECT * FROM flow_logs WHERE flow_id = ? ORDER BY executed_at DESC LIMIT ?'
+    ).bind(flowId, limit).all();
+    
+    return jsonResponse({ 
+      logs: logs.results || [],
+      count: logs.results?.length || 0
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error fetching logs:', err);
+    return jsonResponse({ 
+      error: 'Failed to fetch logs',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+// ===================================================================
+// ROUTES & STATISTICS
 // ===================================================================
 
 async function listRoutes(env: Env, origin: string): Promise<Response> {
@@ -477,37 +743,28 @@ async function listRoutes(env: Env, origin: string): Promise<Response> {
   }
 }
 
-async function getFlowLogs(env: Env, flowId: string, limit: number): Promise<Response> {
-  try {
-    const logs = await env.DB.prepare(
-      'SELECT * FROM flow_logs WHERE flow_id = ? ORDER BY executed_at DESC LIMIT ?'
-    ).bind(flowId, limit).all();
-    
-    return jsonResponse({ logs: logs.results || [] }, corsHeaders);
-  } catch (err: any) {
-    console.error('Error fetching logs:', err);
-    return jsonResponse({ 
-      error: 'Failed to fetch logs',
-      details: err.message
-    }, corsHeaders, 500);
-  }
-}
-
 async function getStats(env: Env): Promise<Response> {
   try {
-    const [flowCount, routeCount, logCount] = await Promise.all([
+    const [flowCount, enabledFlowCount, routeCount, logCount, nodeCount] = await Promise.all([
       env.DB.prepare('SELECT COUNT(*) as count FROM flows').first(),
+      env.DB.prepare('SELECT COUNT(*) as count FROM flows WHERE enabled = 1').first(),
       env.DB.prepare('SELECT COUNT(*) as count FROM http_routes WHERE enabled = 1').first(),
-      env.DB.prepare('SELECT COUNT(*) as count FROM flow_logs').first()
+      env.DB.prepare('SELECT COUNT(*) as count FROM flow_logs').first(),
+      Promise.resolve({ count: registry.list().length })
     ]);
     
     return jsonResponse({
-      flows: flowCount?.count || 0,
+      flows: {
+        total: flowCount?.count || 0,
+        enabled: enabledFlowCount?.count || 0,
+        disabled: (flowCount?.count || 0) - (enabledFlowCount?.count || 0)
+      },
       routes: routeCount?.count || 0,
       logs: logCount?.count || 0,
-      nodes: registry.list().length
+      nodes: nodeCount.count
     }, corsHeaders);
   } catch (err: any) {
+    console.error('Error fetching stats:', err);
     return jsonResponse({
       error: 'Failed to fetch stats',
       details: err.message
@@ -516,7 +773,7 @@ async function getStats(env: Env): Promise<Response> {
 }
 
 // ===================================================================
-// Helper Functions
+// HELPER FUNCTIONS
 // ===================================================================
 
 function extractHttpTriggers(flowData: FlowConfig, flowId: string): Array<{
@@ -533,6 +790,7 @@ function extractHttpTriggers(flowData: FlowConfig, flowId: string): Array<{
         nodePath = '/' + nodePath;
       }
       
+      // Create flow-specific path
       const fullPath = `/${flowId}${nodePath}`;
       
       triggers.push({
