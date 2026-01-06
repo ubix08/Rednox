@@ -1,6 +1,7 @@
 
+// FlowExecutorDO.ts
 // ===================================================================
-// FlowExecutorDO - Ephemeral Flow Execution
+// FlowExecutorDO - Ephemeral Flow Execution (FIXED)
 // ===================================================================
 
 import { DurableObject } from 'cloudflare:workers';
@@ -22,7 +23,6 @@ export class FlowExecutorDO extends DurableObject {
     this.state = state;
     this.env = env;
     
-    // Flow context (scoped to this DO instance)
     this.flowContext = {
       get: async (key: string) => 
         await this.state.storage.get(StorageKeys.flow(key)),
@@ -36,7 +36,6 @@ export class FlowExecutorDO extends DurableObject {
       }
     };
     
-    // Global context (shared across all DO instances via storage)
     this.globalContext = {
       get: async (key: string) => 
         await this.state.storage.get(StorageKeys.global(key)),
@@ -60,12 +59,10 @@ export class FlowExecutorDO extends DurableObject {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     
-    // Internal/Admin endpoints
     if (url.pathname.startsWith('/internal/')) {
       return this.handleInternal(url.pathname, request);
     }
     
-    // Flow execution (HTTP trigger)
     return this.handleFlowExecution(request);
   }
   
@@ -80,7 +77,6 @@ export class FlowExecutorDO extends DurableObject {
     const startTime = Date.now();
     
     try {
-      // 1. Load flow from D1 (no caching)
       const route = await this.lookupRoute(fullPath, method);
       
       if (!route) {
@@ -90,7 +86,6 @@ export class FlowExecutorDO extends DurableObject {
         });
       }
       
-      // 2. Parse request
       const payload = await this.parseRequest(request, fullPath);
       const msg: NodeMessage = {
         _msgid: crypto.randomUUID(),
@@ -98,7 +93,6 @@ export class FlowExecutorDO extends DurableObject {
         topic: ''
       };
       
-      // 3. Create ephemeral execution context
       const context: ExecutionContext = {
         storage: this.state.storage,
         env: this.env,
@@ -106,23 +100,18 @@ export class FlowExecutorDO extends DurableObject {
         global: this.globalContext
       };
       
-      // 4. Create fresh flow engine
       const engine = new FlowEngine(route.flowConfig, context);
       await engine.initialize();
       
-      // 5. Execute flow
       const result = await engine.triggerFlow(route.nodeId, msg);
       const duration = Date.now() - startTime;
       
-      // 6. Cleanup engine (ephemeral)
       await engine.close();
       
-      // 7. Log execution (async, non-blocking)
       this.ctx.waitUntil(
         this.logExecution(route.flowId, route.nodeId, 'success', duration)
       );
       
-      // 8. Return response
       return this.formatResponse(result, duration, route.flowId);
       
     } catch (err: any) {
@@ -143,7 +132,6 @@ export class FlowExecutorDO extends DurableObject {
   private async setupScheduler() {
     const currentAlarm = await this.state.storage.getAlarm();
     if (!currentAlarm) {
-      // Set alarm for 1 minute from now
       await this.state.storage.setAlarm(Date.now() + 60000);
     }
   }
@@ -151,7 +139,6 @@ export class FlowExecutorDO extends DurableObject {
   async alarm() {
     const now = Date.now();
     
-    // Find all schedules
     const schedules = await this.state.storage.list<InjectSchedule>({ 
       prefix: StorageKeys.listPrefix('sched:') 
     });
@@ -159,10 +146,8 @@ export class FlowExecutorDO extends DurableObject {
     for (const [key, schedule] of schedules) {
       if (!schedule || !schedule.repeat) continue;
       
-      // Check if it's time to run
       if (schedule.nextRun && schedule.nextRun <= now) {
         try {
-          // Load flow and execute inject node
           const route = await this.lookupFlowById(schedule.flowId);
           
           if (route) {
@@ -188,7 +173,6 @@ export class FlowExecutorDO extends DurableObject {
             console.log(`[Scheduler] Executed inject node ${schedule.nodeId}`);
           }
           
-          // Update next run time
           if (schedule.interval) {
             schedule.nextRun = now + schedule.interval;
             await this.state.storage.put(key, schedule);
@@ -200,7 +184,6 @@ export class FlowExecutorDO extends DurableObject {
       }
     }
     
-    // Set next alarm
     await this.state.storage.setAlarm(Date.now() + 60000);
   }
   
@@ -247,7 +230,6 @@ export class FlowExecutorDO extends DurableObject {
     
     const flowConfig: FlowConfig = JSON.parse(flow.config as string);
     
-    // Find first inject node
     const injectNode = flowConfig.nodes.find(n => n.type === 'inject');
     
     if (!injectNode) {
@@ -338,11 +320,14 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   // ===================================================================
-  // INTERNAL ENDPOINTS
+  // FIXED: INTERNAL ENDPOINTS - Added /internal/execute
   // ===================================================================
   
   private async handleInternal(pathname: string, request: Request): Promise<Response> {
     switch (pathname) {
+      case '/internal/execute':
+        return await this.handleManualExecution(request);
+        
       case '/internal/status':
         return this.jsonResponse({
           doId: this.state.id.toString(),
@@ -368,6 +353,74 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   // ===================================================================
+  // FIXED: Manual Execution Handler
+  // ===================================================================
+  
+  private async handleManualExecution(request: Request): Promise<Response> {
+    try {
+      const body = await request.json();
+      const { nodeId, payload } = body;
+      
+      if (!nodeId) {
+        return this.errorResponse('nodeId is required', 400);
+      }
+      
+      // Extract flowId from DO name
+      const flowId = this.state.id.toString().replace('flow:', '');
+      
+      // Load flow configuration
+      const route = await this.lookupFlowById(flowId);
+      
+      if (!route) {
+        return this.errorResponse('Flow not found', 404);
+      }
+      
+      // Create execution context
+      const context: ExecutionContext = {
+        storage: this.state.storage,
+        env: this.env,
+        flow: this.flowContext,
+        global: this.globalContext
+      };
+      
+      // Create and initialize engine
+      const engine = new FlowEngine(route.flowConfig, context);
+      await engine.initialize();
+      
+      // Create message
+      const msg: NodeMessage = {
+        _msgid: crypto.randomUUID(),
+        payload: payload || { test: true, manual: true },
+        topic: 'manual-execution'
+      };
+      
+      // Execute flow
+      const startTime = Date.now();
+      const result = await engine.triggerFlow(nodeId, msg);
+      const duration = Date.now() - startTime;
+      
+      // Cleanup
+      await engine.close();
+      
+      // Log execution
+      await this.logExecution(flowId, nodeId, 'success', duration);
+      
+      return this.jsonResponse({
+        success: true,
+        result: result,
+        duration: duration + 'ms',
+        executionTime: new Date().toISOString()
+      });
+      
+    } catch (err: any) {
+      console.error('[Manual Execution] Error:', err);
+      return this.errorResponse(err.message, 500, {
+        stack: err.stack
+      });
+    }
+  }
+  
+  // ===================================================================
   // LOGGING
   // ===================================================================
   
@@ -383,7 +436,7 @@ export class FlowExecutorDO extends DurableObject {
         await this.env.DB.prepare(`
           INSERT INTO flow_logs (flow_id, node_id, status, duration_ms, error_message)
           VALUES (?, ?, ?, ?, ?)
-        `).bind(flowId, nodeId, status, duration, errorMessage || null).run();
+        `).bind(flowId, node_id, status, duration, errorMessage || null).run();
       }
     } catch (err) {
       console.error('[FlowExecutorDO] Failed to log:', err);
