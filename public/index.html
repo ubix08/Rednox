@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RedNox - Flow Administration</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/drawflow/0.0.59/drawflow.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/drawflow@0.0.60/dist/drawflow.min.css">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -192,7 +192,15 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/drawflow/0.0.59/drawflow.min.js"></script>
+    <!-- Load Drawflow from CDN with fallback -->
+    <script src="https://cdn.jsdelivr.net/npm/drawflow@0.0.60/dist/drawflow.min.js"></script>
+    <script>
+        // Check if Drawflow loaded, if not try alternative CDN
+        if (typeof Drawflow === 'undefined') {
+            console.log('Loading Drawflow from alternative CDN...');
+            document.write('<script src="https://unpkg.com/drawflow@0.0.60/dist/drawflow.min.js"><\/script>');
+        }
+    </script>
     <script src="app.js"></script>
 </body>
 </html>
