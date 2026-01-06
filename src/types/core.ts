@@ -1,4 +1,5 @@
 
+// core.ts
 // ===================================================================
 // RedNox - Pure Node-RED Compatible Types with UI Metadata
 // ===================================================================
@@ -119,21 +120,17 @@ export interface NodePropertyField {
   placeholder?: string;
   description?: string;
   
-  // For select type
   options?: Array<{ value: string; label: string }> | string[];
   
-  // For number type
   min?: number;
   max?: number;
   step?: number;
   
-  // For textarea/code type
   rows?: number;
   language?: string;
   
-  // Validation
   pattern?: string;
-  validate?: string; // Function body as string
+  validate?: string;
 }
 
 export interface NodeUIMetadata {
@@ -146,10 +143,8 @@ export interface NodeUIMetadata {
   
   properties?: NodePropertyField[];
   
-  // Help documentation
   info?: string;
   
-  // Advanced options
   align?: 'left' | 'right';
   button?: {
     enabled: boolean;
@@ -164,12 +159,10 @@ export interface RuntimeNodeDefinition {
   inputs: number;
   outputs: number;
   
-  // Runtime execution
   execute: (msg: NodeMessage, node: Node, context: ExecutionContext) => Promise<NodeMessage | NodeMessage[] | NodeMessage[][] | null>;
   onInit?: (node: Node, context: ExecutionContext) => Promise<void>;
   onClose?: (node: Node, context: ExecutionContext) => Promise<void>;
   
-  // UI Metadata
   ui?: NodeUIMetadata;
 }
 
@@ -260,7 +253,7 @@ export interface InjectSchedule {
 }
 
 // ===================================================================
-// Database Schema
+// FIXED: Database Schema - Added debug_output table
 // ===================================================================
 
 export const D1_SCHEMA_STATEMENTS = [
@@ -300,5 +293,18 @@ export const D1_SCHEMA_STATEMENTS = [
     FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE
   )`,
   
-  `CREATE INDEX IF NOT EXISTS idx_logs_flow_time ON flow_logs(flow_id, executed_at DESC)`
+  `CREATE INDEX IF NOT EXISTS idx_logs_flow_time ON flow_logs(flow_id, executed_at DESC)`,
+  
+  // FIXED: Added debug_output table
+  `CREATE TABLE IF NOT EXISTS debug_output (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    flow_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    message TEXT NOT NULL,
+    type TEXT DEFAULT 'info',
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE
+  )`,
+  
+  `CREATE INDEX IF NOT EXISTS idx_debug_flow_time ON debug_output(flow_id, timestamp DESC)`
 ];
