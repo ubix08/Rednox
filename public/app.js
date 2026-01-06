@@ -24,10 +24,17 @@ const state = {
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('RedNox Admin UI initializing...');
     
-    // Wait for Drawflow library to load
+    // Wait for Drawflow library to load (it's loaded before this script)
     if (typeof Drawflow === 'undefined') {
-        console.log('Waiting for Drawflow library...');
-        await waitForDrawflow();
+        console.warn('Drawflow not immediately available, waiting...');
+        const loaded = await waitForDrawflow();
+        if (!loaded) {
+            showToast('Failed to load editor library. Please refresh the page.', 'error');
+            console.error('Cannot proceed without Drawflow library');
+            return;
+        }
+    } else {
+        console.log('✓ Drawflow library loaded successfully');
     }
     
     // Setup navigation
@@ -43,35 +50,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadNodes();
     await loadFlows();
     
-    // Setup Drawflow (but don't initialize yet)
-    // Will be initialized when editor modal is opened
-    console.log('RedNox Admin UI ready');
+    console.log('✓ RedNox Admin UI ready');
 });
 
 // Wait for Drawflow library to be available
 function waitForDrawflow() {
     return new Promise((resolve) => {
         if (typeof Drawflow !== 'undefined') {
-            resolve();
+            console.log('✓ Drawflow available');
+            resolve(true);
             return;
         }
         
+        let attempts = 0;
+        const maxAttempts = 30; // 3 seconds total
+        
+        console.log('Waiting for Drawflow library to load...');
         const checkInterval = setInterval(() => {
+            attempts++;
+            
             if (typeof Drawflow !== 'undefined') {
+                console.log(`✓ Drawflow loaded after ${attempts * 100}ms`);
                 clearInterval(checkInterval);
-                resolve();
+                resolve(true);
+                return;
+            }
+            
+            if (attempts >= maxAttempts) {
+                console.error('✗ Drawflow library failed to load after 3 seconds');
+                console.error('Please check your internet connection and refresh the page');
+                clearInterval(checkInterval);
+                resolve(false);
             }
         }, 100);
-        
-        // Timeout after 5 seconds
-        setTimeout(() => {
-            clearInterval(checkInterval);
-            if (typeof Drawflow === 'undefined') {
-                console.error('Drawflow library failed to load');
-                showToast('Editor library failed to load. Please refresh the page.', 'error');
-            }
-            resolve();
-        }, 5000);
     });
 }
 
