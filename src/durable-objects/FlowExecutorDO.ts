@@ -1,4 +1,3 @@
-
 // FlowExecutorDO.ts
 // ===================================================================
 // FlowExecutorDO - Ephemeral Flow Execution (FIXED)
@@ -359,20 +358,21 @@ export class FlowExecutorDO extends DurableObject {
   private async handleManualExecution(request: Request): Promise<Response> {
     try {
       const body = await request.json();
-      const { nodeId, payload } = body;
+      const { flowId, nodeId, payload } = body;
+      
+      if (!flowId) {
+        return this.errorResponse('flowId is required', 400);
+      }
       
       if (!nodeId) {
         return this.errorResponse('nodeId is required', 400);
       }
       
-      // Extract flowId from DO name
-      const flowId = this.state.id.toString().replace('flow:', '');
-      
       // Load flow configuration
       const route = await this.lookupFlowById(flowId);
       
       if (!route) {
-        return this.errorResponse('Flow not found', 404);
+        return this.errorResponse('Flow not found or disabled', 404);
       }
       
       // Create execution context
@@ -394,7 +394,7 @@ export class FlowExecutorDO extends DurableObject {
         topic: 'manual-execution'
       };
       
-      // Execute flow
+      // Execute flow from the specified node
       const startTime = Date.now();
       const result = await engine.triggerFlow(nodeId, msg);
       const duration = Date.now() - startTime;
@@ -409,7 +409,9 @@ export class FlowExecutorDO extends DurableObject {
         success: true,
         result: result,
         duration: duration + 'ms',
-        executionTime: new Date().toISOString()
+        executionTime: new Date().toISOString(),
+        flowId,
+        nodeId
       });
       
     } catch (err: any) {
@@ -436,7 +438,7 @@ export class FlowExecutorDO extends DurableObject {
         await this.env.DB.prepare(`
           INSERT INTO flow_logs (flow_id, node_id, status, duration_ms, error_message)
           VALUES (?, ?, ?, ?, ?)
-        `).bind(flowId, node_id, status, duration, errorMessage || null).run();
+        `).bind(flowId, nodeId, status, duration, errorMessage || null).run();
       }
     } catch (err) {
       console.error('[FlowExecutorDO] Failed to log:', err);
