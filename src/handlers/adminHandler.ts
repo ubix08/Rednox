@@ -1,6 +1,5 @@
-
 // ===================================================================
-// adminHandler.ts - Complete Flow Management System
+// adminHandler.ts - Complete Flow Management System (FIXED)
 // ===================================================================
 
 import { Env, FlowConfig, D1_SCHEMA_STATEMENTS } from '../types/core';
@@ -294,7 +293,7 @@ async function getFlow(env: Env, flowId: string, origin: string): Promise<Respon
     
     const routesWithUrls = (routes.results || []).map(route => ({
       ...route,
-      fullUrl: `${origin}/api${route.path}`
+      fullUrl: `\( {origin}/api \){route.path}`
     }));
     
     return jsonResponse({
@@ -367,7 +366,7 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
       endpoints: httpTriggers.map(t => ({
         method: t.method,
         path: t.path,
-        url: `${origin}/api${t.path}`,
+        url: `\( {origin}/api \){t.path}`,
         nodeId: t.nodeId
       })),
       message: 'Flow created successfully',
@@ -444,7 +443,7 @@ async function updateFlow(env: Env, request: Request, flowId: string, origin: st
       endpoints: httpTriggers.map(t => ({
         method: t.method,
         path: t.path,
-        url: `${origin}/api${t.path}`,
+        url: `\( {origin}/api \){t.path}`,
         nodeId: t.nodeId
       })),
       warnings: validation.warnings
@@ -509,9 +508,8 @@ async function toggleFlow(env: Env, flowId: string, enable: boolean): Promise<Re
   }
 }
 
-// Continue to part 2...
 // ===================================================================
-// IMPORT/EXPORT OPERATIONS
+// IMPORT/EXPORT OPERATIONS (FIXED)
 // ===================================================================
 
 async function exportFlow(env: Env, flowId: string): Promise<Response> {
@@ -524,21 +522,21 @@ async function exportFlow(env: Env, flowId: string): Promise<Response> {
     
     const config = JSON.parse(flow.config as string);
     
+    // FIXED: Removed 'connections' field - it doesn't exist in FlowConfig
     const exportData = {
       id: flow.id,
       name: flow.name,
       description: flow.description,
       version: config.version || '1.0.0',
       nodes: config.nodes,
-      connections: config.connections,
       exported_at: new Date().toISOString(),
-      exported_from: 'RedNox v2.0'
+      exported_from: 'RedNox v3.0'
     };
     
     return new Response(JSON.stringify(exportData, null, 2), {
       headers: {
         'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="${flow.name}.json"`,
+        'Content-Disposition': `attachment; filename="${flow.id}.json"`,
         ...corsHeaders
       }
     });
@@ -555,7 +553,6 @@ async function importFlow(env: Env, request: Request, origin: string): Promise<R
   try {
     const importData = await request.json();
     
-    // Validate import data
     if (!importData.name || !importData.nodes) {
       return jsonResponse({
         error: 'Invalid import data',
@@ -563,7 +560,6 @@ async function importFlow(env: Env, request: Request, origin: string): Promise<R
       }, corsHeaders, 400);
     }
     
-    // Generate new ID for imported flow
     const newFlowId = crypto.randomUUID();
     
     const flowConfig: FlowConfig = {
@@ -574,7 +570,6 @@ async function importFlow(env: Env, request: Request, origin: string): Promise<R
       nodes: importData.nodes || []
     };
     
-    // Use the create flow function
     const createRequest = new Request(request.url, {
       method: 'POST',
       headers: request.headers,
@@ -592,7 +587,7 @@ async function importFlow(env: Env, request: Request, origin: string): Promise<R
 }
 
 // ===================================================================
-// FLOW EXECUTION
+// FLOW EXECUTION (FIXED)
 // ===================================================================
 
 async function executeFlowManually(env: Env, flowId: string, request: Request): Promise<Response> {
@@ -606,13 +601,11 @@ async function executeFlowManually(env: Env, flowId: string, request: Request): 
       }, corsHeaders, 400);
     }
     
-    // Log execution attempt
     await env.DB.prepare(`
       INSERT INTO debug_output (flow_id, node_id, message, type, timestamp)
       VALUES (?, ?, ?, 'info', datetime('now'))
     `).bind(flowId, nodeId, 'Manual execution triggered').run();
     
-    // Get DO instance
     if (!env.FLOW_EXECUTOR) {
       return jsonResponse({ 
         error: 'Flow executor not configured'
@@ -622,11 +615,12 @@ async function executeFlowManually(env: Env, flowId: string, request: Request): 
     const doId = env.FLOW_EXECUTOR.idFromName(`flow:${flowId}`);
     const doStub = env.FLOW_EXECUTOR.get(doId);
     
-    // Execute the flow
+    // FIXED: Include flowId in the request body
     const execRequest = new Request(`https://internal/internal/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        flowId,      // ← ADDED: Pass flowId to the DO
         nodeId,
         payload: body.payload || {}
       })
@@ -635,7 +629,6 @@ async function executeFlowManually(env: Env, flowId: string, request: Request): 
     const response = await doStub.fetch(execRequest);
     const result = await response.json();
     
-    // Log execution result
     const logType = response.ok ? 'success' : 'error';
     const logMessage = response.ok ? 'Execution completed' : `Execution failed: ${result.error || 'Unknown error'}`;
     
@@ -652,7 +645,6 @@ async function executeFlowManually(env: Env, flowId: string, request: Request): 
   } catch (err: any) {
     console.error('Error executing flow:', err);
     
-    // Log error
     try {
       await env.DB.prepare(`
         INSERT INTO debug_output (flow_id, node_id, message, type, timestamp)
@@ -727,7 +719,7 @@ async function listRoutes(env: Env, origin: string): Promise<Response> {
     
     const routesWithUrls = (routes.results || []).map(route => ({
       ...route,
-      fullUrl: `${origin}/api${route.path}`
+      fullUrl: `\( {origin}/api \){route.path}`
     }));
     
     return jsonResponse({ 
@@ -790,8 +782,7 @@ function extractHttpTriggers(flowData: FlowConfig, flowId: string): Array<{
         nodePath = '/' + nodePath;
       }
       
-      // Create flow-specific path
-      const fullPath = `/${flowId}${nodePath}`;
+      const fullPath = `/\( {flowId} \){nodePath}`;
       
       triggers.push({
         nodeId: node.id,
