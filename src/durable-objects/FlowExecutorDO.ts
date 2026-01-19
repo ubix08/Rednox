@@ -1,6 +1,6 @@
 // FlowExecutorDO.ts
 // ===================================================================
-// FlowExecutorDO - Ephemeral Flow Execution (FIXED)
+// FlowExecutorDO - Pure Ephemeral Execution (NO LOGGING)
 // ===================================================================
 
 import { DurableObject } from 'cloudflare:workers';
@@ -66,7 +66,7 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   // ===================================================================
-  // EPHEMERAL FLOW EXECUTION
+  // EPHEMERAL FLOW EXECUTION (Production - No Logging)
   // ===================================================================
   
   private async handleFlowExecution(request: Request): Promise<Response> {
@@ -99,17 +99,14 @@ export class FlowExecutorDO extends DurableObject {
         global: this.globalContext
       };
       
-      const engine = new FlowEngine(route.flowConfig, context);
+      // Pure ephemeral execution - no logging
+      const engine = new FlowEngine(route.flowConfig, context, false);
       await engine.initialize();
       
       const result = await engine.triggerFlow(route.nodeId, msg);
       const duration = Date.now() - startTime;
       
       await engine.close();
-      
-      this.ctx.waitUntil(
-        this.logExecution(route.flowId, route.nodeId, 'success', duration)
-      );
       
       return this.formatResponse(result, duration, route.flowId);
       
@@ -157,7 +154,7 @@ export class FlowExecutorDO extends DurableObject {
               global: this.globalContext
             };
             
-            const engine = new FlowEngine(route.flowConfig, context);
+            const engine = new FlowEngine(route.flowConfig, context, false);
             await engine.initialize();
             
             const msg: NodeMessage = {
@@ -319,13 +316,13 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   // ===================================================================
-  // FIXED: INTERNAL ENDPOINTS - Added /internal/execute
+  // INTERNAL ENDPOINTS
   // ===================================================================
   
   private async handleInternal(pathname: string, request: Request): Promise<Response> {
     switch (pathname) {
-      case '/internal/execute':
-        return await this.handleManualExecution(request);
+      case '/internal/debug-execute':
+        return await this.handleDebugExecution(request);
         
       case '/internal/status':
         return this.jsonResponse({
@@ -352,10 +349,14 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   // ===================================================================
-  // FIXED: Manual Execution Handler
+  // DEBUG EXECUTION (Returns trace to frontend)
   // ===================================================================
   
-  private async handleManualExecution(request: Request): Promise<Response> {
+  private async handleDebugExecution(request: Request): Promise<Response> {
+    const executionId = crypto.randomUUID();
+    const startTime = new Date().toISOString();
+    const startTimeMs = Date.now();
+    
     try {
       const body = await request.json();
       const { flowId, nodeId, payload } = body;
@@ -375,7 +376,7 @@ export class FlowExecutorDO extends DurableObject {
         return this.errorResponse('Flow not found or disabled', 404);
       }
       
-      // Create execution context
+      // Create execution context with DEBUG MODE enabled
       const context: ExecutionContext = {
         storage: this.state.storage,
         env: this.env,
@@ -383,65 +384,79 @@ export class FlowExecutorDO extends DurableObject {
         global: this.globalContext
       };
       
-      // Create and initialize engine
-      const engine = new FlowEngine(route.flowConfig, context);
+      // Create engine in DEBUG MODE
+      const engine = new FlowEngine(route.flowConfig, context, true);
       await engine.initialize();
       
       // Create message
       const msg: NodeMessage = {
         _msgid: crypto.randomUUID(),
         payload: payload || { test: true, manual: true },
-        topic: 'manual-execution'
+        topic: 'debug-execution'
       };
       
-      // Execute flow from the specified node
-      const startTime = Date.now();
-      const result = await engine.triggerFlow(nodeId, msg);
-      const duration = Date.now() - startTime;
+      // Execute flow
+      let finalOutput: any = null;
+      let executionSuccess = true;
+      
+      try {
+        finalOutput = await engine.triggerFlow(nodeId, msg);
+      } catch (err: any) {
+        executionSuccess = false;
+        console.error('[Debug Execution] Error:', err);
+      }
+      
+      // Get execution trace
+      const trace = engine.getTrace();
       
       // Cleanup
       await engine.close();
       
-      // Log execution
-      await this.logExecution(flowId, nodeId, 'success', duration);
+      const endTime = new Date().toISOString();
+      const duration = Date.now() - startTimeMs;
       
+      // Extract errors from trace
+      const errors = trace
+        .filter(t => t.status === 'error')
+        .map(t => ({
+          nodeId: t.nodeId,
+          message: t.error || 'Unknown error',
+          stack: t.stack
+        }));
+      
+      // Calculate metadata
+      const totalNodes = route.flowConfig.nodes.length;
+      const executedNodes = new Set(trace.map(t => t.nodeId)).size;
+      const errorNodes = errors.length;
+      const skippedNodes = totalNodes - executedNodes;
+      
+      // Return complete debug result
       return this.jsonResponse({
-        success: true,
-        result: result,
-        duration: duration + 'ms',
-        executionTime: new Date().toISOString(),
+        success: executionSuccess,
+        executionId,
         flowId,
-        nodeId
+        flowName: route.flowConfig.name,
+        startTime,
+        endTime,
+        duration,
+        entryNodeId: nodeId,
+        trace,
+        finalOutput,
+        errors,
+        metadata: {
+          totalNodes,
+          executedNodes,
+          skippedNodes,
+          errorNodes
+        }
       });
       
     } catch (err: any) {
-      console.error('[Manual Execution] Error:', err);
+      console.error('[Debug Execution] Fatal error:', err);
       return this.errorResponse(err.message, 500, {
+        executionId,
         stack: err.stack
       });
-    }
-  }
-  
-  // ===================================================================
-  // LOGGING
-  // ===================================================================
-  
-  private async logExecution(
-    flowId: string,
-    nodeId: string,
-    status: string,
-    duration: number,
-    errorMessage?: string
-  ): Promise<void> {
-    try {
-      if (this.env.DB) {
-        await this.env.DB.prepare(`
-          INSERT INTO flow_logs (flow_id, node_id, status, duration_ms, error_message)
-          VALUES (?, ?, ?, ?, ?)
-        `).bind(flowId, nodeId, status, duration, errorMessage || null).run();
-      }
-    } catch (err) {
-      console.error('[FlowExecutorDO] Failed to log:', err);
     }
   }
 }
