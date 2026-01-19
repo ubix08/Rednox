@@ -1,12 +1,30 @@
-
 // ===================================================================
-// RedNox - Ephemeral Flow Engine
+// RedNox - Ephemeral Flow Engine with Optional Debug Tracing
 // ===================================================================
 
 import { NodeInstance } from './NodeInstance';
 import { registry } from './NodeRegistry';
 import { RED } from '../utils';
-import { FlowConfig, ExecutionContext, NodeMessage } from '../types/core';
+import { 
+  FlowConfig, 
+  ExecutionContext, 
+  NodeMessage, 
+  NodeExecutionTrace,
+  ExecutionTrace,
+  NodeStatus
+} from '../types/core';
+
+class ExecutionTraceImpl implements ExecutionTrace {
+  traces: NodeExecutionTrace[] = [];
+  
+  addTrace(trace: NodeExecutionTrace): void {
+    this.traces.push(trace);
+  }
+  
+  getTraces(): NodeExecutionTrace[] {
+    return this.traces;
+  }
+}
 
 export class FlowEngine {
   private nodes = new Map<string, NodeInstance>();
@@ -16,11 +34,19 @@ export class FlowEngine {
   private executionDepth = new Map<string, number>();
   private maxExecutionDepth = 50;
   private initializedNodes = new Set<string>();
+  private debugMode: boolean;
   
-  constructor(flowConfig: FlowConfig, context: ExecutionContext) {
+  constructor(flowConfig: FlowConfig, context: ExecutionContext, debugMode = false) {
     this.flowConfig = flowConfig;
     this.context = context;
+    this.debugMode = debugMode;
     this.context.flowEngine = this;
+    this.context.debugMode = debugMode;
+    
+    // Initialize trace collector if in debug mode
+    if (debugMode) {
+      this.context.trace = new ExecutionTraceImpl();
+    }
   }
   
   async initialize() {
@@ -80,8 +106,23 @@ export class FlowEngine {
     // Lazy initialize
     await this.initializeNode(nodeId);
     
+    // Debug tracing
+    const startTime = this.debugMode ? Date.now() : 0;
+    const statusUpdates: NodeStatus[] = [];
+    let result: NodeMessage | NodeMessage[] | NodeMessage[][] | null = null;
+    let executionError: Error | null = null;
+    
+    // Intercept status updates if debugging
+    if (this.debugMode) {
+      const originalStatus = nodeInstance.status.bind(nodeInstance);
+      nodeInstance.status = (status: NodeStatus) => {
+        statusUpdates.push({ ...status });
+        originalStatus(status);
+      };
+    }
+    
     try {
-      const result = await definition.execute(msg, nodeInstance, this.context);
+      result = await definition.execute(msg, nodeInstance, this.context);
       
       // Check for HTTP response
       if (result && (result as NodeMessage)._httpResponse) {
@@ -93,14 +134,36 @@ export class FlowEngine {
         await this.routeMessage(nodeInstance, result);
       }
       
-      this.executionDepth.set(msg._msgid, depth);
-      return result;
-      
     } catch (err: any) {
-      this.executionDepth.set(msg._msgid, depth);
+      executionError = err;
       await this.handleNodeError(err, nodeInstance, msg);
-      return null;
     }
+    
+    // Record trace if in debug mode
+    if (this.debugMode && this.context.trace) {
+      const endTime = Date.now();
+      const trace: NodeExecutionTrace = {
+        nodeId: nodeInstance.id,
+        nodeType: nodeInstance.type,
+        nodeName: nodeInstance.name,
+        startTime,
+        endTime,
+        duration: endTime - startTime,
+        input: RED.util.cloneMessage(msg),
+        output: result ? (Array.isArray(result) ? result.map(m => 
+          m ? RED.util.cloneMessage(m) : null
+        ) : RED.util.cloneMessage(result)) : null,
+        status: executionError ? 'error' : 'success',
+        error: executionError?.message,
+        stack: executionError?.stack,
+        statusUpdates
+      };
+      
+      this.context.trace.addTrace(trace);
+    }
+    
+    this.executionDepth.set(msg._msgid, depth);
+    return executionError ? null : result;
   }
   
   async routeMessage(
@@ -201,6 +264,24 @@ export class FlowEngine {
     } catch (err: any) {
       console.error('[FlowEngine] Flow execution error:', err);
       
+      // Record error in trace if debugging
+      if (this.debugMode && this.context.trace) {
+        this.context.trace.addTrace({
+          nodeId: 'system',
+          nodeType: 'system',
+          nodeName: 'Flow Engine',
+          startTime: Date.now(),
+          endTime: Date.now(),
+          duration: 0,
+          input: msg,
+          output: null,
+          status: 'error',
+          error: err.message,
+          stack: err.stack,
+          statusUpdates: []
+        });
+      }
+      
       return {
         _msgid: msg._msgid,
         _httpResponse: {
@@ -213,6 +294,10 @@ export class FlowEngine {
         }
       };
     }
+  }
+  
+  getTrace(): NodeExecutionTrace[] {
+    return this.context.trace?.getTraces() || [];
   }
   
   async close() {
