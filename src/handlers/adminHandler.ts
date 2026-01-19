@@ -1,5 +1,5 @@
 // ===================================================================
-// adminHandler.ts - Complete Flow Management System (FIXED)
+// adminHandler.ts - Clean Admin API (No Execution Logging)
 // ===================================================================
 
 import { Env, FlowConfig, D1_SCHEMA_STATEMENTS } from '../types/core';
@@ -129,28 +129,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
     
     // ===================================================================
-    // FLOW EXECUTION
+    // DEBUG EXECUTION (Returns trace to frontend)
     // ===================================================================
     
-    if (path.match(/^\/admin\/flows\/[^/]+\/execute$/) && request.method === 'POST') {
+    if (path.match(/^\/admin\/flows\/[^/]+\/debug-execute$/) && request.method === 'POST') {
       const flowId = path.split('/')[3];
-      return await executeFlowManually(env, flowId, request);
-    }
-    
-    // ===================================================================
-    // DEBUG & MONITORING
-    // ===================================================================
-    
-    if (path.match(/^\/admin\/flows\/[^/]+\/debug$/) && request.method === 'GET') {
-      const flowId = path.split('/')[3];
-      const limit = parseInt(url.searchParams.get('limit') || '50');
-      return await getDebugOutput(env, flowId, limit);
-    }
-    
-    if (path.match(/^\/admin\/flows\/[^/]+\/logs$/) && request.method === 'GET') {
-      const flowId = path.split('/')[3];
-      const limit = parseInt(url.searchParams.get('limit') || '50');
-      return await getFlowLogs(env, flowId, limit);
+      return await debugExecuteFlow(env, flowId, request);
     }
     
     // ===================================================================
@@ -178,7 +162,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 }
 
 // ===================================================================
-// DATABASE INITIALIZATION
+// DATABASE INITIALIZATION (Clean schema only)
 // ===================================================================
 
 async function initializeDatabase(env: Env): Promise<Response> {
@@ -205,30 +189,6 @@ async function initializeDatabase(env: Env): Promise<Response> {
       }
     }
     
-    // Create debug_output table
-    try {
-      await env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS debug_output (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          flow_id TEXT NOT NULL,
-          node_id TEXT NOT NULL,
-          message TEXT NOT NULL,
-          type TEXT DEFAULT 'info',
-          timestamp TEXT NOT NULL DEFAULT (datetime('now')),
-          FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE
-        )
-      `).run();
-      
-      await env.DB.prepare(
-        'CREATE INDEX IF NOT EXISTS idx_debug_flow_time ON debug_output(flow_id, timestamp DESC)'
-      ).run();
-      
-      results.push({ statement: 'debug_output table', success: true });
-    } catch (err: any) {
-      console.error('Debug table error:', err);
-      results.push({ statement: 'debug_output table', success: false, error: err.message });
-    }
-    
     const failed = results.filter(r => !r.success);
     
     if (failed.length > 0) {
@@ -243,7 +203,8 @@ async function initializeDatabase(env: Env): Promise<Response> {
     return jsonResponse({ 
       success: true, 
       message: 'Database initialized successfully',
-      statements: results.length
+      statements: results.length,
+      note: 'Ephemeral runtime - no execution logs stored'
     }, corsHeaders);
   } catch (err: any) {
     console.error('Database initialization error:', err);
@@ -293,7 +254,7 @@ async function getFlow(env: Env, flowId: string, origin: string): Promise<Respon
     
     const routesWithUrls = (routes.results || []).map(route => ({
       ...route,
-      fullUrl: `\( {origin}/api \){route.path}`
+      fullUrl: `${origin}/api${route.path}`
     }));
     
     return jsonResponse({
@@ -366,7 +327,7 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
       endpoints: httpTriggers.map(t => ({
         method: t.method,
         path: t.path,
-        url: `\( {origin}/api \){t.path}`,
+        url: `${origin}/api${t.path}`,
         nodeId: t.nodeId
       })),
       message: 'Flow created successfully',
@@ -443,7 +404,7 @@ async function updateFlow(env: Env, request: Request, flowId: string, origin: st
       endpoints: httpTriggers.map(t => ({
         method: t.method,
         path: t.path,
-        url: `\( {origin}/api \){t.path}`,
+        url: `${origin}/api${t.path}`,
         nodeId: t.nodeId
       })),
       warnings: validation.warnings
@@ -509,7 +470,7 @@ async function toggleFlow(env: Env, flowId: string, enable: boolean): Promise<Re
 }
 
 // ===================================================================
-// IMPORT/EXPORT OPERATIONS (FIXED)
+// IMPORT/EXPORT OPERATIONS
 // ===================================================================
 
 async function exportFlow(env: Env, flowId: string): Promise<Response> {
@@ -522,7 +483,6 @@ async function exportFlow(env: Env, flowId: string): Promise<Response> {
     
     const config = JSON.parse(flow.config as string);
     
-    // FIXED: Removed 'connections' field - it doesn't exist in FlowConfig
     const exportData = {
       id: flow.id,
       name: flow.name,
@@ -587,24 +547,19 @@ async function importFlow(env: Env, request: Request, origin: string): Promise<R
 }
 
 // ===================================================================
-// FLOW EXECUTION (FIXED)
+// DEBUG EXECUTION (Returns full trace to frontend)
 // ===================================================================
 
-async function executeFlowManually(env: Env, flowId: string, request: Request): Promise<Response> {
+async function debugExecuteFlow(env: Env, flowId: string, request: Request): Promise<Response> {
   try {
     const body = await request.json().catch(() => ({}));
     const nodeId = body.nodeId;
     
     if (!nodeId) {
       return jsonResponse({ 
-        error: 'nodeId is required for manual execution'
+        error: 'nodeId is required for debug execution'
       }, corsHeaders, 400);
     }
-    
-    await env.DB.prepare(`
-      INSERT INTO debug_output (flow_id, node_id, message, type, timestamp)
-      VALUES (?, ?, ?, 'info', datetime('now'))
-    `).bind(flowId, nodeId, 'Manual execution triggered').run();
     
     if (!env.FLOW_EXECUTOR) {
       return jsonResponse({ 
@@ -615,12 +570,12 @@ async function executeFlowManually(env: Env, flowId: string, request: Request): 
     const doId = env.FLOW_EXECUTOR.idFromName(`flow:${flowId}`);
     const doStub = env.FLOW_EXECUTOR.get(doId);
     
-    // FIXED: Include flowId in the request body
-    const execRequest = new Request(`https://internal/internal/execute`, {
+    // Call the DO's internal debug endpoint
+    const execRequest = new Request(`https://internal/internal/debug-execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        flowId,      // ← ADDED: Pass flowId to the DO
+        flowId,
         nodeId,
         payload: body.payload || {}
       })
@@ -629,75 +584,13 @@ async function executeFlowManually(env: Env, flowId: string, request: Request): 
     const response = await doStub.fetch(execRequest);
     const result = await response.json();
     
-    const logType = response.ok ? 'success' : 'error';
-    const logMessage = response.ok ? 'Execution completed' : `Execution failed: ${result.error || 'Unknown error'}`;
+    // Return the complete debug trace to frontend
+    return jsonResponse(result, corsHeaders);
     
-    await env.DB.prepare(`
-      INSERT INTO debug_output (flow_id, node_id, message, type, timestamp)
-      VALUES (?, ?, ?, ?, datetime('now'))
-    `).bind(flowId, nodeId, logMessage, logType).run();
-    
-    return jsonResponse({
-      success: response.ok,
-      output: result,
-      executionTime: new Date().toISOString()
-    }, corsHeaders);
   } catch (err: any) {
-    console.error('Error executing flow:', err);
-    
-    try {
-      await env.DB.prepare(`
-        INSERT INTO debug_output (flow_id, node_id, message, type, timestamp)
-        VALUES (?, ?, ?, 'error', datetime('now'))
-      `).bind(flowId, 'system', `Execution error: ${err.message}`).run();
-    } catch (logErr) {
-      console.error('Failed to log error:', logErr);
-    }
-    
+    console.error('Error executing debug flow:', err);
     return jsonResponse({ 
-      error: 'Failed to execute flow',
-      details: err.message
-    }, corsHeaders, 500);
-  }
-}
-
-// ===================================================================
-// DEBUG & MONITORING
-// ===================================================================
-
-async function getDebugOutput(env: Env, flowId: string, limit: number): Promise<Response> {
-  try {
-    const output = await env.DB.prepare(
-      'SELECT * FROM debug_output WHERE flow_id = ? ORDER BY timestamp DESC LIMIT ?'
-    ).bind(flowId, limit).all();
-    
-    return jsonResponse({ 
-      output: output.results || [],
-      count: output.results?.length || 0
-    }, corsHeaders);
-  } catch (err: any) {
-    console.error('Error fetching debug output:', err);
-    return jsonResponse({ 
-      error: 'Failed to fetch debug output',
-      details: err.message
-    }, corsHeaders, 500);
-  }
-}
-
-async function getFlowLogs(env: Env, flowId: string, limit: number): Promise<Response> {
-  try {
-    const logs = await env.DB.prepare(
-      'SELECT * FROM flow_logs WHERE flow_id = ? ORDER BY executed_at DESC LIMIT ?'
-    ).bind(flowId, limit).all();
-    
-    return jsonResponse({ 
-      logs: logs.results || [],
-      count: logs.results?.length || 0
-    }, corsHeaders);
-  } catch (err: any) {
-    console.error('Error fetching logs:', err);
-    return jsonResponse({ 
-      error: 'Failed to fetch logs',
+      error: 'Failed to execute debug flow',
       details: err.message
     }, corsHeaders, 500);
   }
@@ -719,7 +612,7 @@ async function listRoutes(env: Env, origin: string): Promise<Response> {
     
     const routesWithUrls = (routes.results || []).map(route => ({
       ...route,
-      fullUrl: `\( {origin}/api \){route.path}`
+      fullUrl: `${origin}/api${route.path}`
     }));
     
     return jsonResponse({ 
@@ -737,11 +630,10 @@ async function listRoutes(env: Env, origin: string): Promise<Response> {
 
 async function getStats(env: Env): Promise<Response> {
   try {
-    const [flowCount, enabledFlowCount, routeCount, logCount, nodeCount] = await Promise.all([
+    const [flowCount, enabledFlowCount, routeCount, nodeCount] = await Promise.all([
       env.DB.prepare('SELECT COUNT(*) as count FROM flows').first(),
       env.DB.prepare('SELECT COUNT(*) as count FROM flows WHERE enabled = 1').first(),
       env.DB.prepare('SELECT COUNT(*) as count FROM http_routes WHERE enabled = 1').first(),
-      env.DB.prepare('SELECT COUNT(*) as count FROM flow_logs').first(),
       Promise.resolve({ count: registry.list().length })
     ]);
     
@@ -752,8 +644,9 @@ async function getStats(env: Env): Promise<Response> {
         disabled: (flowCount?.count || 0) - (enabledFlowCount?.count || 0)
       },
       routes: routeCount?.count || 0,
-      logs: logCount?.count || 0,
-      nodes: nodeCount.count
+      nodes: nodeCount.count,
+      runtime: 'ephemeral',
+      note: 'No execution logs stored - use debug-execute for tracing'
     }, corsHeaders);
   } catch (err: any) {
     console.error('Error fetching stats:', err);
@@ -782,7 +675,7 @@ function extractHttpTriggers(flowData: FlowConfig, flowId: string): Array<{
         nodePath = '/' + nodePath;
       }
       
-      const fullPath = `/\( {flowId} \){nodePath}`;
+      const fullPath = `/${flowId}${nodePath}`;
       
       triggers.push({
         nodeId: node.id,
