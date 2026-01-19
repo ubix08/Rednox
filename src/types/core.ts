@@ -1,7 +1,6 @@
-
 // core.ts
 // ===================================================================
-// RedNox - Pure Node-RED Compatible Types with UI Metadata
+// RedNox - Pure Node-RED Compatible Types (EPHEMERAL)
 // ===================================================================
 
 export interface NodeMessage {
@@ -43,6 +42,8 @@ export interface ExecutionContext {
   flow: FlowContext;
   global: GlobalContext;
   flowEngine?: any;
+  debugMode?: boolean;
+  trace?: ExecutionTrace;
 }
 
 export interface FlowContext {
@@ -119,16 +120,12 @@ export interface NodePropertyField {
   required?: boolean;
   placeholder?: string;
   description?: string;
-  
   options?: Array<{ value: string; label: string }> | string[];
-  
   min?: number;
   max?: number;
   step?: number;
-  
   rows?: number;
   language?: string;
-  
   pattern?: string;
   validate?: string;
 }
@@ -140,11 +137,8 @@ export interface NodeUIMetadata {
   paletteLabel?: string;
   label?: string | ((node: NodeConfig) => string);
   labelStyle?: string | ((node: NodeConfig) => string);
-  
   properties?: NodePropertyField[];
-  
   info?: string;
-  
   align?: 'left' | 'right';
   button?: {
     enabled: boolean;
@@ -253,10 +247,60 @@ export interface InjectSchedule {
 }
 
 // ===================================================================
-// FIXED: Database Schema - Added debug_output table
+// DEBUG EXECUTION TYPES (Frontend-only storage)
+// ===================================================================
+
+export interface NodeExecutionTrace {
+  nodeId: string;
+  nodeType: string;
+  nodeName?: string;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  input: NodeMessage;
+  output: NodeMessage | NodeMessage[] | NodeMessage[][] | null;
+  status: 'success' | 'error' | 'skipped';
+  error?: string;
+  stack?: string;
+  statusUpdates: NodeStatus[];
+}
+
+export interface ExecutionTrace {
+  traces: NodeExecutionTrace[];
+  addTrace(trace: NodeExecutionTrace): void;
+  getTraces(): NodeExecutionTrace[];
+}
+
+export interface DebugExecutionResult {
+  success: boolean;
+  executionId: string;
+  flowId: string;
+  flowName: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  entryNodeId: string;
+  trace: NodeExecutionTrace[];
+  finalOutput: any;
+  errors: Array<{
+    nodeId: string;
+    message: string;
+    stack?: string;
+  }>;
+  metadata: {
+    totalNodes: number;
+    executedNodes: number;
+    skippedNodes: number;
+    errorNodes: number;
+  };
+}
+
+// ===================================================================
+// CLEAN DATABASE SCHEMA (No execution logs)
 // ===================================================================
 
 export const D1_SCHEMA_STATEMENTS = [
+  // Flows table - stores flow definitions only
   `CREATE TABLE IF NOT EXISTS flows (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -269,6 +313,7 @@ export const D1_SCHEMA_STATEMENTS = [
   
   `CREATE INDEX IF NOT EXISTS idx_flows_enabled ON flows(enabled)`,
   
+  // HTTP routes - maps URLs to flow entry points
   `CREATE TABLE IF NOT EXISTS http_routes (
     id TEXT PRIMARY KEY,
     flow_id TEXT NOT NULL,
@@ -280,31 +325,5 @@ export const D1_SCHEMA_STATEMENTS = [
     UNIQUE(path, method)
   )`,
   
-  `CREATE INDEX IF NOT EXISTS idx_http_routes_lookup ON http_routes(path, method, enabled)`,
-  
-  `CREATE TABLE IF NOT EXISTS flow_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    flow_id TEXT NOT NULL,
-    node_id TEXT,
-    status TEXT NOT NULL,
-    duration_ms INTEGER,
-    error_message TEXT,
-    executed_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE
-  )`,
-  
-  `CREATE INDEX IF NOT EXISTS idx_logs_flow_time ON flow_logs(flow_id, executed_at DESC)`,
-  
-  // FIXED: Added debug_output table
-  `CREATE TABLE IF NOT EXISTS debug_output (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    flow_id TEXT NOT NULL,
-    node_id TEXT NOT NULL,
-    message TEXT NOT NULL,
-    type TEXT DEFAULT 'info',
-    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE
-  )`,
-  
-  `CREATE INDEX IF NOT EXISTS idx_debug_flow_time ON debug_output(flow_id, timestamp DESC)`
+  `CREATE INDEX IF NOT EXISTS idx_http_routes_lookup ON http_routes(path, method, enabled)`
 ];
