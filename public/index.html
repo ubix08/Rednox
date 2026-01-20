@@ -71,8 +71,8 @@
     <!-- Main Content Area -->
     <div class="main-content">
       
-      <!-- Sidebar -->
-      <aside class="sidebar" id="sidebar">
+      <!-- Flow List Sidebar (Left - Collapsible) -->
+      <aside class="sidebar flow-sidebar" id="flowSidebar">
         <div class="sidebar-header">
           <h2>Flows</h2>
           <button class="btn btn-sm btn-primary" id="newFlowBtn">
@@ -94,7 +94,7 @@
         </div>
         
         <div class="sidebar-footer">
-          <button class="btn btn-sm btn-ghost" id="importBtn">
+          <button class="btn btn-sm btn-ghost btn-block" id="importBtn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="7 10 12 15 17 10"></polyline>
@@ -102,7 +102,7 @@
             </svg>
             Import
           </button>
-          <button class="btn btn-sm btn-ghost" id="settingsBtn">
+          <button class="btn btn-sm btn-ghost btn-block" id="settingsBtn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3"></circle>
               <path d="M12 1v6m0 6v6m-9-9h6m6 0h6m-3.636-6.364l4.243 4.243m-12.728 0l4.243 4.243m0-12.728l4.243 4.243m-12.728 0l4.243 4.243"></path>
@@ -112,19 +112,21 @@
         </div>
       </aside>
 
-      <!-- Node Palette -->
-      <aside class="node-palette" id="nodePalette">
-        <div class="palette-header">
-          <h3>Nodes</h3>
-          <button class="btn-close-palette" id="closePalette" aria-label="Close Palette">×</button>
+      <!-- Node Palette (Left - Collapsible) -->
+      <aside class="sidebar node-palette" id="nodePalette">
+        <div class="sidebar-header">
+          <h3>Node Palette</h3>
+          <button class="btn-close-sidebar" id="closePalette" aria-label="Close Palette">×</button>
         </div>
         
         <div class="palette-search">
           <input type="text" id="paletteSearch" placeholder="Search nodes..." class="search-input">
         </div>
         
-        <div class="palette-content" id="paletteContent">
-          <div class="palette-loading">Loading nodes...</div>
+        <div class="sidebar-content">
+          <div id="paletteContent" class="palette-content">
+            <div class="palette-loading">Loading nodes...</div>
+          </div>
         </div>
       </aside>
 
@@ -191,61 +193,76 @@
         </div>
       </main>
 
-      <!-- Properties Panel -->
-      <aside class="properties-panel" id="propertiesPanel">
-        <div class="properties-header">
-          <h3>Properties</h3>
-          <button class="btn-close-properties" id="closeProperties" aria-label="Close Properties">×</button>
+      <!-- Right Sidebar - Tabbed (Properties & Debug) -->
+      <aside class="sidebar right-sidebar" id="rightSidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-tabs">
+            <button class="sidebar-tab active" data-tab="properties">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m-9-9h6m6 0h6"></path>
+              </svg>
+              Properties
+            </button>
+            <button class="sidebar-tab" data-tab="debug">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+              Debug
+            </button>
+          </div>
+          <button class="btn-close-sidebar" id="closeRightSidebar" aria-label="Close Panel">×</button>
         </div>
         
-        <div class="properties-content" id="propertiesContent">
-          <div class="empty-state">
-            <p>No node selected</p>
-            <small>Select a node to edit its properties</small>
+        <!-- Properties Tab Content -->
+        <div class="sidebar-tab-content active" data-tab="properties">
+          <div class="sidebar-content">
+            <div id="propertiesContent" class="properties-content">
+              <div class="empty-state">
+                <p>No node selected</p>
+                <small>Select a node to edit its properties</small>
+              </div>
+            </div>
+          </div>
+          
+          <div class="sidebar-footer">
+            <button class="btn btn-ghost btn-block" id="cancelPropertiesBtn">Cancel</button>
+            <button class="btn btn-primary btn-block" id="applyPropertiesBtn">Apply</button>
           </div>
         </div>
         
-        <div class="properties-footer">
-          <button class="btn btn-ghost" id="cancelPropertiesBtn">Cancel</button>
-          <button class="btn btn-primary" id="applyPropertiesBtn">Apply</button>
+        <!-- Debug Tab Content -->
+        <div class="sidebar-tab-content" data-tab="debug">
+          <div class="sidebar-header-secondary">
+            <div class="debug-subtabs">
+              <button class="debug-subtab active" data-subtab="console">Console</button>
+              <button class="debug-subtab" data-subtab="trace">Trace</button>
+              <button class="debug-subtab" data-subtab="output">Output</button>
+            </div>
+            <button class="btn btn-sm btn-icon" id="clearDebugBtn" title="Clear">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="sidebar-content">
+            <div class="debug-subtab-content active" data-subtab="console">
+              <div class="debug-messages" id="debugMessages"></div>
+            </div>
+            <div class="debug-subtab-content" data-subtab="trace">
+              <div class="trace-viewer" id="traceViewer"></div>
+            </div>
+            <div class="debug-subtab-content" data-subtab="output">
+              <div class="output-viewer" id="outputViewer"></div>
+            </div>
+          </div>
         </div>
       </aside>
 
-    </div>
-
-    <!-- Bottom Debug Panel -->
-    <div class="debug-panel" id="debugPanel">
-      <div class="debug-header">
-        <div class="debug-tabs">
-          <button class="debug-tab active" data-tab="console">Console</button>
-          <button class="debug-tab" data-tab="trace">Execution Trace</button>
-          <button class="debug-tab" data-tab="output">Output</button>
-        </div>
-        <div class="debug-actions">
-          <button class="btn btn-sm btn-icon" id="clearDebugBtn" title="Clear">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            </svg>
-          </button>
-          <button class="btn btn-sm btn-icon" id="toggleDebugBtn" title="Minimize">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="18 15 12 9 6 15"></polyline>
-            </svg>
-          </button>
-        </div>
-      </div>
-      <div class="debug-content">
-        <div class="debug-tab-content active" data-tab="console">
-          <div class="debug-messages" id="debugMessages"></div>
-        </div>
-        <div class="debug-tab-content" data-tab="trace">
-          <div class="trace-viewer" id="traceViewer"></div>
-        </div>
-        <div class="debug-tab-content" data-tab="output">
-          <div class="output-viewer" id="outputViewer"></div>
-        </div>
-      </div>
     </div>
 
   </div>
