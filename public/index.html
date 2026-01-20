@@ -1,288 +1,370 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>RedNox - Flow Administration</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/drawflow@0.0.60/dist/drawflow.min.css">
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="RedNox Flow Editor - Visual Node-RED Compatible Flow Designer">
+  <title>RedNox Admin</title>
+  
+  <!-- LiteGraph.js -->
+  <script src="https://cdn.jsdelivr.net/npm/litegraph.js@0.7.18/build/litegraph.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litegraph.js@0.7.18/css/litegraph.css">
+  
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Header -->
-    <header class="header">
-        <div class="header-content">
-            <div class="logo">
-                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                    <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2"/>
-                    <path d="M12 16L16 12L20 16L16 20L12 16Z" fill="currentColor"/>
-                </svg>
-                <h1>RedNox</h1>
-            </div>
-            <nav class="nav">
-                <button class="nav-btn active" data-view="flows">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    </svg>
-                    <span>Flows</span>
-                </button>
-                <button class="nav-btn" data-view="routes">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <path d="M10 3v14M3 10h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    </svg>
-                    <span>Routes</span>
-                </button>
-                <button class="nav-btn" data-view="nodes">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <rect x="3" y="3" width="6" height="6" stroke="currentColor" stroke-width="2"/>
-                        <rect x="11" y="11" width="6" height="6" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                    <span>Nodes</span>
-                </button>
-            </nav>
-            <div class="header-actions">
-                <button class="btn-icon" id="refreshBtn" title="Refresh">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <path d="M17 10a7 7 0 11-14 0 7 7 0 0114 0z" stroke="currentColor" stroke-width="2"/>
-                        <path d="M10 6v4l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    </svg>
-                </button>
-                <button class="btn-primary" id="newFlowBtn">
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                        <path d="M10 5v10M5 10h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    </svg>
-                    <span>New Flow</span>
-                </button>
-            </div>
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-content">
+      <div class="loading-spinner"></div>
+      <p>Loading RedNox...</p>
+    </div>
+  </div>
+
+  <!-- Main Application Container -->
+  <div id="app" class="app-container" style="display: none;">
+    
+    <!-- Top Navigation Bar -->
+    <header class="top-nav">
+      <div class="nav-left">
+        <button class="menu-toggle" id="menuToggle" aria-label="Toggle Menu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <h1 class="app-title">
+          <span class="logo">⚡</span>
+          RedNox
+        </h1>
+      </div>
+      
+      <div class="nav-center">
+        <div class="flow-info" id="flowInfo">
+          <span class="flow-name" id="currentFlowName">No Flow Selected</span>
+          <span class="flow-status" id="flowStatus"></span>
         </div>
+      </div>
+      
+      <div class="nav-right">
+        <button class="btn btn-icon" id="saveBtn" title="Save Flow" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+        </button>
+        <button class="btn btn-icon" id="deployBtn" title="Deploy Flow" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+        </button>
+        <button class="btn btn-primary" id="debugBtn" title="Debug Execute">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          Debug
+        </button>
+      </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="main">
-        <!-- Flows View -->
-        <div class="view active" id="flowsView">
-            <div class="view-header">
-                <h2>Flows</h2>
-                <div class="stats" id="flowStats">
-                    <div class="stat">
-                        <span class="stat-value">-</span>
-                        <span class="stat-label">Total</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-value">-</span>
-                        <span class="stat-label">Active</span>
-                    </div>
-                </div>
-            </div>
-            <div class="flows-container" id="flowsContainer">
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <p style="margin-top: 1rem;">Loading flows...</p>
-                </div>
-            </div>
+    <!-- Main Content Area -->
+    <div class="main-content">
+      
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <h2>Flows</h2>
+          <button class="btn btn-sm btn-primary" id="newFlowBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            New
+          </button>
         </div>
+        
+        <div class="sidebar-content">
+          <div class="flow-list" id="flowList">
+            <div class="empty-state">
+              <p>No flows yet</p>
+              <small>Click "New" to create your first flow</small>
+            </div>
+          </div>
+        </div>
+        
+        <div class="sidebar-footer">
+          <button class="btn btn-sm btn-ghost" id="importBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Import
+          </button>
+          <button class="btn btn-sm btn-ghost" id="settingsBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 1v6m0 6v6m-9-9h6m6 0h6m-3.636-6.364l4.243 4.243m-12.728 0l4.243 4.243m0-12.728l4.243 4.243m-12.728 0l4.243 4.243"></path>
+            </svg>
+            Settings
+          </button>
+        </div>
+      </aside>
 
-        <!-- Routes View -->
-        <div class="view" id="routesView">
-            <div class="view-header">
-                <h2>HTTP Routes</h2>
-            </div>
-            <div class="routes-list" id="routesList">
-                <div class="loading">Loading routes...</div>
-            </div>
+      <!-- Node Palette -->
+      <aside class="node-palette" id="nodePalette">
+        <div class="palette-header">
+          <h3>Nodes</h3>
+          <button class="btn-close-palette" id="closePalette" aria-label="Close Palette">×</button>
         </div>
+        
+        <div class="palette-search">
+          <input type="text" id="paletteSearch" placeholder="Search nodes..." class="search-input">
+        </div>
+        
+        <div class="palette-content" id="paletteContent">
+          <div class="palette-loading">Loading nodes...</div>
+        </div>
+      </aside>
 
-        <!-- Nodes View -->
-        <div class="view" id="nodesView">
-            <div class="view-header">
-                <h2>Available Nodes</h2>
-                <input type="text" id="nodeSearchInput" class="search-input" placeholder="Search nodes...">
-            </div>
-            <div class="nodes-categories" id="nodesCategories">
-                <div class="loading">Loading nodes...</div>
-            </div>
+      <!-- Canvas Area -->
+      <main class="canvas-area">
+        <div class="canvas-toolbar">
+          <div class="toolbar-left">
+            <button class="btn btn-sm btn-icon" id="zoomInBtn" title="Zoom In">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+                <line x1="11" y1="8" x2="11" y2="14"></line>
+                <line x1="8" y1="11" x2="14" y2="11"></line>
+              </svg>
+            </button>
+            <button class="btn btn-sm btn-icon" id="zoomOutBtn" title="Zoom Out">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+                <line x1="8" y1="11" x2="14" y2="11"></line>
+              </svg>
+            </button>
+            <button class="btn btn-sm btn-icon" id="fitBtn" title="Fit to Screen">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+            </button>
+            <button class="btn btn-sm btn-icon" id="gridBtn" title="Toggle Grid">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="toolbar-center">
+            <span class="zoom-level" id="zoomLevel">100%</span>
+          </div>
+          
+          <div class="toolbar-right">
+            <button class="btn btn-sm" id="togglePaletteBtn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+              </svg>
+              Nodes
+            </button>
+          </div>
         </div>
-    </main>
+        
+        <div class="canvas-container">
+          <canvas id="flowCanvas" class="flow-canvas"></canvas>
+        </div>
+        
+        <div class="canvas-minimap" id="minimap">
+          <canvas id="minimapCanvas"></canvas>
+        </div>
+      </main>
 
-    <!-- Flow Editor Modal -->
-    <div class="modal" id="editorModal">
-        <div class="modal-content modal-fullscreen">
-            <div class="modal-header">
-                <div class="modal-title">
-                    <input type="text" id="flowName" class="flow-name-input" placeholder="Flow Name">
-                    <input type="text" id="flowDescription" class="flow-desc-input" placeholder="Description (optional)">
-                </div>
-                <div class="modal-actions">
-                    <button class="btn-icon" id="togglePaletteBtn" title="Toggle Palette">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <rect x="2" y="2" width="6" height="16" stroke="currentColor" stroke-width="2"/>
-                        </svg>
-                    </button>
-                    <button class="btn-success" id="executeBtn" title="Execute Flow">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <path d="M5 3l12 7-12 7V3z" fill="currentColor"/>
-                        </svg>
-                        <span>Execute</span>
-                    </button>
-                    <button class="btn-secondary" id="exportBtn" title="Export Flow">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <path d="M10 3v10M6 9l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            <path d="M3 15v2h14v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                        <span>Export</span>
-                    </button>
-                    <button class="btn-secondary" id="importBtn" title="Import Flow">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <path d="M10 13V3M6 7l4-4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            <path d="M3 15v2h14v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                        <span>Import</span>
-                    </button>
-                    <button class="btn-secondary" id="clearFlowBtn" title="Clear Canvas">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <path d="M3 3l14 14M17 3L3 17" stroke="currentColor" stroke-width="2"/>
-                        </svg>
-                    </button>
-                    <button class="btn-secondary" id="validateBtn">Validate</button>
-                    <button class="btn-primary" id="saveFlowBtn">Save Flow</button>
-                    <button class="btn-icon" id="closeEditorBtn">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            <div class="editor-container">
-                <div class="node-palette" id="nodePalette">
-                    <div class="palette-header">Node Palette</div>
-                    <div class="palette-search">
-                        <input type="text" id="paletteSearch" placeholder="Search nodes...">
-                    </div>
-                    <div class="palette-nodes" id="paletteNodes"></div>
-                </div>
-                <div class="canvas-container">
-                    <div class="canvas-toolbar">
-                        <button class="toolbar-btn" id="zoomInBtn" title="Zoom In">
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2"/>
-                                <path d="M8 5v6M5 8h6M13 13l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </button>
-                        <button class="toolbar-btn" id="zoomOutBtn" title="Zoom Out">
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2"/>
-                                <path d="M5 8h6M13 13l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </button>
-                        <button class="toolbar-btn" id="zoomResetBtn" title="Reset Zoom">
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2"/>
-                                <path d="M10 6v8M6 10h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </button>
-                        <button class="toolbar-btn" id="fitViewBtn" title="Fit to View">
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <rect x="3" y="3" width="14" height="14" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                        </button>
-                    </div>
-                    <div id="drawflow"></div>
-                </div>
-                <div class="properties-panel" id="propertiesPanel">
-                    <div class="properties-header">
-                        Properties
-                        <button class="btn-icon btn-small" id="closePropsBtn">
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="properties-content" id="propertiesContent">
-                        <div class="properties-empty">Double-click a node to edit properties</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Debug Panel -->
-            <div class="debug-panel" id="debugPanel">
-                <div class="debug-header">
-                    <span>Debug Output</span>
-                    <div class="debug-controls">
-                        <button class="btn-icon btn-small" id="clearDebugBtn" title="Clear">
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                        </button>
-                        <button class="btn-icon btn-small" id="toggleDebugBtn" title="Toggle">
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                <path d="M2 8l5 5 5-5" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-                <div class="debug-content" id="debugContent">
-                    <div class="debug-empty">No debug output yet. Execute flow to see results.</div>
-                </div>
-            </div>
+      <!-- Properties Panel -->
+      <aside class="properties-panel" id="propertiesPanel">
+        <div class="properties-header">
+          <h3>Properties</h3>
+          <button class="btn-close-properties" id="closeProperties" aria-label="Close Properties">×</button>
         </div>
+        
+        <div class="properties-content" id="propertiesContent">
+          <div class="empty-state">
+            <p>No node selected</p>
+            <small>Select a node to edit its properties</small>
+          </div>
+        </div>
+        
+        <div class="properties-footer">
+          <button class="btn btn-ghost" id="cancelPropertiesBtn">Cancel</button>
+          <button class="btn btn-primary" id="applyPropertiesBtn">Apply</button>
+        </div>
+      </aside>
+
     </div>
 
-    <!-- Import Modal -->
-    <div class="modal" id="importModal">
-        <div class="modal-content modal-small">
-            <div class="modal-header">
-                <h3>Import Flow</h3>
-                <button class="btn-icon btn-small" onclick="closeImportModal()">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                </button>
-            </div>
-            <div class="modal-body">
-                <p style="margin-bottom: 1rem;">Paste your flow JSON or upload a file:</p>
-                <textarea id="importJson" placeholder='{"id": "...", "name": "...", ...}' rows="10"></textarea>
-                <div style="margin-top: 1rem;">
-                    <input type="file" id="importFile" accept=".json" style="display: none;">
-                    <button class="btn-secondary" onclick="document.getElementById('importFile').click()">
-                        Choose File
-                    </button>
-                    <span id="importFileName" style="margin-left: 1rem; color: #666;"></span>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-secondary" onclick="closeImportModal()">Cancel</button>
-                <button class="btn-primary" id="importFlowBtn">Import</button>
-            </div>
+    <!-- Bottom Debug Panel -->
+    <div class="debug-panel" id="debugPanel">
+      <div class="debug-header">
+        <div class="debug-tabs">
+          <button class="debug-tab active" data-tab="console">Console</button>
+          <button class="debug-tab" data-tab="trace">Execution Trace</button>
+          <button class="debug-tab" data-tab="output">Output</button>
         </div>
+        <div class="debug-actions">
+          <button class="btn btn-sm btn-icon" id="clearDebugBtn" title="Clear">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
+          <button class="btn btn-sm btn-icon" id="toggleDebugBtn" title="Minimize">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="18 15 12 9 6 15"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="debug-content">
+        <div class="debug-tab-content active" data-tab="console">
+          <div class="debug-messages" id="debugMessages"></div>
+        </div>
+        <div class="debug-tab-content" data-tab="trace">
+          <div class="trace-viewer" id="traceViewer"></div>
+        </div>
+        <div class="debug-tab-content" data-tab="output">
+          <div class="output-viewer" id="outputViewer"></div>
+        </div>
+      </div>
     </div>
 
-    <!-- Confirmation Modal -->
-    <div class="modal" id="confirmModal">
-        <div class="modal-content modal-small">
-            <div class="modal-header">
-                <h3 id="confirmTitle">Confirm Action</h3>
-            </div>
-            <div class="modal-body">
-                <p id="confirmMessage"></p>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-secondary" id="confirmCancelBtn">Cancel</button>
-                <button class="btn-danger" id="confirmOkBtn">Confirm</button>
-            </div>
+  </div>
+
+  <!-- Modals -->
+  
+  <!-- New Flow Modal -->
+  <div class="modal" id="newFlowModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Create New Flow</h2>
+        <button class="modal-close" data-modal="newFlowModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="newFlowName">Flow Name</label>
+          <input type="text" id="newFlowName" class="input" placeholder="My New Flow" required>
         </div>
+        <div class="form-group">
+          <label for="newFlowDescription">Description (Optional)</label>
+          <textarea id="newFlowDescription" class="textarea" rows="3" placeholder="Describe what this flow does..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-modal="newFlowModal">Cancel</button>
+        <button class="btn btn-primary" id="createFlowBtn">Create Flow</button>
+      </div>
     </div>
+  </div>
 
-    <!-- Toast Notifications -->
-    <div class="toast-container" id="toastContainer"></div>
+  <!-- Import Flow Modal -->
+  <div class="modal" id="importFlowModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Import Flow</h2>
+        <button class="modal-close" data-modal="importFlowModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Import From</label>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="importType" value="json" checked>
+              <span>JSON Text</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="importType" value="file">
+              <span>File Upload</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-group" id="importJsonGroup">
+          <label for="importJson">Flow JSON</label>
+          <textarea id="importJson" class="textarea code" rows="10" placeholder='{"name": "My Flow", "nodes": [...]}' spellcheck="false"></textarea>
+        </div>
+        <div class="form-group" id="importFileGroup" style="display: none;">
+          <label for="importFile">Select File</label>
+          <input type="file" id="importFile" class="file-input" accept=".json">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-modal="importFlowModal">Cancel</button>
+        <button class="btn btn-primary" id="importFlowBtn">Import</button>
+      </div>
+    </div>
+  </div>
 
-    <!-- Load Drawflow from CDN with fallback -->
-    <script src="https://cdn.jsdelivr.net/npm/drawflow@0.0.60/dist/drawflow.min.js"></script>
-    <script>
-        if (typeof Drawflow === 'undefined') {
-            console.log('Loading Drawflow from alternative CDN...');
-            document.write('<script src="https://unpkg.com/drawflow@0.0.60/dist/drawflow.min.js"><\/script>');
-        }
-    </script>
-    <script src="app.js"></script>
+  <!-- Settings Modal -->
+  <div class="modal" id="settingsModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button class="modal-close" data-modal="settingsModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section">
+          <h3>General</h3>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="settingAutoSave">
+              <span>Auto-save flows</span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="settingShowGrid" checked>
+              <span>Show grid</span>
+            </label>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3>Editor</h3>
+          <div class="form-group">
+            <label for="settingTheme">Theme</label>
+            <select id="settingTheme" class="select">
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3>Backend</h3>
+          <div class="form-group">
+            <label for="settingApiUrl">API URL</label>
+            <input type="text" id="settingApiUrl" class="input" value="/admin" placeholder="/admin">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-modal="settingsModal">Cancel</button>
+        <button class="btn btn-primary" id="saveSettingsBtn">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Custom Scripts -->
+  <script src="app.js"></script>
 </body>
 </html>
