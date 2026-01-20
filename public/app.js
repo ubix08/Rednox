@@ -158,15 +158,31 @@
     },
 
     toggleSidebar() {
-      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('flowSidebar').classList.toggle('open');
     },
 
     togglePalette() {
-      document.getElementById('nodePalette').classList.toggle('hidden');
+      const palette = document.getElementById('nodePalette');
+      if (window.innerWidth < 768) {
+        palette.classList.toggle('open');
+      } else {
+        palette.classList.toggle('collapsed');
+      }
     },
 
-    toggleProperties() {
-      document.getElementById('propertiesPanel').classList.toggle('hidden');
+    toggleRightSidebar() {
+      const sidebar = document.getElementById('rightSidebar');
+      if (window.innerWidth < 768) {
+        sidebar.classList.toggle('open');
+      }
+    },
+
+    closeAllOverlays() {
+      if (window.innerWidth < 768) {
+        document.getElementById('flowSidebar').classList.remove('open');
+        document.getElementById('nodePalette').classList.remove('open');
+        document.getElementById('rightSidebar').classList.remove('open');
+      }
     },
 
     setFlowStatus(status) {
@@ -329,10 +345,8 @@
         UI.setModified(false);
         UI.renderFlowList(STATE.flows);
         
-        // Close sidebar on mobile
-        if (window.innerWidth < 768) {
-          UI.toggleSidebar();
-        }
+        // Close overlays on mobile
+        UI.closeAllOverlays();
       } catch (error) {
         UI.showToast('Failed to load flow: ' + error.message, 'error');
       } finally {
@@ -355,6 +369,8 @@
         if (data.flowId) {
           await this.loadFlow(data.flowId);
         }
+        
+        UI.closeModal('newFlowModal');
       } catch (error) {
         UI.showToast('Failed to create flow: ' + error.message, 'error');
       }
@@ -666,8 +682,14 @@
         </div>
       `;
       
-      // Switch to trace tab
-      document.querySelector('[data-tab="trace"]').click();
+      // Switch to debug tab and trace subtab
+      document.querySelector('.sidebar-tab[data-tab="debug"]').click();
+      document.querySelector('.debug-subtab[data-subtab="trace"]').click();
+      
+      // Open right sidebar on mobile
+      if (window.innerWidth < 768) {
+        document.getElementById('rightSidebar').classList.add('open');
+      }
     },
 
     log(message, type = 'info') {
@@ -688,8 +710,42 @@
 
   // ===== Event Handlers =====
   function setupEventHandlers() {
-    // Menu toggle
+    // Menu toggle (hamburger) - opens flow list
     document.getElementById('menuToggle').addEventListener('click', UI.toggleSidebar);
+    
+    // Close buttons for sidebars
+    document.getElementById('closePalette')?.addEventListener('click', UI.togglePalette);
+    document.getElementById('closeRightSidebar')?.addEventListener('click', UI.toggleRightSidebar);
+    
+    // Sidebar tabs (Properties/Debug)
+    document.querySelectorAll('.sidebar-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const targetTab = tab.dataset.tab;
+        
+        // Update tab buttons
+        document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // Update tab content
+        document.querySelectorAll('.sidebar-tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelector(`.sidebar-tab-content[data-tab="${targetTab}"]`).classList.add('active');
+      });
+    });
+    
+    // Debug subtabs
+    document.querySelectorAll('.debug-subtab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const targetTab = tab.dataset.subtab;
+        
+        // Update subtab buttons
+        document.querySelectorAll('.debug-subtab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // Update subtab content
+        document.querySelectorAll('.debug-subtab-content').forEach(c => c.classList.remove('active'));
+        document.querySelector(`.debug-subtab-content[data-subtab="${targetTab}"]`).classList.add('active');
+      });
+    });
     
     // New flow
     document.getElementById('newFlowBtn').addEventListener('click', () => {
@@ -709,6 +765,12 @@
       UI.closeModal('newFlowModal');
       
       // Clear form
+      document.getElementById('newFlowName').value = '';
+      document.getElementById('newFlowDescription').value = '';
+    });
+    
+    // Cancel new flow
+    document.querySelector('[data-modal="newFlowModal"]').addEventListener('click', () => {
       document.getElementById('newFlowName').value = '';
       document.getElementById('newFlowDescription').value = '';
     });
@@ -776,23 +838,8 @@
     // Toggle palette
     document.getElementById('togglePaletteBtn').addEventListener('click', UI.togglePalette);
     
-    // Debug panel
+    // Clear debug
     document.getElementById('clearDebugBtn').addEventListener('click', DebugManager.clear);
-    
-    document.getElementById('toggleDebugBtn').addEventListener('click', () => {
-      document.getElementById('debugPanel').classList.toggle('minimized');
-    });
-    
-    // Debug tabs
-    document.querySelectorAll('.debug-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.debug-tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.debug-tab-content').forEach(c => c.classList.remove('active'));
-        
-        tab.classList.add('active');
-        document.querySelector(`.debug-tab-content[data-tab="${tab.dataset.tab}"]`).classList.add('active');
-      });
-    });
     
     // Modal close buttons
     document.querySelectorAll('.modal-close, [data-modal]').forEach(btn => {
