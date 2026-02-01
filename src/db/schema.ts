@@ -1,6 +1,5 @@
-
 // ===================================================================
-// RedNox - Database Schema (Fixed)
+// RedNox - Database Schema with Persistent Context
 // ===================================================================
 
 export const D1_SCHEMA = `
@@ -29,20 +28,29 @@ CREATE TABLE IF NOT EXISTS http_routes (
 
 CREATE INDEX IF NOT EXISTS idx_http_routes_lookup ON http_routes(path, method, enabled);
 
-CREATE TABLE IF NOT EXISTS flow_logs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE IF NOT EXISTS execution_contexts (
+  id TEXT PRIMARY KEY,
   flow_id TEXT NOT NULL,
-  status TEXT NOT NULL,
-  duration_ms INTEGER,
-  error_message TEXT,
+  conversation_id TEXT NOT NULL,
+  context_data TEXT NOT NULL,
   executed_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_logs_flow_time ON flow_logs(flow_id, executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_execution_contexts_flow ON execution_contexts(flow_id, conversation_id, executed_at DESC);
+
+CREATE TABLE IF NOT EXISTS flow_context_store (
+  flow_id TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (flow_id, key),
+  FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_flow_context_flow ON flow_context_store(flow_id);
 `;
 
-// Alternative: Split into individual statements
 export const D1_SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS flows (
     id TEXT PRIMARY KEY,
@@ -69,15 +77,25 @@ export const D1_SCHEMA_STATEMENTS = [
   
   `CREATE INDEX IF NOT EXISTS idx_http_routes_lookup ON http_routes(path, method, enabled)`,
   
-  `CREATE TABLE IF NOT EXISTS flow_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+  `CREATE TABLE IF NOT EXISTS execution_contexts (
+    id TEXT PRIMARY KEY,
     flow_id TEXT NOT NULL,
-    status TEXT NOT NULL,
-    duration_ms INTEGER,
-    error_message TEXT,
+    conversation_id TEXT NOT NULL,
+    context_data TEXT NOT NULL,
     executed_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE
   )`,
   
-  `CREATE INDEX IF NOT EXISTS idx_logs_flow_time ON flow_logs(flow_id, executed_at DESC)`
+  `CREATE INDEX IF NOT EXISTS idx_execution_contexts_flow ON execution_contexts(flow_id, conversation_id, executed_at DESC)`,
+  
+  `CREATE TABLE IF NOT EXISTS flow_context_store (
+    flow_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (flow_id, key),
+    FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE
+  )`,
+  
+  `CREATE INDEX IF NOT EXISTS idx_flow_context_flow ON flow_context_store(flow_id)`
 ];
