@@ -1,6 +1,6 @@
 // FlowExecutorDO.ts
 // ===================================================================
-// FlowExecutorDO - Pure Ephemeral Execution (NO LOGGING)
+// FlowExecutorDO - With D1 Persistent Context
 // ===================================================================
 
 import { DurableObject } from 'cloudflare:workers';
@@ -10,43 +10,41 @@ import {
   NodeMessage, Env, RouteInfo, InjectSchedule
 } from '../types/core';
 import { StorageKeys } from '../utils';
+import { 
+  PersistentFlowContext, 
+  PersistentGlobalContext, 
+  ExecutionContextManager,
+  PersistentContextConfig 
+} from '../core/PersistentContext';
 
 export class FlowExecutorDO extends DurableObject {
   private state: DurableObjectState;
   private env: Env;
-  private flowContext: FlowContext;
-  private globalContext: GlobalContext;
+  private flowId: string;
+  private flowContext: PersistentFlowContext;
+  private globalContext: PersistentGlobalContext;
+  private contextManager: ExecutionContextManager;
+  private contextConfig: PersistentContextConfig;
   
   constructor(state: DurableObjectState, env: Env) {
     super(state, env);
     this.state = state;
     this.env = env;
     
-    this.flowContext = {
-      get: async (key: string) => 
-        await this.state.storage.get(StorageKeys.flow(key)),
-      set: async (key: string, value: any) => 
-        await this.state.storage.put(StorageKeys.flow(key), value),
-      keys: async () => {
-        const list = await this.state.storage.list({ 
-          prefix: StorageKeys.listPrefix('f:') 
-        });
-        return Array.from(list.keys()).map(k => k.replace('f:', ''));
-      }
+    // Extract flowId from DO name
+    this.flowId = this.state.id.name?.replace('flow:', '') || 'unknown';
+    
+    // Context configuration
+    this.contextConfig = {
+      maxExecutionsPerFlow: 100,
+      maxContextsPerConversation: 20,
+      cleanupOnWrite: true
     };
     
-    this.globalContext = {
-      get: async (key: string) => 
-        await this.state.storage.get(StorageKeys.global(key)),
-      set: async (key: string, value: any) => 
-        await this.state.storage.put(StorageKeys.global(key), value),
-      keys: async () => {
-        const list = await this.state.storage.list({ 
-          prefix: StorageKeys.listPrefix('g:') 
-        });
-        return Array.from(list.keys()).map(k => k.replace('g:', ''));
-      }
-    };
+    // Initialize persistent contexts
+    this.flowContext = new PersistentFlowContext(this.flowId, env.DB);
+    this.globalContext = new PersistentGlobalContext(env.DB);
+    this.contextManager = new ExecutionContextManager(env.DB, this.contextConfig);
     
     this.setupScheduler();
   }
@@ -66,7 +64,7 @@ export class FlowExecutorDO extends DurableObject {
   }
   
   // ===================================================================
-  // EPHEMERAL FLOW EXECUTION (Production - No Logging)
+  // FLOW EXECUTION WITH PERSISTENT CONTEXT
   // ===================================================================
   
   private async handleFlowExecution(request: Request): Promise<Response> {
@@ -86,20 +84,37 @@ export class FlowExecutorDO extends DurableObject {
       }
       
       const payload = await this.parseRequest(request, fullPath);
+      
+      // Get conversation ID (from body, header, or generate)
+      const conversationId = payload.body?.conversationId 
+        || request.headers.get('X-Conversation-ID')
+        || request.headers.get('X-Session-ID')
+        || 'default';
+      
+      // Load previous context if exists
+      const previousContext = await this.contextManager.getLatestContext(
+        route.flowId,
+        conversationId
+      );
+      
       const msg: NodeMessage = {
         _msgid: crypto.randomUUID(),
         payload,
-        topic: ''
+        topic: '',
+        conversationId,
+        previousContext // Available to nodes
       };
       
       const context: ExecutionContext = {
         storage: this.state.storage,
         env: this.env,
         flow: this.flowContext,
-        global: this.globalContext
+        global: this.globalContext,
+        conversationId,
+        previousContext
       };
       
-      // Pure ephemeral execution - no logging
+      // Execute flow
       const engine = new FlowEngine(route.flowConfig, context, false);
       await engine.initialize();
       
@@ -108,11 +123,48 @@ export class FlowExecutorDO extends DurableObject {
       
       await engine.close();
       
-      return this.formatResponse(result, duration, route.flowId);
+      // Save execution context (with auto-cleanup)
+      await this.contextManager.saveContext(
+        route.flowId,
+        conversationId,
+        {
+          input: payload,
+          output: result,
+          duration,
+          timestamp: new Date().toISOString(),
+          success: true
+        }
+      );
+      
+      // Clear in-memory cache for next request
+      this.flowContext.clearCache();
+      this.globalContext.clearCache();
+      
+      return this.formatResponse(result, duration, route.flowId, conversationId);
       
     } catch (err: any) {
       const duration = Date.now() - startTime;
       console.error('[FlowExecutorDO] Error:', err);
+      
+      // Save error context
+      try {
+        const conversationId = 'error';
+        await this.contextManager.saveContext(
+          this.flowId,
+          conversationId,
+          {
+            input: null,
+            output: null,
+            duration,
+            timestamp: new Date().toISOString(),
+            success: false,
+            error: err.message,
+            stack: err.stack
+          }
+        );
+      } catch (saveErr) {
+        console.error('[FlowExecutorDO] Error saving error context:', saveErr);
+      }
       
       return this.errorResponse(err.message, 500, { 
         duration,
@@ -151,7 +203,8 @@ export class FlowExecutorDO extends DurableObject {
               storage: this.state.storage,
               env: this.env,
               flow: this.flowContext,
-              global: this.globalContext
+              global: this.globalContext,
+              conversationId: 'scheduled'
             };
             
             const engine = new FlowEngine(route.flowConfig, context, false);
@@ -160,7 +213,8 @@ export class FlowExecutorDO extends DurableObject {
             const msg: NodeMessage = {
               _msgid: crypto.randomUUID(),
               payload: Date.now(),
-              topic: 'scheduled'
+              topic: 'scheduled',
+              conversationId: 'scheduled'
             };
             
             await engine.triggerFlow(schedule.nodeId, msg);
@@ -278,7 +332,12 @@ export class FlowExecutorDO extends DurableObject {
   // RESPONSE FORMATTING
   // ===================================================================
   
-  private formatResponse(result: any, duration: number, flowId: string): Response {
+  private formatResponse(
+    result: any, 
+    duration: number, 
+    flowId: string, 
+    conversationId?: string
+  ): Response {
     if (result?._httpResponse) {
       const resPayload = result._httpResponse.payload;
       const body = typeof resPayload === 'string' ? resPayload : JSON.stringify(resPayload);
@@ -289,7 +348,8 @@ export class FlowExecutorDO extends DurableObject {
           ...result._httpResponse.headers,
           'X-Execution-Time': duration + 'ms',
           'X-Flow-ID': flowId,
-          'X-Message-ID': result._msgid
+          'X-Message-ID': result._msgid,
+          'X-Conversation-ID': conversationId || 'default'
         }
       });
     }
@@ -297,7 +357,8 @@ export class FlowExecutorDO extends DurableObject {
     return this.jsonResponse({ 
       success: true, 
       duration: duration + 'ms',
-      flowId
+      flowId,
+      conversationId
     });
   }
   
@@ -327,6 +388,7 @@ export class FlowExecutorDO extends DurableObject {
       case '/internal/status':
         return this.jsonResponse({
           doId: this.state.id.toString(),
+          flowId: this.flowId,
           ready: true,
           timestamp: new Date().toISOString()
         });
@@ -341,7 +403,13 @@ export class FlowExecutorDO extends DurableObject {
         
       case '/internal/clear':
         await this.state.storage.deleteAll();
+        this.flowContext.clearCache();
+        this.globalContext.clearCache();
         return this.jsonResponse({ success: true, message: 'Storage cleared' });
+        
+      case '/internal/context-stats':
+        const stats = await this.contextManager.getFlowStats(this.flowId);
+        return this.jsonResponse(stats);
         
       default:
         return this.errorResponse('Unknown internal endpoint', 404);
@@ -359,7 +427,7 @@ export class FlowExecutorDO extends DurableObject {
     
     try {
       const body = await request.json();
-      const { flowId, nodeId, payload } = body;
+      const { flowId, nodeId, payload, conversationId } = body;
       
       if (!flowId) {
         return this.errorResponse('flowId is required', 400);
@@ -369,6 +437,8 @@ export class FlowExecutorDO extends DurableObject {
         return this.errorResponse('nodeId is required', 400);
       }
       
+      const convId = conversationId || 'debug';
+      
       // Load flow configuration
       const route = await this.lookupFlowById(flowId);
       
@@ -376,12 +446,17 @@ export class FlowExecutorDO extends DurableObject {
         return this.errorResponse('Flow not found or disabled', 404);
       }
       
+      // Load previous context
+      const previousContext = await this.contextManager.getLatestContext(flowId, convId);
+      
       // Create execution context with DEBUG MODE enabled
       const context: ExecutionContext = {
         storage: this.state.storage,
         env: this.env,
         flow: this.flowContext,
-        global: this.globalContext
+        global: this.globalContext,
+        conversationId: convId,
+        previousContext
       };
       
       // Create engine in DEBUG MODE
@@ -392,7 +467,9 @@ export class FlowExecutorDO extends DurableObject {
       const msg: NodeMessage = {
         _msgid: crypto.randomUUID(),
         payload: payload || { test: true, manual: true },
-        topic: 'debug-execution'
+        topic: 'debug-execution',
+        conversationId: convId,
+        previousContext
       };
       
       // Execute flow
@@ -430,12 +507,16 @@ export class FlowExecutorDO extends DurableObject {
       const errorNodes = errors.length;
       const skippedNodes = totalNodes - executedNodes;
       
+      // Get conversation stats
+      const conversationCount = await this.contextManager.getConversationCount(flowId, convId);
+      
       // Return complete debug result
       return this.jsonResponse({
         success: executionSuccess,
         executionId,
         flowId,
         flowName: route.flowConfig.name,
+        conversationId: convId,
         startTime,
         endTime,
         duration,
@@ -447,8 +528,10 @@ export class FlowExecutorDO extends DurableObject {
           totalNodes,
           executedNodes,
           skippedNodes,
-          errorNodes
-        }
+          errorNodes,
+          conversationCount
+        },
+        previousContext
       });
       
     } catch (err: any) {
