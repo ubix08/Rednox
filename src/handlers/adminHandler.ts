@@ -1,10 +1,12 @@
 // ===================================================================
-// adminHandler.ts - Clean Admin API (No Execution Logging)
+// adminHandler.ts - Complete Admin API with Context Management
 // ===================================================================
 
-import { Env, FlowConfig, D1_SCHEMA_STATEMENTS } from '../types/core';
+import { Env, FlowConfig } from '../types/core';
 import { jsonResponse, validateFlow } from '../utils';
 import { registry } from '../core/NodeRegistry';
+import { ExecutionContextManager } from '../core/PersistentContext';
+import { D1_SCHEMA_STATEMENTS } from '../db/schema';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -129,12 +131,69 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
     
     // ===================================================================
-    // DEBUG EXECUTION (Returns trace to frontend)
+    // DEBUG EXECUTION
     // ===================================================================
     
     if (path.match(/^\/admin\/flows\/[^/]+\/debug-execute$/) && request.method === 'POST') {
       const flowId = path.split('/')[3];
       return await debugExecuteFlow(env, flowId, request);
+    }
+    
+    // ===================================================================
+    // CONTEXT MANAGEMENT (NEW)
+    // ===================================================================
+    
+    // Get execution history for a conversation
+    if (path.match(/^\/admin\/flows\/[^/]+\/contexts\/[^/]+$/) && request.method === 'GET') {
+      return await getConversationContexts(env, path, url);
+    }
+    
+    // Get all conversations for a flow
+    if (path.match(/^\/admin\/flows\/[^/]+\/conversations$/) && request.method === 'GET') {
+      return await getFlowConversations(env, path);
+    }
+    
+    // Delete a conversation
+    if (path.match(/^\/admin\/flows\/[^/]+\/contexts\/[^/]+$/) && request.method === 'DELETE') {
+      return await deleteConversation(env, path);
+    }
+    
+    // Get flow context (persistent key-value)
+    if (path.match(/^\/admin\/flows\/[^/]+\/context$/) && request.method === 'GET') {
+      return await getFlowContext(env, path);
+    }
+    
+    // Set flow context value
+    if (path.match(/^\/admin\/flows\/[^/]+\/context$/) && request.method === 'POST') {
+      return await setFlowContext(env, path, request);
+    }
+    
+    // Delete flow context key
+    if (path.match(/^\/admin\/flows\/[^/]+\/context\/[^/]+$/) && request.method === 'DELETE') {
+      return await deleteFlowContextKey(env, path);
+    }
+    
+    // Get context statistics
+    if (path.match(/^\/admin\/flows\/[^/]+\/context-stats$/) && request.method === 'GET') {
+      return await getContextStats(env, path);
+    }
+    
+    // Manual cleanup trigger
+    if (path === '/admin/contexts/cleanup' && request.method === 'POST') {
+      return await cleanupAllContexts(env, request);
+    }
+    
+    // Global context management
+    if (path === '/admin/global-context' && request.method === 'GET') {
+      return await getGlobalContext(env);
+    }
+    
+    if (path === '/admin/global-context' && request.method === 'POST') {
+      return await setGlobalContext(env, request);
+    }
+    
+    if (path.match(/^\/admin\/global-context\/[^/]+$/) && request.method === 'DELETE') {
+      return await deleteGlobalContextKey(env, path);
     }
     
     // ===================================================================
@@ -162,7 +221,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 }
 
 // ===================================================================
-// DATABASE INITIALIZATION (Clean schema only)
+// DATABASE INITIALIZATION
 // ===================================================================
 
 async function initializeDatabase(env: Env): Promise<Response> {
@@ -204,7 +263,14 @@ async function initializeDatabase(env: Env): Promise<Response> {
       success: true, 
       message: 'Database initialized successfully',
       statements: results.length,
-      note: 'Ephemeral runtime - no execution logs stored'
+      tables: ['flows', 'http_routes', 'execution_contexts', 'flow_context_store'],
+      features: [
+        'Flow definitions storage',
+        'HTTP route mapping',
+        'Persistent execution contexts',
+        'Flow & global context store',
+        'Auto-cleanup enabled'
+      ]
     }, corsHeaders);
   } catch (err: any) {
     console.error('Database initialization error:', err);
@@ -257,10 +323,15 @@ async function getFlow(env: Env, flowId: string, origin: string): Promise<Respon
       fullUrl: `${origin}/api${route.path}`
     }));
     
+    // Get context stats
+    const contextManager = new ExecutionContextManager(env.DB);
+    const contextStats = await contextManager.getFlowStats(flowId);
+    
     return jsonResponse({
       ...flow,
       config: JSON.parse(flow.config as string),
-      routes: routesWithUrls
+      routes: routesWithUrls,
+      contextStats
     }, corsHeaders);
   } catch (err: any) {
     console.error('Error fetching flow:', err);
@@ -429,7 +500,7 @@ async function deleteFlow(env: Env, flowId: string): Promise<Response> {
     
     return jsonResponse({ 
       success: true, 
-      message: 'Flow deleted successfully' 
+      message: 'Flow deleted successfully (cascading delete will remove routes and contexts)' 
     }, corsHeaders);
   } catch (err: any) {
     console.error('Error deleting flow:', err);
@@ -547,13 +618,15 @@ async function importFlow(env: Env, request: Request, origin: string): Promise<R
 }
 
 // ===================================================================
-// DEBUG EXECUTION (Returns full trace to frontend)
+// DEBUG EXECUTION
 // ===================================================================
 
 async function debugExecuteFlow(env: Env, flowId: string, request: Request): Promise<Response> {
   try {
     const body = await request.json().catch(() => ({}));
     const nodeId = body.nodeId;
+    const payload = body.payload;
+    const conversationId = body.conversationId;
     
     if (!nodeId) {
       return jsonResponse({ 
@@ -577,7 +650,8 @@ async function debugExecuteFlow(env: Env, flowId: string, request: Request): Pro
       body: JSON.stringify({
         flowId,
         nodeId,
-        payload: body.payload || {}
+        payload: payload || {},
+        conversationId: conversationId || 'debug'
       })
     });
     
@@ -591,6 +665,325 @@ async function debugExecuteFlow(env: Env, flowId: string, request: Request): Pro
     console.error('Error executing debug flow:', err);
     return jsonResponse({ 
       error: 'Failed to execute debug flow',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+// ===================================================================
+// CONTEXT MANAGEMENT
+// ===================================================================
+
+async function getConversationContexts(env: Env, path: string, url: URL): Promise<Response> {
+  try {
+    const pathParts = path.split('/');
+    const flowId = pathParts[3];
+    const conversationId = pathParts[5];
+    
+    const limit = parseInt(url.searchParams.get('limit') || '50');
+    
+    const contextManager = new ExecutionContextManager(env.DB);
+    const contexts = await contextManager.getContext(flowId, conversationId, limit);
+    
+    return jsonResponse({
+      flowId,
+      conversationId,
+      contexts,
+      count: contexts.length
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error getting conversation contexts:', err);
+    return jsonResponse({
+      error: 'Failed to get conversation contexts',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function getFlowConversations(env: Env, path: string): Promise<Response> {
+  try {
+    const flowId = path.split('/')[3];
+    
+    const results = await env.DB.prepare(`
+      SELECT 
+        conversation_id,
+        COUNT(*) as execution_count,
+        MAX(executed_at) as last_execution,
+        MIN(executed_at) as first_execution
+      FROM execution_contexts
+      WHERE flow_id = ?
+      GROUP BY conversation_id
+      ORDER BY last_execution DESC
+    `).bind(flowId).all();
+    
+    return jsonResponse({
+      flowId,
+      conversations: results.results || [],
+      count: results.results?.length || 0
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error getting flow conversations:', err);
+    return jsonResponse({
+      error: 'Failed to get conversations',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function deleteConversation(env: Env, path: string): Promise<Response> {
+  try {
+    const pathParts = path.split('/');
+    const flowId = pathParts[3];
+    const conversationId = pathParts[5];
+    
+    const contextManager = new ExecutionContextManager(env.DB);
+    const deleted = await contextManager.deleteConversation(flowId, conversationId);
+    
+    return jsonResponse({
+      success: true,
+      deleted,
+      flowId,
+      conversationId,
+      message: `Deleted ${deleted} execution contexts`
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error deleting conversation:', err);
+    return jsonResponse({
+      error: 'Failed to delete conversation',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function getFlowContext(env: Env, path: string): Promise<Response> {
+  try {
+    const flowId = path.split('/')[3];
+    
+    const results = await env.DB.prepare(
+      'SELECT key, value, updated_at FROM flow_context_store WHERE flow_id = ? ORDER BY key'
+    ).bind(flowId).all();
+    
+    const context: Record<string, any> = {};
+    results.results?.forEach(r => {
+      context[r.key as string] = {
+        value: JSON.parse(r.value as string),
+        updated_at: r.updated_at
+      };
+    });
+    
+    return jsonResponse({
+      flowId,
+      context,
+      count: Object.keys(context).length
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error getting flow context:', err);
+    return jsonResponse({
+      error: 'Failed to get flow context',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function setFlowContext(env: Env, path: string, request: Request): Promise<Response> {
+  try {
+    const flowId = path.split('/')[3];
+    const { key, value } = await request.json();
+    
+    if (!key) {
+      return jsonResponse({
+        error: 'Key is required'
+      }, corsHeaders, 400);
+    }
+    
+    await env.DB.prepare(`
+      INSERT INTO flow_context_store (flow_id, key, value, updated_at)
+      VALUES (?, ?, ?, datetime('now'))
+      ON CONFLICT (flow_id, key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = excluded.updated_at
+    `).bind(flowId, key, JSON.stringify(value)).run();
+    
+    return jsonResponse({
+      success: true,
+      flowId,
+      key,
+      value,
+      message: 'Context value set successfully'
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error setting flow context:', err);
+    return jsonResponse({
+      error: 'Failed to set flow context',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function deleteFlowContextKey(env: Env, path: string): Promise<Response> {
+  try {
+    const pathParts = path.split('/');
+    const flowId = pathParts[3];
+    const key = pathParts[5];
+    
+    const result = await env.DB.prepare(
+      'DELETE FROM flow_context_store WHERE flow_id = ? AND key = ?'
+    ).bind(flowId, key).run();
+    
+    return jsonResponse({
+      success: true,
+      deleted: result.meta.changes || 0,
+      flowId,
+      key,
+      message: result.meta.changes ? 'Context key deleted' : 'Key not found'
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error deleting flow context key:', err);
+    return jsonResponse({
+      error: 'Failed to delete flow context key',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function getContextStats(env: Env, path: string): Promise<Response> {
+  try {
+    const flowId = path.split('/')[3];
+    
+    const contextManager = new ExecutionContextManager(env.DB);
+    const stats = await contextManager.getFlowStats(flowId);
+    
+    // Get context store stats
+    const contextStoreCount = await env.DB.prepare(
+      'SELECT COUNT(*) as count FROM flow_context_store WHERE flow_id = ?'
+    ).bind(flowId).first();
+    
+    return jsonResponse({
+      flowId,
+      executionContexts: stats,
+      contextStore: {
+        keys: contextStoreCount?.count || 0
+      }
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error getting context stats:', err);
+    return jsonResponse({
+      error: 'Failed to get context stats',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function cleanupAllContexts(env: Env, request: Request): Promise<Response> {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const maxExecutionsPerFlow = body.maxExecutionsPerFlow || 100;
+    const maxContextsPerConversation = body.maxContextsPerConversation || 20;
+    
+    const contextManager = new ExecutionContextManager(env.DB, {
+      maxExecutionsPerFlow,
+      maxContextsPerConversation,
+      cleanupOnWrite: true
+    });
+    
+    const result = await contextManager.cleanupAllFlows();
+    
+    return jsonResponse({
+      success: true,
+      ...result,
+      config: {
+        maxExecutionsPerFlow,
+        maxContextsPerConversation
+      },
+      message: 'Cleanup completed successfully'
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error cleaning up contexts:', err);
+    return jsonResponse({
+      error: 'Failed to cleanup contexts',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function getGlobalContext(env: Env): Promise<Response> {
+  try {
+    const results = await env.DB.prepare(
+      'SELECT key, value, updated_at FROM flow_context_store WHERE flow_id = ? ORDER BY key'
+    ).bind('__global__').all();
+    
+    const context: Record<string, any> = {};
+    results.results?.forEach(r => {
+      context[r.key as string] = {
+        value: JSON.parse(r.value as string),
+        updated_at: r.updated_at
+      };
+    });
+    
+    return jsonResponse({
+      context,
+      count: Object.keys(context).length
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error getting global context:', err);
+    return jsonResponse({
+      error: 'Failed to get global context',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function setGlobalContext(env: Env, request: Request): Promise<Response> {
+  try {
+    const { key, value } = await request.json();
+    
+    if (!key) {
+      return jsonResponse({
+        error: 'Key is required'
+      }, corsHeaders, 400);
+    }
+    
+    await env.DB.prepare(`
+      INSERT INTO flow_context_store (flow_id, key, value, updated_at)
+      VALUES (?, ?, ?, datetime('now'))
+      ON CONFLICT (flow_id, key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = excluded.updated_at
+    `).bind('__global__', key, JSON.stringify(value)).run();
+    
+    return jsonResponse({
+      success: true,
+      key,
+      value,
+      message: 'Global context value set successfully'
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error setting global context:', err);
+    return jsonResponse({
+      error: 'Failed to set global context',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function deleteGlobalContextKey(env: Env, path: string): Promise<Response> {
+  try {
+    const key = path.split('/')[3];
+    
+    const result = await env.DB.prepare(
+      'DELETE FROM flow_context_store WHERE flow_id = ? AND key = ?'
+    ).bind('__global__', key).run();
+    
+    return jsonResponse({
+      success: true,
+      deleted: result.meta.changes || 0,
+      key,
+      message: result.meta.changes ? 'Global context key deleted' : 'Key not found'
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error deleting global context key:', err);
+    return jsonResponse({
+      error: 'Failed to delete global context key',
       details: err.message
     }, corsHeaders, 500);
   }
@@ -630,11 +1023,26 @@ async function listRoutes(env: Env, origin: string): Promise<Response> {
 
 async function getStats(env: Env): Promise<Response> {
   try {
-    const [flowCount, enabledFlowCount, routeCount, nodeCount] = await Promise.all([
+    const [
+      flowCount, 
+      enabledFlowCount, 
+      routeCount, 
+      nodeCount, 
+      contextStats, 
+      executionStats
+    ] = await Promise.all([
       env.DB.prepare('SELECT COUNT(*) as count FROM flows').first(),
       env.DB.prepare('SELECT COUNT(*) as count FROM flows WHERE enabled = 1').first(),
       env.DB.prepare('SELECT COUNT(*) as count FROM http_routes WHERE enabled = 1').first(),
-      Promise.resolve({ count: registry.list().length })
+      Promise.resolve({ count: registry.list().length }),
+      env.DB.prepare('SELECT COUNT(*) as count FROM flow_context_store').first(),
+      env.DB.prepare(`
+        SELECT 
+          COUNT(*) as total_executions,
+          COUNT(DISTINCT flow_id) as flows_with_executions,
+          COUNT(DISTINCT conversation_id) as total_conversations
+        FROM execution_contexts
+      `).first()
     ]);
     
     return jsonResponse({
@@ -644,9 +1052,24 @@ async function getStats(env: Env): Promise<Response> {
         disabled: (flowCount?.count || 0) - (enabledFlowCount?.count || 0)
       },
       routes: routeCount?.count || 0,
-      nodes: nodeCount.count,
-      runtime: 'ephemeral',
-      note: 'No execution logs stored - use debug-execute for tracing'
+      nodes: {
+        registered: nodeCount.count,
+        categories: registry.getByCategory().size
+      },
+      context: {
+        persistentKeys: contextStats?.count || 0,
+        totalExecutions: executionStats?.total_executions || 0,
+        flowsWithExecutions: executionStats?.flows_with_executions || 0,
+        totalConversations: executionStats?.total_conversations || 0
+      },
+      runtime: 'ephemeral with persistent context',
+      storage: 'D1 Database (Free Tier)',
+      features: [
+        'Auto-cleanup enabled',
+        'Conversation history',
+        'Flow & global context',
+        'Debug execution with trace'
+      ]
     }, corsHeaders);
   } catch (err: any) {
     console.error('Error fetching stats:', err);
