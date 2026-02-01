@@ -36,6 +36,7 @@ export interface NodeStatus {
   text?: string;
 }
 
+// Update ExecutionContext interface to include conversationId
 export interface ExecutionContext {
   storage: DurableObjectStorage;
   env: Env;
@@ -44,6 +45,8 @@ export interface ExecutionContext {
   flowEngine?: any;
   debugMode?: boolean;
   trace?: ExecutionTrace;
+  conversationId?: string; // NEW
+  previousContext?: ExecutionContextData; // NEW
 }
 
 export interface FlowContext {
@@ -327,3 +330,21 @@ export const D1_SCHEMA_STATEMENTS = [
   
   `CREATE INDEX IF NOT EXISTS idx_http_routes_lookup ON http_routes(path, method, enabled)`
 ];
+
+
+// Add to existing types in core.ts
+
+export interface PersistentContextConfig {
+  maxExecutionsPerFlow: number;
+  maxContextsPerConversation: number;
+  cleanupOnWrite: boolean;
+}
+
+export interface ExecutionContextData {
+  input: any;
+  output: any;
+  duration: number;
+  timestamp: string;
+  [key: string]: any;
+}
+
