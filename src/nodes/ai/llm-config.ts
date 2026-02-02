@@ -2,9 +2,8 @@
 // LLM Config Node - Centralized Model Configuration
 // ===================================================================
 
-import { registry } from '../core/NodeRegistry';
-import { NodeMessage, Node, ExecutionContext } from '../types/core';
-import { ProviderFactory } from '../providers/factory';
+import { registry } from '../../core/NodeRegistry';
+import { NodeMessage, Node, ExecutionContext } from '../../types/core';
 
 // This is a configuration node - no execution
 registry.register('llm-config', {
