@@ -9,7 +9,7 @@ directory = "public"
 [[d1_databases]]
 binding = "DB"
 database_name = "rednox-db"
-database_id = "eba933e6-bd4a-41aa-85bc-313ffe2ae8c9"
+database_id = "274002eb-d1a4-4c58-97a5-489b6dd18d60"
 
 # Durable Objects
 [[durable_objects.bindings]]
