@@ -45,8 +45,8 @@ export interface ExecutionContext {
   flowEngine?: any;
   debugMode?: boolean;
   trace?: ExecutionTrace;
-  conversationId?: string; // NEW
-  previousContext?: ExecutionContextData; // NEW
+  conversationId?: string;
+  previousContext?: ExecutionContextData;
 }
 
 export interface FlowContext {
@@ -113,7 +113,8 @@ export type PropertyFieldType =
   | 'json'
   | 'color'
   | 'url'
-  | 'email';
+  | 'email'
+  | 'password';
 
 export interface NodePropertyField {
   name: string;
@@ -299,40 +300,8 @@ export interface DebugExecutionResult {
 }
 
 // ===================================================================
-// CLEAN DATABASE SCHEMA (No execution logs)
+// Persistent Context Types
 // ===================================================================
-
-export const D1_SCHEMA_STATEMENTS = [
-  // Flows table - stores flow definitions only
-  `CREATE TABLE IF NOT EXISTS flows (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    config TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )`,
-  
-  `CREATE INDEX IF NOT EXISTS idx_flows_enabled ON flows(enabled)`,
-  
-  // HTTP routes - maps URLs to flow entry points
-  `CREATE TABLE IF NOT EXISTS http_routes (
-    id TEXT PRIMARY KEY,
-    flow_id TEXT NOT NULL,
-    node_id TEXT NOT NULL,
-    path TEXT NOT NULL,
-    method TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1,
-    FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE,
-    UNIQUE(path, method)
-  )`,
-  
-  `CREATE INDEX IF NOT EXISTS idx_http_routes_lookup ON http_routes(path, method, enabled)`
-];
-
-
-// Add to existing types in core.ts
 
 export interface PersistentContextConfig {
   maxExecutionsPerFlow: number;
@@ -347,4 +316,3 @@ export interface ExecutionContextData {
   timestamp: string;
   [key: string]: any;
 }
-
