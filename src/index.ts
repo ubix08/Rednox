@@ -8,18 +8,11 @@ import { handleAdmin } from './handlers/adminHandler';
 // Import all standard nodes
 import './nodes/nodes';
 
-// Import new AI agent system nodes (replaces gemini-nodes)
+// Import all AI agent system nodes
 import './nodes/ai/index';
 
-// Export the DO
+// Export the Durable Object
 export { FlowExecutorDO } from './durable-objects/FlowExecutorDO';
-
-export * from './base';
-export * from './factory';
-export * from './openai';
-export * from './anthropic';
-export * from './gemini';
-export * from './groq';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -55,6 +48,8 @@ export default {
           'Conversation memory',
           'HTTP-based tools',
           'Code-based tools',
+          'Persistent context storage',
+          'Debug execution with traces',
         ]
       }), {
         headers: { 
@@ -93,16 +88,19 @@ export default {
         'Function-based tools',
         'HTTP-based tools',
         'Conversation memory',
+        'Persistent context storage (D1)',
         'Ephemeral execution',
         'HTTP webhooks (multiple per flow)',
         'Scheduled execution (inject nodes)',
         'Context storage (flow/global scope)',
-        'Standard Node-RED nodes'
+        'Standard Node-RED nodes',
+        'Debug execution with traces'
       ],
       
       aiNodes: {
         'llm-config': 'Centralized LLM configuration',
         'llm-agent': 'Universal agent with tool calling',
+        'llm-stream': 'Real-time streaming responses',
         'memory': 'Conversation memory management',
         'function-tool': 'Code-based tool wrapper',
         'http-tool': 'API-based tool wrapper'
@@ -127,7 +125,22 @@ export default {
           logs: 'GET /admin/flows/{id}/logs',
           stats: 'GET /admin/stats',
           nodes: 'GET /admin/nodes',
-          debugExecute: 'POST /admin/flows/{id}/debug-execute'
+          debugExecute: 'POST /admin/flows/{id}/debug-execute',
+          contextManagement: {
+            getConversations: 'GET /admin/flows/{id}/conversations',
+            getContexts: 'GET /admin/flows/{id}/contexts/{conversationId}',
+            deleteConversation: 'DELETE /admin/flows/{id}/contexts/{conversationId}',
+            getFlowContext: 'GET /admin/flows/{id}/context',
+            setFlowContext: 'POST /admin/flows/{id}/context',
+            deleteContextKey: 'DELETE /admin/flows/{id}/context/{key}',
+            getStats: 'GET /admin/flows/{id}/context-stats',
+            cleanup: 'POST /admin/contexts/cleanup',
+            globalContext: {
+              get: 'GET /admin/global-context',
+              set: 'POST /admin/global-context',
+              delete: 'DELETE /admin/global-context/{key}'
+            }
+          }
         },
         flows: {
           pattern: 'POST /api/{flow-id}/{endpoint}',
@@ -136,12 +149,16 @@ export default {
       },
       
       standardNodes: [
-        'http-in', 'http-response',
+        'http-in', 'http-response', 'http-request',
         'inject', 'function', 'context', 'memory',
         'switch', 'change',
-        'json', 'delay', 'split', 'join',
-        'debug', 'catch', 'status',
-        'llm-config', 'llm-agent', 'function-tool', 'http-tool'
+        'json', 'csv', 'xml',
+        'delay', 'split', 'join', 'sort', 'batch',
+        'debug', 'catch', 'status', 'complete',
+        'template', 'range', 'trigger',
+        'comment', 'link-in', 'link-out',
+        'llm-config', 'llm-agent', 'llm-stream',
+        'function-tool', 'http-tool'
       ]
     }, null, 2), {
       headers: { 
