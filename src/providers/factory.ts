@@ -124,7 +124,7 @@ export class ProviderFactory {
   }
 }
 
-// Re-export all providers
+// Re-export types and classes
 export { OpenAIProvider } from './openai';
 export { AnthropicProvider } from './anthropic';
 export { GeminiProvider } from './gemini';
