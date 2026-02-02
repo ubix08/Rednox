@@ -81,6 +81,250 @@ registry.register('http-in', {
     ]
   }
 });
+// ===================================================================
+// HTTP Request Node - General Purpose API Calls
+// ===================================================================
+registry.register('http-request', {
+  type: 'http-request',
+  category: 'network',
+  defaults: {
+    name: { value: '' },
+    method: { value: 'GET' },
+    url: { value: '' },
+    headers: { value: {} },
+    timeout: { value: 30000 },
+    followRedirects: { value: true },
+    parseResponse: { value: true },
+  },
+  inputs: 1,
+  outputs: 1,
+  
+  execute: async (msg: NodeMessage, node: Node, context: ExecutionContext) => {
+    try {
+      node.status({ fill: 'yellow', shape: 'dot', text: 'requesting' });
+
+      // Get URL from config or msg
+      let url = node.config.url || msg.url;
+      if (!url) {
+        throw new Error('URL is required (set in config or msg.url)');
+      }
+
+      // Support msg property substitution in URL
+      if (typeof url === 'string') {
+        url = url.replace(/\{\{([^}]+)\}\}/g, (match, prop) => {
+          const value = RED.util.getMessageProperty(msg, prop.trim());
+          return value !== undefined ? encodeURIComponent(String(value)) : match;
+        });
+      }
+
+      // Get method
+      const method = (node.config.method || msg.method || 'GET').toUpperCase();
+
+      // Prepare headers
+      const headers: Record<string, string> = {
+        ...node.config.headers,
+        ...msg.headers,
+      };
+
+      // Auto-set content-type for POST/PUT if not specified
+      if ((method === 'POST' || method === 'PUT' || method === 'PATCH') && !headers['Content-Type']) {
+        if (msg.payload && typeof msg.payload === 'object') {
+          headers['Content-Type'] = 'application/json';
+        }
+      }
+
+      // Prepare body
+      let body: string | undefined;
+      if (method !== 'GET' && method !== 'HEAD' && msg.payload !== undefined) {
+        if (typeof msg.payload === 'string') {
+          body = msg.payload;
+        } else if (headers['Content-Type']?.includes('application/json')) {
+          body = JSON.stringify(msg.payload);
+        } else {
+          body = String(msg.payload);
+        }
+      }
+
+      // Make request with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), node.config.timeout || 30000);
+
+      try {
+        const response = await fetch(url, {
+          method,
+          headers,
+          body,
+          signal: controller.signal,
+          redirect: node.config.followRedirects ? 'follow' : 'manual',
+        });
+
+        clearTimeout(timeoutId);
+
+        // Parse response
+        const contentType = response.headers.get('content-type') || '';
+        let payload: any;
+
+        if (node.config.parseResponse) {
+          if (contentType.includes('application/json')) {
+            payload = await response.json();
+          } else if (contentType.includes('text/')) {
+            payload = await response.text();
+          } else {
+            // Binary data as ArrayBuffer
+            const buffer = await response.arrayBuffer();
+            payload = new Uint8Array(buffer);
+          }
+        } else {
+          payload = await response.text();
+        }
+
+        node.status({ 
+          fill: response.ok ? 'green' : 'yellow', 
+          shape: 'dot', 
+          text: `${response.status}` 
+        });
+
+        return {
+          ...msg,
+          payload,
+          statusCode: response.status,
+          statusMessage: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          responseUrl: response.url,
+        };
+
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        
+        if (fetchError.name === 'AbortError') {
+          throw new Error(`Request timeout after ${node.config.timeout}ms`);
+        }
+        throw fetchError;
+      }
+
+    } catch (error: any) {
+      node.error(`HTTP Request Error: ${error.message}`, msg);
+      node.status({ fill: 'red', shape: 'dot', text: 'error' });
+
+      return {
+        ...msg,
+        payload: null,
+        error: error.message,
+        statusCode: 0,
+      };
+    }
+  },
+  
+  ui: {
+    icon: '🌐',
+    color: '#3498DB',
+    colorLight: '#5DADE2',
+    paletteLabel: 'HTTP Request',
+    label: (node) => {
+      if (node.name) return node.name;
+      const method = node.method || 'GET';
+      const url = node.url || '';
+      return url ? `${method} ${url.substring(0, 30)}` : 'HTTP Request';
+    },
+    info: `
+      <h3>HTTP Request</h3>
+      <p>Make HTTP/HTTPS requests to external APIs.</p>
+      
+      <h4>Configuration:</h4>
+      <ul>
+        <li><strong>URL</strong> - Can use {{msg.property}} syntax</li>
+        <li><strong>Method</strong> - GET, POST, PUT, DELETE, etc.</li>
+        <li><strong>Headers</strong> - Custom headers (JSON object)</li>
+      </ul>
+      
+      <h4>Input Message:</h4>
+      <ul>
+        <li><code>msg.url</code> - Override URL from config</li>
+        <li><code>msg.method</code> - Override method</li>
+        <li><code>msg.headers</code> - Additional headers</li>
+        <li><code>msg.payload</code> - Request body (for POST/PUT)</li>
+      </ul>
+      
+      <h4>Output Message:</h4>
+      <ul>
+        <li><code>msg.payload</code> - Response body</li>
+        <li><code>msg.statusCode</code> - HTTP status code</li>
+        <li><code>msg.headers</code> - Response headers</li>
+        <li><code>msg.responseUrl</code> - Final URL (after redirects)</li>
+      </ul>
+      
+      <h4>URL Templating:</h4>
+      <pre>
+https://api.example.com/users/{{payload.userId}}/posts
+      </pre>
+    `,
+    properties: [
+      {
+        name: 'name',
+        label: 'Name',
+        type: 'text',
+        default: '',
+        placeholder: 'My API Call',
+      },
+      {
+        name: 'method',
+        label: 'Method',
+        type: 'select',
+        options: [
+          { value: 'GET', label: 'GET' },
+          { value: 'POST', label: 'POST' },
+          { value: 'PUT', label: 'PUT' },
+          { value: 'PATCH', label: 'PATCH' },
+          { value: 'DELETE', label: 'DELETE' },
+          { value: 'HEAD', label: 'HEAD' },
+          { value: 'OPTIONS', label: 'OPTIONS' },
+        ],
+        default: 'GET',
+        required: true,
+      },
+      {
+        name: 'url',
+        label: 'URL',
+        type: 'url',
+        default: '',
+        required: true,
+        placeholder: 'https://api.example.com/endpoint',
+        description: 'Use {{property}} for dynamic values',
+      },
+      {
+        name: 'headers',
+        label: 'Headers (JSON)',
+        type: 'json',
+        default: {},
+        description: 'Custom HTTP headers',
+      },
+      {
+        name: 'timeout',
+        label: 'Timeout (ms)',
+        type: 'number',
+        default: 30000,
+        min: 1000,
+        max: 300000,
+        description: 'Request timeout in milliseconds',
+      },
+      {
+        name: 'followRedirects',
+        label: 'Follow Redirects',
+        type: 'checkbox',
+        default: true,
+        description: 'Automatically follow HTTP redirects',
+      },
+      {
+        name: 'parseResponse',
+        label: 'Parse Response',
+        type: 'checkbox',
+        default: true,
+        description: 'Automatically parse JSON responses',
+      },
+    ],
+  },
+});
+        
 
 // ===================================================================
 // PARSER NODES
