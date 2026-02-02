@@ -14,6 +14,13 @@ import './nodes/ai/index';
 // Export the DO
 export { FlowExecutorDO } from './durable-objects/FlowExecutorDO';
 
+export * from './base';
+export * from './factory';
+export * from './openai';
+export * from './anthropic';
+export * from './gemini';
+export * from './groq';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
