@@ -1,4 +1,3 @@
-
 // ===================================================================
 // index.ts - Worker Entry Point
 // ===================================================================
@@ -6,9 +5,11 @@
 import { Env } from './types/core';
 import { handleAdmin } from './handlers/adminHandler';
 
-// Import all nodes
+// Import all standard nodes
 import './nodes/nodes';
-import './nodes/gemini-nodes';
+
+// Import new AI agent system nodes (replaces gemini-nodes)
+import './nodes/ai/index';
 
 // Export the DO
 export { FlowExecutorDO } from './durable-objects/FlowExecutorDO';
@@ -38,9 +39,16 @@ export default {
     if (path === '/health') {
       return new Response(JSON.stringify({ 
         status: 'ok',
-        version: '3.0.0',
-        description: 'Pure Node-RED Compatible Runtime',
-        timestamp: new Date().toISOString()
+        version: '3.1.0',
+        description: 'RedNox - Universal LLM Agent System',
+        timestamp: new Date().toISOString(),
+        features: [
+          'Multi-provider LLM support (OpenAI, Anthropic, Gemini, Groq)',
+          'Function calling / Tool use',
+          'Conversation memory',
+          'HTTP-based tools',
+          'Code-based tools',
+        ]
       }), {
         headers: { 
           'Content-Type': 'application/json',
@@ -57,8 +65,8 @@ export default {
     // Root info
     return new Response(JSON.stringify({
       name: 'RedNox',
-      version: '3.0.0',
-      description: 'Pure Node-RED Compatible Flow Execution Runtime',
+      version: '3.1.0',
+      description: 'Universal LLM Agent Flow Execution Runtime',
       
       routing: {
         pattern: '/api/{flow-id}/{endpoint}',
@@ -73,14 +81,25 @@ export default {
       
       features: [
         'Pure Node-RED compatibility',
-        'Ephemeral execution (no state retention)',
+        'Multi-provider LLM support (OpenAI, Anthropic, Gemini, Groq)',
+        'Universal agent with tool calling',
+        'Function-based tools',
+        'HTTP-based tools',
+        'Conversation memory',
+        'Ephemeral execution',
         'HTTP webhooks (multiple per flow)',
         'Scheduled execution (inject nodes)',
         'Context storage (flow/global scope)',
-        'Standard Node-RED nodes',
-        'No templates - all flows stored in D1',
-        'No hardcoded sessions/AI - use function nodes'
+        'Standard Node-RED nodes'
       ],
+      
+      aiNodes: {
+        'llm-config': 'Centralized LLM configuration',
+        'llm-agent': 'Universal agent with tool calling',
+        'memory': 'Conversation memory management',
+        'function-tool': 'Code-based tool wrapper',
+        'http-tool': 'API-based tool wrapper'
+      },
       
       quickStart: {
         step1: 'Initialize database: POST /admin/init',
@@ -99,7 +118,9 @@ export default {
           toggleFlow: 'POST /admin/flows/{id}/{enable|disable}',
           routes: 'GET /admin/routes',
           logs: 'GET /admin/flows/{id}/logs',
-          stats: 'GET /admin/stats'
+          stats: 'GET /admin/stats',
+          nodes: 'GET /admin/nodes',
+          debugExecute: 'POST /admin/flows/{id}/debug-execute'
         },
         flows: {
           pattern: 'POST /api/{flow-id}/{endpoint}',
@@ -109,10 +130,11 @@ export default {
       
       standardNodes: [
         'http-in', 'http-response',
-        'inject', 'function', 'context',
+        'inject', 'function', 'context', 'memory',
         'switch', 'change',
         'json', 'delay', 'split', 'join',
-        'debug', 'catch', 'status'
+        'debug', 'catch', 'status',
+        'llm-config', 'llm-agent', 'function-tool', 'http-tool'
       ]
     }, null, 2), {
       headers: { 
