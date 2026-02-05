@@ -6,7 +6,6 @@ import { registry } from '../../core/NodeRegistry';
 import { NodeMessage, Node, ExecutionContext } from '../../types/core';
 import { ProviderFactory, LLMMessage, ToolDefinition } from '../../providers/factory';
 import { createConfigRegistry } from '../../core/ConfigNodeRegistry';
-import { ToolExecutor } from '../../core/ToolExecutor';
 import { MemoryManager } from '../../core/MemoryManager';
 import { RED } from '../../utils';
 
@@ -106,24 +105,24 @@ registry.register('agent', {
         content: userContent
       });
       
-      // 6. Load tool configs and create definitions
+      // 6. Load tool configs and create definitions using Tool Registry
       let tools: ToolDefinition[] | undefined;
-      const toolConfigs: any[] = [];
-      
+      const toolConfigs: ToolNodeConfig[] = [];
+
       if (Array.isArray(node.config.tools) && node.config.tools.length > 0) {
         try {
           const loadedTools = await configRegistry.loadMultiple(node.config.tools);
-          toolConfigs.push(...loadedTools);
           
-          // Create tool definitions for LLM
-          tools = loadedTools.map(tc => ({
-            type: 'function' as const,
-            function: {
-              name: tc.toolName,
-              description: tc.toolDescription,
-              parameters: tc.toolParameters,
-            }
-          }));
+          // Filter to only tool nodes
+          const validTools = loadedTools.filter(t => 
+            ToolRegistry.has(t.type)
+          ) as ToolNodeConfig[];
+          
+          toolConfigs.push(...validTools);
+          
+          // Create tool definitions for LLM using Tool Registry
+          tools = ToolRegistry.getToolDefinitions(validTools);
+          
         } catch (error) {
           console.error('[Agent] Error loading tools:', error);
         }
@@ -170,7 +169,7 @@ registry.register('agent', {
             throw new Error(`Max tool calls exceeded: ${maxToolCalls}`);
           }
           
-          // Execute all tool calls
+          // Execute all tool calls using Tool Registry
           for (const toolCall of response.toolCalls) {
             try {
               // Find tool config
@@ -186,8 +185,8 @@ registry.register('agent', {
                 console.warn('[Agent] Tool requires approval (not implemented):', toolCall.function.name);
               }
               
-              // Execute tool
-              const toolResult = await ToolExecutor.execute(
+              // Execute tool using Tool Registry
+              const toolResult = await ToolRegistry.execute(
                 toolCall,
                 toolConfig,
                 msg,
@@ -199,7 +198,7 @@ registry.register('agent', {
                 role: 'tool',
                 name: toolCall.function.name,
                 tool_call_id: toolCall.id,
-                content: JSON.stringify(toolResult)
+                content: JSON.stringify(toolResult.result)
               });
               
             } catch (error: any) {
