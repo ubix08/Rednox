@@ -116,86 +116,19 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const action = parts[parts.length - 1];
       return await toggleFlow(env, flowId, action === 'enable');
     }
-
-    // Add to existing adminHandler.ts after line 100
-
-// ===================================================================
-// CONFIG NODE MANAGEMENT (NEW)
-// ===================================================================
-
-if (path === '/admin/config-nodes' && request.method === 'GET') {
-  return await listConfigNodes(env, url.searchParams.get('type') || undefined);
-}
-
-if (path.match(/^\/admin\/config-nodes\/[^/]+$/) && request.method === 'GET') {
-  const configId = path.split('/').pop()!;
-  return await getConfigNode(env, configId);
-}
-
-// Add these helper functions at the end of the file
-
-async function listConfigNodes(env: Env, type?: string): Promise<Response> {
-  try {
-    const flows = await env.DB.prepare('SELECT config FROM flows').all();
     
-    const configNodes: any[] = [];
-    
-    for (const flow of flows.results || []) {
-      const flowConfig: FlowConfig = JSON.parse(flow.config as string);
-      
-      const configs = flowConfig.nodes.filter(n => 
-        n.isConfigNode === true && (!type || n.type === type)
-      );
-      
-      configNodes.push(...configs);
+    // ===================================================================
+    // CONFIG NODE MANAGEMENT (NEW)
+    // ===================================================================
+
+    if (path === '/admin/config-nodes' && request.method === 'GET') {
+      return await listConfigNodes(env, url.searchParams.get('type') || undefined);
     }
-    
-    // Remove duplicates by ID
-    const unique = Array.from(
-      new Map(configNodes.map(c => [c.id, c])).values()
-    );
-    
-    return jsonResponse({
-      configNodes: unique,
-      count: unique.length,
-      type: type || 'all'
-    }, corsHeaders);
-  } catch (err: any) {
-    console.error('Error listing config nodes:', err);
-    return jsonResponse({ 
-      error: 'Failed to list config nodes',
-      details: err.message
-    }, corsHeaders, 500);
-  }
-}
 
-async function getConfigNode(env: Env, configId: string): Promise<Response> {
-  try {
-    const flows = await env.DB.prepare('SELECT config FROM flows').all();
-    
-    for (const flow of flows.results || []) {
-      const flowConfig: FlowConfig = JSON.parse(flow.config as string);
-      const config = flowConfig.nodes.find(n => 
-        n.id === configId && n.isConfigNode === true
-      );
-      
-      if (config) {
-        return jsonResponse(config, corsHeaders);
-      }
+    if (path.match(/^\/admin\/config-nodes\/[^/]+$/) && request.method === 'GET') {
+      const configId = path.split('/').pop()!;
+      return await getConfigNode(env, configId);
     }
-    
-    return jsonResponse({ 
-      error: 'Config node not found',
-      configId 
-    }, corsHeaders, 404);
-  } catch (err: any) {
-    console.error('Error getting config node:', err);
-    return jsonResponse({ 
-      error: 'Failed to get config node',
-      details: err.message
-    }, corsHeaders, 500);
-  }
-}
     
     // ===================================================================
     // IMPORT/EXPORT
@@ -400,7 +333,7 @@ async function getFlow(env: Env, flowId: string, origin: string): Promise<Respon
     
     const routesWithUrls = (routes.results || []).map(route => ({
       ...route,
-      fullUrl: `${origin}/api${route.path}`
+      fullUrl: `\( {origin}/api \){route.path}`
     }));
     
     // Get context stats
@@ -478,7 +411,7 @@ async function createFlow(env: Env, request: Request, origin: string): Promise<R
       endpoints: httpTriggers.map(t => ({
         method: t.method,
         path: t.path,
-        url: `${origin}/api${t.path}`,
+        url: `\( {origin}/api \){t.path}`,
         nodeId: t.nodeId
       })),
       message: 'Flow created successfully',
@@ -555,7 +488,7 @@ async function updateFlow(env: Env, request: Request, flowId: string, origin: st
       endpoints: httpTriggers.map(t => ({
         method: t.method,
         path: t.path,
-        url: `${origin}/api${t.path}`,
+        url: `\( {origin}/api \){t.path}`,
         nodeId: t.nodeId
       })),
       warnings: validation.warnings
@@ -615,6 +548,69 @@ async function toggleFlow(env: Env, flowId: string, enable: boolean): Promise<Re
     console.error(`Error toggling flow:`, err);
     return jsonResponse({ 
       error: `Failed to ${enable ? 'enable' : 'disable'} flow`,
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function listConfigNodes(env: Env, type?: string): Promise<Response> {
+  try {
+    const flows = await env.DB.prepare('SELECT config FROM flows').all();
+    
+    const configNodes: any[] = [];
+    
+    for (const flow of flows.results || []) {
+      const flowConfig: FlowConfig = JSON.parse(flow.config as string);
+      
+      const configs = flowConfig.nodes.filter(n => 
+        n.isConfigNode === true && (!type || n.type === type)
+      );
+      
+      configNodes.push(...configs);
+    }
+    
+    // Remove duplicates by ID
+    const unique = Array.from(
+      new Map(configNodes.map(c => [c.id, c])).values()
+    );
+    
+    return jsonResponse({
+      configNodes: unique,
+      count: unique.length,
+      type: type || 'all'
+    }, corsHeaders);
+  } catch (err: any) {
+    console.error('Error listing config nodes:', err);
+    return jsonResponse({ 
+      error: 'Failed to list config nodes',
+      details: err.message
+    }, corsHeaders, 500);
+  }
+}
+
+async function getConfigNode(env: Env, configId: string): Promise<Response> {
+  try {
+    const flows = await env.DB.prepare('SELECT config FROM flows').all();
+    
+    for (const flow of flows.results || []) {
+      const flowConfig: FlowConfig = JSON.parse(flow.config as string);
+      const config = flowConfig.nodes.find(n => 
+        n.id === configId && n.isConfigNode === true
+      );
+      
+      if (config) {
+        return jsonResponse(config, corsHeaders);
+      }
+    }
+    
+    return jsonResponse({ 
+      error: 'Config node not found',
+      configId 
+    }, corsHeaders, 404);
+  } catch (err: any) {
+    console.error('Error getting config node:', err);
+    return jsonResponse({ 
+      error: 'Failed to get config node',
       details: err.message
     }, corsHeaders, 500);
   }
@@ -1085,7 +1081,7 @@ async function listRoutes(env: Env, origin: string): Promise<Response> {
     
     const routesWithUrls = (routes.results || []).map(route => ({
       ...route,
-      fullUrl: `${origin}/api${route.path}`
+      fullUrl: `\( {origin}/api \){route.path}`
     }));
     
     return jsonResponse({ 
@@ -1178,7 +1174,7 @@ function extractHttpTriggers(flowData: FlowConfig, flowId: string): Array<{
         nodePath = '/' + nodePath;
       }
       
-      const fullPath = `/${flowId}${nodePath}`;
+      const fullPath = `/\( {flowId} \){nodePath}`;
       
       triggers.push({
         nodeId: node.id,
