@@ -2767,3 +2767,4 @@ registry.register('complete', {
     ]
   }
 });
+import './ai/index';
