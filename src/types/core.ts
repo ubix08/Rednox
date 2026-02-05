@@ -1,6 +1,6 @@
 // core.ts
 // ===================================================================
-// RedNox - Pure Node-RED Compatible Types (EPHEMERAL)
+// RedNox - Pure Node-RED Compatible Types (EPHEMERAL) - REFACTORED
 // ===================================================================
 
 export interface NodeMessage {
@@ -18,6 +18,15 @@ export interface NodeMessage {
     headers: Record<string, string>;
     payload: any;
   };
+  conversationId?: string;
+  previousContext?: any;
+  toolCall?: {
+    id: string;
+    name: string;
+    arguments: any;
+  };
+  toolResult?: any;
+  _toolCall?: any;
   [key: string]: any;
 }
 
@@ -36,7 +45,6 @@ export interface NodeStatus {
   text?: string;
 }
 
-// Update ExecutionContext interface to include conversationId
 export interface ExecutionContext {
   storage: DurableObjectStorage;
   env: Env;
@@ -66,6 +74,7 @@ export interface NodeConfig {
   type: string;
   name?: string;
   wires: string[][];
+  isConfigNode?: boolean; // NEW: Mark config nodes
   [key: string]: any;
 }
 
@@ -107,6 +116,7 @@ export type PropertyFieldType =
   | 'text' 
   | 'number' 
   | 'select' 
+  | 'multiselect' // NEW
   | 'checkbox' 
   | 'textarea' 
   | 'code' 
@@ -124,7 +134,7 @@ export interface NodePropertyField {
   required?: boolean;
   placeholder?: string;
   description?: string;
-  options?: Array<{ value: string; label: string }> | string[];
+  options?: Array<{ value: string; label: string; description?: string }> | string[];
   min?: number;
   max?: number;
   step?: number;
@@ -132,6 +142,8 @@ export interface NodePropertyField {
   language?: string;
   pattern?: string;
   validate?: string;
+  loadOptions?: string; // NEW: Async options loader
+  show?: Record<string, any>; // Conditional visibility
 }
 
 export interface NodeUIMetadata {
@@ -148,6 +160,7 @@ export interface NodeUIMetadata {
     enabled: boolean;
     onclick?: string;
   };
+  isConfigNode?: boolean; // NEW: Hide from canvas
 }
 
 export interface RuntimeNodeDefinition {
@@ -237,10 +250,6 @@ export interface RouteInfo {
   flowConfig: FlowConfig;
 }
 
-// ===================================================================
-// Inject Node Schedule
-// ===================================================================
-
 export interface InjectSchedule {
   nodeId: string;
   flowId: string;
@@ -251,7 +260,7 @@ export interface InjectSchedule {
 }
 
 // ===================================================================
-// DEBUG EXECUTION TYPES (Frontend-only storage)
+// DEBUG EXECUTION TYPES
 // ===================================================================
 
 export interface NodeExecutionTrace {
@@ -315,4 +324,101 @@ export interface ExecutionContextData {
   duration: number;
   timestamp: string;
   [key: string]: any;
+}
+
+// ===================================================================
+// CONFIG NODE TYPES (NEW)
+// ===================================================================
+
+export interface LLMProviderConfig {
+  id: string;
+  type: 'llm-provider-config';
+  name: string;
+  provider: 'openai' | 'anthropic' | 'gemini' | 'groq' | 'custom';
+  model: string;
+  apiKey: string;
+  baseUrl?: string;
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  topK?: number;
+  defaultSystemPrompt?: string;
+  isConfigNode: true;
+}
+
+export interface ToolConfig {
+  id: string;
+  type: 'tool-config';
+  name: string;
+  toolType: 'function' | 'http' | 'openapi';
+  
+  // Common
+  toolName: string;
+  toolDescription: string;
+  toolParameters: any;
+  requiresApproval?: boolean;
+  
+  // Function tool
+  functionCode?: string;
+  
+  // HTTP tool
+  httpMethod?: string;
+  httpUrl?: string;
+  httpHeaders?: Record<string, string>;
+  httpQueryParams?: Record<string, string>;
+  bodyTemplate?: string;
+  responseTransform?: string;
+  timeout?: number;
+  
+  // OpenAPI tool
+  openApiSpec?: string;
+  openApiBaseUrl?: string;
+  
+  isConfigNode: true;
+}
+
+export interface MemoryConfig {
+  id: string;
+  type: 'memory-config';
+  name: string;
+  memoryType: 'conversation-buffer' | 'window-buffer' | 'summary-buffer';
+  
+  // Conversation buffer
+  maxMessages?: number;
+  
+  // Window buffer
+  windowSize?: number;
+  
+  // Summary buffer
+  summaryModel?: string; // LLM provider config ID
+  maxTokenLimit?: number;
+  
+  // Common
+  storageScope: 'conversation' | 'flow' | 'global';
+  ttl?: number;
+  
+  isConfigNode: true;
+}
+
+export interface KnowledgeConfig {
+  id: string;
+  type: 'knowledge-config';
+  name: string;
+  knowledgeType: 'vector-store' | 'document-store';
+  
+  // Vector store
+  vectorStoreProvider?: string;
+  embeddingModel?: string;
+  collectionName?: string;
+  
+  // Document store
+  documentStoreId?: string;
+  
+  // Common
+  description: string;
+  topK?: number;
+  scoreThreshold?: number;
+  returnSourceDocuments?: boolean;
+  
+  isConfigNode: true;
 }
